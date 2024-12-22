@@ -669,28 +669,59 @@ export function SpotifyClone() {
     [openDatabase]
   );
 
+  // const toggleLike = useCallback(
+  //   (track: Track | null = currentTrack) => {
+  //     if (!track) return;
+  //     const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
+  //     if (!likedSongsPlaylist) return;
+  //     const updatedPlaylists = playlists.map((playlist) => {
+  //       if (playlist.name === 'Liked Songs') {
+  //         const isAlreadyLiked = playlist.tracks.some((t) => t.id === track.id);
+  //         if (isAlreadyLiked) {
+  //           return { ...playlist, tracks: playlist.tracks.filter((t) => t.id !== track.id) };
+  //         } else {
+  //           return { ...playlist, tracks: [...playlist.tracks, track] };
+  //         }
+  //       }
+  //       return playlist;
+  //     });
+  //     setPlaylists(updatedPlaylists);
+  //     safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
+  //     setIsLiked(!isLiked);
+  //   },
+  //   [currentTrack, isLiked, playlists]
+  // );
+
   const toggleLike = useCallback(
     (track: Track | null = currentTrack) => {
       if (!track) return;
+  
       const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
       if (!likedSongsPlaylist) return;
+  
+      // Use a local copy of playlists to avoid triggering unnecessary updates
       const updatedPlaylists = playlists.map((playlist) => {
         if (playlist.name === 'Liked Songs') {
           const isAlreadyLiked = playlist.tracks.some((t) => t.id === track.id);
-          if (isAlreadyLiked) {
-            return { ...playlist, tracks: playlist.tracks.filter((t) => t.id !== track.id) };
-          } else {
-            return { ...playlist, tracks: [...playlist.tracks, track] };
-          }
+          return {
+            ...playlist,
+            tracks: isAlreadyLiked
+              ? playlist.tracks.filter((t) => t.id !== track.id)
+              : [...playlist.tracks, track],
+          };
         }
         return playlist;
       });
+  
+      // Update playlists state
       setPlaylists(updatedPlaylists);
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
-      setIsLiked(!isLiked);
+  
+      // Toggle the like state for UI
+      setIsLiked((prev) => !prev);
     },
-    [currentTrack, isLiked, playlists]
-  );
+    [currentTrack, playlists]
+  );  
 
   const deletePlaylist = useCallback(
     (playlist: Playlist) => {
@@ -1281,15 +1312,21 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (currentTrack) {
-      void playTrackFromSource(currentTrack);
-      setIsPlaying(true);
-      updateRecentlyPlayed(currentTrack);
+      void playTrackFromSource(currentTrack); // Handles playback
+      setIsPlaying(true); // Ensure play state is updated correctly
+      updateRecentlyPlayed(currentTrack); // Updates recently played list
       safeLocalStorageSetItem('currentTrack', JSON.stringify(currentTrack));
-      setIsLiked(isTrackLiked(currentTrack));
-      void fetchLyrics(currentTrack);
+  
+      // Ensure toggling likes does not unintentionally modify the queue
+      if (!queue.some((track) => track.id === currentTrack.id)) {
+        setQueue((prevQueue) => [currentTrack, ...prevQueue.filter((t) => t.id !== currentTrack.id)]);
+      }
+  
+      setIsLiked(isTrackLiked(currentTrack)); // Check like status
+      void fetchLyrics(currentTrack); // Fetch lyrics asynchronously
     }
-  }, [currentTrack, fetchLyrics, isTrackLiked, playTrackFromSource, updateRecentlyPlayed]);
-
+  }, [currentTrack, fetchLyrics, isTrackLiked, playTrackFromSource, queue, updateRecentlyPlayed ]);
+  
   useEffect(() => {
     if (currentTrack) {
       const counts = JSON.parse(safeLocalStorageGetItem('listenCounts') || '{}');
@@ -1985,10 +2022,13 @@ export function SpotifyClone() {
                   <Library className="w-6 h-6 mr-3" />
                   Your Library
                 </div>
-                <Plus
-                  className="w-5 h-5 text-white hover:text-white cursor-pointer transition-colors duration-200"
-                  onClick={() => setShowCreatePlaylist(true)}
-                />
+                {false && (
+                  <Plus
+                    className="w-5 h-5 text-white hover:text-white cursor-pointer transition-colors duration-200"
+                    // onClick={() => setShowCreatePlaylist(true)}
+                  />
+                )}
+
               </div>
               <div className="space-y-2">
                 {playlists.map((playlist) => (
@@ -2591,15 +2631,16 @@ export function SpotifyClone() {
         </div>
 
         {/* Add Songs Button */}
-        <button
-          onClick={() => setShowSearchInPlaylistCreation(true)}
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 
-                   hover:from-green-600 hover:to-green-700 text-white font-medium
-                   transform transition-all duration-300 hover:scale-[1.02]
-                   focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-        >
-          Add Songs
-        </button>
+        {false && (
+          <button
+            // onClick={() => setShowSearchInPlaylistCreation(true)}
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 
+                      hover:from-green-600 hover:to-green-700 text-white font-medium"
+          >
+            Add Songs
+          </button>
+        )}
+
 
         {/* Action Buttons */}
         <div className="flex gap-4">
