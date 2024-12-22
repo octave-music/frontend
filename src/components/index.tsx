@@ -37,7 +37,7 @@ import CustomContextMenu from './CustomContextMenu';
 import OnboardingStep1 from './OnboardingStep1';
 import ArtistSelection from './ArtistSelection';
 
-import safeClone from './safeClone'; // Helper for JSON safe clone
+import safeClone from '../lib/safeClone'; // Helper for JSON safe clone
 
 /** ------------------------------------------------------------------
  *  Types / Interfaces

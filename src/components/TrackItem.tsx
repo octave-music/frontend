@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { Play, Plus, Library } from 'lucide-react';
-import { Track } from '../../lib/types'; // or inline if you prefer
+import { Track } from '../lib/types'; // or inline if you prefer
 
 interface TrackItemProps {
   track: Track;
