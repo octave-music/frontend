@@ -699,7 +699,6 @@ export function SpotifyClone() {
       const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
       if (!likedSongsPlaylist) return;
   
-      // Use a local copy of playlists to avoid triggering unnecessary updates
       const updatedPlaylists = playlists.map((playlist) => {
         if (playlist.name === 'Liked Songs') {
           const isAlreadyLiked = playlist.tracks.some((t) => t.id === track.id);
@@ -713,15 +712,15 @@ export function SpotifyClone() {
         return playlist;
       });
   
-      // Update playlists state
-      setPlaylists(updatedPlaylists);
-      safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
+      // Clone updated playlists to remove circular references
+      const cleanPlaylists = safeClone(updatedPlaylists);
   
-      // Toggle the like state for UI
+      setPlaylists(cleanPlaylists);
+      safeLocalStorageSetItem('playlists', JSON.stringify(cleanPlaylists)); // Safe to serialize
       setIsLiked((prev) => !prev);
     },
     [currentTrack, playlists]
-  );  
+  );
 
   const deletePlaylist = useCallback(
     (playlist: Playlist) => {
@@ -1052,6 +1051,28 @@ export function SpotifyClone() {
   interface ArtistSelectionProps {
     onComplete: (selectedArtists: Artist[]) => void;
   }
+
+  function safeClone<T>(obj: T): T {
+    const cache = new Set();
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (cache.has(value)) {
+          // Circular reference found, discard key
+          return undefined;
+        }
+        cache.add(value);
+      }
+  
+      // Exclude React's Fiber properties
+      if (key.startsWith('__react')) return undefined;
+  
+      // Exclude global objects
+      if (value === window) return undefined;
+  
+      return value;
+    }));
+  }
+  
 
   const ArtistSelection: React.FC<ArtistSelectionProps> = ({ onComplete }) => {
     const [searchTerm, setSearchTerm] = useState('');
