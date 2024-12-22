@@ -21,7 +21,9 @@
     "lucide-react": "^0.441.0",
     "music-app": "file:",
     "next": "14.2.11",
+    "next-pwa": "^5.6.0",
     "node-vibrant": "3.2.1-alpha.1",
+    "path": "^0.12.7",
     "react": "^18.3.1",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.3.1",
@@ -35,7 +37,7 @@
   "devDependencies": {
     "@types/lodash": "^4.17.13",
     "@types/node": "^20.17.10",
-    "@types/react": "^18.3.17",
+    "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/simplebar": "^5.3.3",
     "eslint": "^8.57.1",

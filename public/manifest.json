@@ -1,7 +1,7 @@
 {
   "name": "Octave Streaming - Stream Your Favorite Tunes",
   "short_name": "Octave",
-  "description": "Your ultimate music streaming companion. Listen to millions of songs, create playlists, and discover new music with personalized recommendations. Enjoy high-quality audio streaming with offline playback support.",
+  "description": "Your ultimate music streaming companion",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,55 +11,5 @@
   "categories": ["music", "entertainment", "streaming"],
   "lang": "en-US",
   "dir": "ltr",
-  "prefer_related_applications": false,
-  "screenshots": [
-    {
-      "src": "/screenshot-home.png",
-      "sizes": "1920x1080",
-      "type": "image/png",
-      "label": "Home screen with trending music"
-    },
-    {
-      "src": "/screenshot-player.png",
-      "sizes": "1920x1080",
-      "type": "image/png",
-      "label": "Music player interface"
-    }
-  ],
-  "icons": [
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Play My Favorites",
-      "short_name": "Favorites",
-      "description": "Start playing your favorite tracks",
-      "url": "/favorites",
-      "icons": [{ "src": "/favorite-icon.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "New Releases",
-      "short_name": "New",
-      "description": "Check out the latest releases",
-      "url": "/new-releases",
-      "icons": [{ "src": "/new-release-icon.png", "sizes": "192x192" }]
-    }
-  ]
+  "prefer_related_applications": false
 }

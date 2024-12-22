@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { SpotifyClone } from "@/components/main"
+import  SpotifyClone  from "../components/SpotifyClone"
 
 export const metadata: Metadata = {
   title: 'Octave Streaming',
