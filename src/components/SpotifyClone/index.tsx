@@ -30,8 +30,8 @@ import {
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
-import MobilePlayer from '../mobilePlayer';
-import DesktopPlayer from './DesktopPlayer/DesktopPlayer';
+import MobilePlayer from './mobilePlayer';
+import DesktopPlayer from './DesktopPlayer';
 import TrackItem from './TrackItem';
 import CustomContextMenu from './CustomContextMenu';
 import OnboardingStep1 from './OnboardingStep1';
