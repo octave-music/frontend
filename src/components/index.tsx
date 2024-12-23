@@ -24,6 +24,7 @@ import {
   Plus,
   User,
   Download,
+  Music,
   LogOut,
   ChevronLeft,
   X
@@ -32,18 +33,10 @@ import debounce from 'lodash/debounce';
 
 import MobilePlayer from './mobilePlayer';
 import DesktopPlayer from './DesktopPlayer';
-import TrackItem from './TrackItem';
-import CustomContextMenu from './CustomContextMenu';
-import OnboardingStep1 from './OnboardingStep1';
-import ArtistSelection from './ArtistSelection';
 
-import safeClone from '../lib/safeClone'; // Helper for JSON safe clone
-
-/** ------------------------------------------------------------------
- *  Types / Interfaces
- * ------------------------------------------------------------------ */
 const API_BASE_URL = 'https://mbck.cloudgen.xyz';
 
+// types.ts
 interface Track {
   id: string;
   title: string;
@@ -94,16 +87,32 @@ interface Position {
   y: number;
 }
 
+interface CustomContextMenuProps {
+  x: number;
+  y: number;
+  onClose: () => void;
+  options: ContextMenuOption[];
+}
+
+interface TrackItemProps {
+  track: Track;
+  showArtist?: boolean;
+  inPlaylistCreation?: boolean;
+  onTrackClick?: (track: Track) => void;
+}
+
 interface Artist {
   id: number;
   name: string;
   picture_medium: string;
 }
 
-/** ------------------------------------------------------------------
- *                 getDynamicGreeting
- * ------------------------------------------------------------------ */
-function getDynamicGreeting(): string {
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+const getDynamicGreeting = (): string => {
   const now = new Date();
   const currentHour = now.getHours();
   const currentMonth = now.getMonth();
@@ -152,29 +161,28 @@ function getDynamicGreeting(): string {
     if (isAutumn) return "Good Night! Reflect on the day with your favorite tracks.";
     return "Good Night! Time to relax with some music.";
   }
-}
+};
 
-/** ------------------------------------------------------------------
- *                 Main SpotifyClone Component
- * ------------------------------------------------------------------ */
-export default function SpotifyClone() {
-  // State hooks
+export function SpotifyClone() {
   const [view, setView] = useState<'home' | 'search' | 'playlist' | 'settings' | 'library'>('home');
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [jumpBackIn, setJumpBackIn] = useState<Track[]>([]);
+  const [showLibrary, setShowLibrary] = useState<boolean>(false);
+  const [shows, setShows] = useState<{ name: string; image: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [queue, setQueue] = useState<Track[]>([]);
   const [previousTracks, setPreviousTracks] = useState<Track[]>([]);
+  const [showMobileLibrary, setShowMobileLibrary] = useState<boolean>(false);
   const [shuffleOn, setShuffleOn] = useState<boolean>(false);
   const [savedPosition, setSavedPosition] = useState<number>(0);
   const [volume, setVolume] = useState<number>(1);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   const [seekPosition, setSeekPosition] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [showQueue] = useState<boolean>(false); // we read it, but not toggling
+  const [showQueue, setShowQueue] = useState<boolean>(false);
   const [showContextMenu, setShowContextMenu] = useState<boolean>(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<Position>({ x: 0, y: 0 });
   const [contextMenuTrack, setContextMenuTrack] = useState<Track | null>(null);
@@ -183,6 +191,7 @@ export default function SpotifyClone() {
   const [newPlaylistImage, setNewPlaylistImage] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState<boolean>(false);
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<string | null>(null);
   const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] = useState<boolean>(false);
   const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<Track[]>([]);
@@ -200,8 +209,13 @@ export default function SpotifyClone() {
   const [greeting, setGreeting] = useState<string>(getDynamicGreeting());
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [searchType, setSearchType] = useState('tracks');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadedAudios = useRef<HTMLAudioElement[]>([]);
+  const lyricsRef = useRef<HTMLDivElement>(null);
 
   const [audioQuality, setAudioQuality] = useState<'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER'>('HIGH');
 
@@ -210,13 +224,6 @@ export default function SpotifyClone() {
   const [showArtistSelection, setShowArtistSelection] = useState<boolean>(false);
 
   const [mounted, setMounted] = useState(false);
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const preloadedAudios = useRef<HTMLAudioElement[]>([]);
-
-  /** ------------------------------------------------------------------
-   *  Lifecycle & Effects
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -235,54 +242,45 @@ export default function SpotifyClone() {
     return () => clearInterval(interval);
   }, []);
 
-  /** ------------------------------------------------------------------
-   *  safeLocalStorage helpers
-   * ------------------------------------------------------------------ */
-  const safeLocalStorageGetItem = useCallback((key: string): string | null => {
+  const safeLocalStorageGetItem = (key: string): string | null => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(key);
     }
     return null;
-  }, []); 
-  
-  const safeLocalStorageSetItem = useCallback((key: string, value: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(key, value);
-    }
-  }, []); 
+  };
 
-  /** ------------------------------------------------------------------
-   *  Lyrics: sync with audio
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     if (lyrics.length > 0 && currentTrack && audioRef.current) {
       const handleTimeUpdate = () => {
-        if (!audioRef.current) return;
-        const currentTime = audioRef.current.currentTime || 0;
-
+        const currentTime = audioRef.current?.currentTime || 0;
+  
         // Find the active lyric line based on current playback time
         const activeIndex = lyrics.findIndex((lyric, index) => {
           const isLastLine = index === lyrics.length - 1;
           const nextLyricTime = isLastLine ? Infinity : lyrics[index + 1].time;
           return currentTime >= lyric.time && currentTime < nextLyricTime;
         });
-
+  
         // Update only if we found a valid line and it's different from the current one
         if (activeIndex !== -1 && activeIndex !== currentLyricIndex) {
           setCurrentLyricIndex(activeIndex);
         }
       };
-
+  
       audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
       return () => {
         audioRef.current?.removeEventListener('timeupdate', handleTimeUpdate);
       };
     }
   }, [lyrics, currentTrack, currentLyricIndex]);
+  
 
-  /** ------------------------------------------------------------------
-   *  IndexedDB open/store
-   * ------------------------------------------------------------------ */
+  const safeLocalStorageSetItem = (key: string, value: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  };
+
   const openDatabase = useCallback((): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
       if (typeof window === 'undefined') {
@@ -331,14 +329,13 @@ export default function SpotifyClone() {
     [openDatabase]
   );
 
-  /** ------------------------------------------------------------------
-   *  Debounced searching
-   * ------------------------------------------------------------------ */
   const fetchSearchResults = useMemo(
     () =>
       debounce(async (query: string) => {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`);
+          const response = await fetch(
+            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
+          );
           const data = await response.json();
           setSearchResults(data.results);
         } catch (error) {
@@ -348,9 +345,6 @@ export default function SpotifyClone() {
     []
   );
 
-  /** ------------------------------------------------------------------
-   *  parseLyrics / fetchLyrics
-   * ------------------------------------------------------------------ */
   const parseLyrics = (lyricsString: string): Lyric[] => {
     return lyricsString.split('\n').map((line) => {
       const [time, text] = line.split(']');
@@ -383,9 +377,6 @@ export default function SpotifyClone() {
     }
   }, []);
 
-  /** ------------------------------------------------------------------
-   *  isTrackLiked
-   * ------------------------------------------------------------------ */
   const isTrackLiked = useCallback(
     (track: Track) => {
       const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
@@ -394,9 +385,6 @@ export default function SpotifyClone() {
     [playlists]
   );
 
-  /** ------------------------------------------------------------------
-   *  Preload next tracks
-   * ------------------------------------------------------------------ */
   const preloadQueueTracks = useCallback(
     async (queueTracks: Track[]) => {
       const nextTracks = queueTracks.slice(1, 4);
@@ -410,9 +398,6 @@ export default function SpotifyClone() {
     [getOfflineTrack]
   );
 
-  /** ------------------------------------------------------------------
-   *  Playback / Audio Source
-   * ------------------------------------------------------------------ */
   const playTrackFromSource = useCallback(
     async (track: Track) => {
       const offlineTrack = await getOfflineTrack(track.id);
@@ -429,17 +414,17 @@ export default function SpotifyClone() {
     [currentTrack?.id, savedPosition, getOfflineTrack]
   );
 
-  /** ------------------------------------------------------------------
-   *  Main "Play Track" Flow
-   * ------------------------------------------------------------------ */
-  const playTrack = useCallback((track: Track) => {
-    setQueue((prevQueue) => {
-      const filteredQueue = prevQueue.filter((t) => t.id !== track.id);
-      return [track, ...filteredQueue];
-    });
-    setCurrentTrack(track);
-    setIsPlaying(true);
-  }, []);
+  const playTrack = useCallback(
+    (track: Track) => {
+      setQueue((prevQueue) => {
+        const filteredQueue = prevQueue.filter((t) => t.id !== track.id);
+        return [track, ...filteredQueue];
+      });
+      setCurrentTrack(track);
+      setIsPlaying(true);
+    },
+    []
+  );
 
   const togglePlay = useCallback(() => {
     if (!audioRef.current) return;
@@ -480,23 +465,14 @@ export default function SpotifyClone() {
     });
   }, [currentTrack]);
 
-  /** ------------------------------------------------------------------
-   *  Update "Recently Played"
-   * ------------------------------------------------------------------ */
-  const updateRecentlyPlayed = useCallback(
-    (track: Track) => {
-      if (typeof window === 'undefined') return;
-      const recentlyPlayed = JSON.parse(safeLocalStorageGetItem('recentlyPlayed') || '[]') as Track[];
-      const updatedRecentlyPlayed = [track, ...recentlyPlayed.filter((t) => t.id !== track.id)].slice(0, 4);
-      safeLocalStorageSetItem('recentlyPlayed', JSON.stringify(updatedRecentlyPlayed));
-      setJumpBackIn(updatedRecentlyPlayed);
-    },
-    [safeLocalStorageGetItem, safeLocalStorageSetItem]
-  );
+  const updateRecentlyPlayed = useCallback((track: Track) => {
+    if (typeof window === 'undefined') return;
+    const recentlyPlayed = JSON.parse(safeLocalStorageGetItem('recentlyPlayed') || '[]') as Track[];
+    const updatedRecentlyPlayed = [track, ...recentlyPlayed.filter((t) => t.id !== track.id)].slice(0, 4);
+    safeLocalStorageSetItem('recentlyPlayed', JSON.stringify(updatedRecentlyPlayed));
+    setJumpBackIn(updatedRecentlyPlayed);
+  }, []);
 
-  /** ------------------------------------------------------------------
-   *  Queue Add / Remove
-   * ------------------------------------------------------------------ */
   const addToQueue = useCallback((tracks: Track | Track[]) => {
     setQueue((prevQueue) => {
       const newTracks = Array.isArray(tracks) ? tracks : [tracks];
@@ -519,9 +495,6 @@ export default function SpotifyClone() {
     setCurrentTrack(track);
   }, []);
 
-  /** ------------------------------------------------------------------
-   *  Handle Audio End (repeat, skip, etc.)
-   * ------------------------------------------------------------------ */
   const handleTrackEnd = useCallback(() => {
     if (typeof window !== 'undefined' && currentTrack) {
       const counts = JSON.parse(safeLocalStorageGetItem('listenCounts') || '{}');
@@ -563,7 +536,7 @@ export default function SpotifyClone() {
     } else {
       setIsPlaying(false);
     }
-  }, [currentTrack, queue, repeatMode, skipTrack, safeLocalStorageGetItem, safeLocalStorageSetItem]);
+  }, [currentTrack, queue, repeatMode, skipTrack]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -571,9 +544,6 @@ export default function SpotifyClone() {
     }
   }, [repeatMode]);
 
-  /** ------------------------------------------------------------------
-   *  Volume & Audio Quality
-   * ------------------------------------------------------------------ */
   const onCycleAudioQuality = useCallback(() => {
     const order: ('MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER')[] = ['MAX', 'HIGH', 'NORMAL', 'DATA_SAVER'];
     const currentIndex = order.indexOf(audioQuality);
@@ -581,7 +551,7 @@ export default function SpotifyClone() {
     const newQuality = order[nextIndex];
     setAudioQuality(newQuality);
     safeLocalStorageSetItem('audioQuality', newQuality);
-  }, [audioQuality, safeLocalStorageSetItem]);
+  }, [audioQuality]);
 
   const onVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume);
@@ -589,12 +559,11 @@ export default function SpotifyClone() {
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
     }
-  }, [safeLocalStorageSetItem]);
+  }, []);
 
   useEffect(() => {
     if (!audioRef.current) return;
     const audio = audioRef.current;
-
     const handleEnded = () => {
       handleTrackEnd();
     };
@@ -619,42 +588,60 @@ export default function SpotifyClone() {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [handleTrackEnd, safeLocalStorageSetItem]);
+  }, [handleTrackEnd]);
 
-  /** ------------------------------------------------------------------
-   *  openAddToPlaylistModal
-   * ------------------------------------------------------------------ */
+  const handleSeek = (time: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setSeekPosition(time);
+    }
+  };
+
+  const handleSeekInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const newTime = parseFloat(e.target.value);
+    handleSeek(newTime);
+  };
+
+  const handleVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value);
+    onVolumeChange(newVolume);
+  };
+
   const openAddToPlaylistModal = useCallback((track: Track) => {
     setContextMenuTrack(track);
-    // If you want a real modal, you could set showAddToPlaylistModal = true
-    // but since ESLint says it's not used, remove it entirely or actually use it.
+    setShowAddToPlaylistModal(true);
   }, []);
 
-  /** ------------------------------------------------------------------
-   *  addToPlaylist
-   * ------------------------------------------------------------------ */
   const addToPlaylist = useCallback(
     (track: Track, playlistName: string) => {
-      const updatedPlaylists = playlists.map((p) =>
-        p.name === playlistName ? { ...p, tracks: [...p.tracks, track] } : p
+      const updatedPlaylists = playlists.map((playlist) =>
+        playlist.name === playlistName ? { ...playlist, tracks: [...playlist.tracks, track] } : playlist
       );
       setPlaylists(updatedPlaylists);
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
     },
-    [playlists, safeLocalStorageSetItem]
+    [playlists]
   );
 
-  /** ------------------------------------------------------------------
-   *  openPlaylist
-   * ------------------------------------------------------------------ */
+  const handleAddToPlaylist = useCallback(() => {
+    if (selectedPlaylistForAdd && contextMenuTrack) {
+      addToPlaylist(contextMenuTrack, selectedPlaylistForAdd);
+      setShowAddToPlaylistModal(false);
+      setSelectedPlaylistForAdd(null);
+    }
+  }, [addToPlaylist, contextMenuTrack, selectedPlaylistForAdd]);
+
+  const toggleTrackSelection = useCallback((track: Track) => {
+    setSelectedTracksForNewPlaylist((prev) =>
+      prev.some((t) => t.id === track.id) ? prev.filter((t) => t.id !== track.id) : [...prev, track]
+    );
+  }, []);
+
   const openPlaylist = useCallback((playlist: Playlist) => {
     setCurrentPlaylist(playlist);
     setView('playlist');
   }, []);
 
-  /** ------------------------------------------------------------------
-   *  pinPlaylist
-   * ------------------------------------------------------------------ */
   const pinPlaylist = useCallback(
     (playlist: Playlist) => {
       const updatedPlaylists = playlists.map((p) =>
@@ -663,12 +650,9 @@ export default function SpotifyClone() {
       setPlaylists(updatedPlaylists);
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
     },
-    [playlists, safeLocalStorageSetItem]
+    [playlists]
   );
 
-  /** ------------------------------------------------------------------
-   *  downloadTrack
-   * ------------------------------------------------------------------ */
   const downloadTrack = useCallback(
     async (track: Track) => {
       try {
@@ -685,54 +669,68 @@ export default function SpotifyClone() {
     [openDatabase]
   );
 
-  /** ------------------------------------------------------------------
-   *  toggleLike
-   * ------------------------------------------------------------------ */
+  // const toggleLike = useCallback(
+  //   (track: Track | null = currentTrack) => {
+  //     if (!track) return;
+  //     const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
+  //     if (!likedSongsPlaylist) return;
+  //     const updatedPlaylists = playlists.map((playlist) => {
+  //       if (playlist.name === 'Liked Songs') {
+  //         const isAlreadyLiked = playlist.tracks.some((t) => t.id === track.id);
+  //         if (isAlreadyLiked) {
+  //           return { ...playlist, tracks: playlist.tracks.filter((t) => t.id !== track.id) };
+  //         } else {
+  //           return { ...playlist, tracks: [...playlist.tracks, track] };
+  //         }
+  //       }
+  //       return playlist;
+  //     });
+  //     setPlaylists(updatedPlaylists);
+  //     safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
+  //     setIsLiked(!isLiked);
+  //   },
+  //   [currentTrack, isLiked, playlists]
+  // );
+
   const toggleLike = useCallback(
     (track: Track | null = currentTrack) => {
       if (!track) return;
-
+  
       const likedSongsPlaylist = playlists.find((p) => p.name === 'Liked Songs');
       if (!likedSongsPlaylist) return;
-
-      const updatedPlaylists = playlists.map((p) => {
-        if (p.name === 'Liked Songs') {
-          const isAlreadyLiked = p.tracks.some((t) => t.id === track.id);
+  
+      const updatedPlaylists = playlists.map((playlist) => {
+        if (playlist.name === 'Liked Songs') {
+          const isAlreadyLiked = playlist.tracks.some((t) => t.id === track.id);
           return {
-            ...p,
+            ...playlist,
             tracks: isAlreadyLiked
-              ? p.tracks.filter((t) => t.id !== track.id)
-              : [...p.tracks, track],
+              ? playlist.tracks.filter((t) => t.id !== track.id)
+              : [...playlist.tracks, track],
           };
         }
-        return p;
+        return playlist;
       });
-
+  
+      // Clone updated playlists to remove circular references
       const cleanPlaylists = safeClone(updatedPlaylists);
-
+  
       setPlaylists(cleanPlaylists);
-      safeLocalStorageSetItem('playlists', JSON.stringify(cleanPlaylists));
+      safeLocalStorageSetItem('playlists', JSON.stringify(cleanPlaylists)); // Safe to serialize
       setIsLiked((prev) => !prev);
     },
-    [currentTrack, playlists, safeLocalStorageSetItem]
+    [currentTrack, playlists]
   );
 
-  /** ------------------------------------------------------------------
-   *  deletePlaylist
-   * ------------------------------------------------------------------ */
   const deletePlaylist = useCallback(
     (playlist: Playlist) => {
       const updatedPlaylists = playlists.filter((p) => p.name !== playlist.name);
       setPlaylists(updatedPlaylists);
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
     },
-    [playlists, safeLocalStorageSetItem]
+    [playlists]
   );
 
-  /** ------------------------------------------------------------------
-   *  handleContextMenu
-   *  (We can remove it entirely if we never attach it)
-   * ------------------------------------------------------------------ */
   const handleContextMenu = useCallback(
     (e: MouseEvent, item: Track | Playlist) => {
       e.preventDefault();
@@ -745,19 +743,121 @@ export default function SpotifyClone() {
       if ('tracks' in item) {
         options.push(
           { label: 'Pin Playlist', action: () => pinPlaylist(item as Playlist) },
-          { label: 'Delete Playlist', action: () => deletePlaylist(item as Playlist) }
+          { label: 'Delete Playlist', action: () => deletePlaylist(item as Playlist) } // Add this
         );
       }
       setContextMenuPosition({ x: e.clientX, y: e.clientY });
       setContextMenuOptions(options);
       setShowContextMenu(true);
     },
-    [addToQueue, openAddToPlaylistModal, toggleLike, downloadTrack, pinPlaylist, deletePlaylist]
-  );
+    [addToQueue, downloadTrack, openAddToPlaylistModal, pinPlaylist, toggleLike, deletePlaylist]
+  );  
 
-  /** ------------------------------------------------------------------
-   *  Playlist control (play, download, shuffle)
-   * ------------------------------------------------------------------ */
+  const CustomContextMenu = ({ x, y, onClose, options }: CustomContextMenuProps) => {
+    return (
+      <div
+        className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-50"
+        style={{ top: y, left: x }}
+        onMouseLeave={onClose}
+      >
+        {options.map((option, index) => (
+          <button
+            key={index}
+            className="block w-full text-left px-4 py-2 hover:bg-gray-700"
+            onClick={() => {
+              option.action();
+              onClose();
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  const TrackItem = ({ track, showArtist = true, inPlaylistCreation = false, onTrackClick }: TrackItemProps) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    const handleTrackClick = (e: React.MouseEvent) => {
+      if (inPlaylistCreation) {
+        e.stopPropagation();
+        toggleTrackSelection(track);
+      } else if (onTrackClick) {
+        onTrackClick(track);
+      } else {
+        playTrack(track);
+      }
+    };
+
+    const coverImage = track.album?.cover_medium || '/images/placeholder-image.png';
+
+    return (
+      <div
+        className={`group flex items-center space-x-4 bg-gray-800 bg-opacity-40 rounded-lg p-2 relative cursor-pointer ${
+          inPlaylistCreation ? 'selectable' : ''
+        }`}
+        onClick={handleTrackClick}
+        onContextMenu={(e) => handleContextMenu(e, track)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div className="relative">
+          <img src={coverImage} alt={track.title} className="w-12 h-12 rounded-md" />
+          {isHovered && !inPlaylistCreation && (
+            <button
+              className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center transition-opacity duration-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                playTrack(track);
+              }}
+            >
+              <Play className="w-6 h-6 text-white" />
+            </button>
+          )}
+        </div>
+        <div className="flex-grow">
+          <p className="font-medium">{track.title}</p>
+          {showArtist && <p className="text-sm text-gray-400">{track.artist?.name || 'Unknown Artist'}</p>}
+        </div>
+        {inPlaylistCreation ? (
+          <input
+            type="checkbox"
+            checked={selectedTracksForNewPlaylist.some((t) => t.id === track.id)}
+            onChange={(e) => {
+              e.stopPropagation();
+              toggleTrackSelection(track);
+            }}
+            className="ml-auto bg-gray-700 rounded-full border-none"
+          />
+        ) : (
+          isHovered && (
+            <div className="flex space-x-2 transition-opacity duration-300">
+              <button
+                className="bg-gray-700 rounded-full p-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addToQueue(track);
+                }}
+              >
+                <Plus className="w-4 h-4 text-white" />
+              </button>
+              <button
+                className="bg-gray-700 rounded-full p-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openAddToPlaylistModal(track);
+                }}
+              >
+                <Library className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          )
+        )}
+      </div>
+    );
+  };
+
   const playPlaylist = useCallback(
     (playlist: Playlist) => {
       setQueue(playlist.tracks);
@@ -805,19 +905,13 @@ export default function SpotifyClone() {
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
       setCurrentPlaylist(updatedPlaylist);
     },
-    [playlists, searchResults, safeLocalStorageSetItem]
+    [playlists, searchResults]
   );
 
-  /** ------------------------------------------------------------------
-   *  toggleLyricsView
-   * ------------------------------------------------------------------ */
   const toggleLyricsView = useCallback(() => {
     setShowLyrics(!showLyrics);
   }, [showLyrics]);
 
-  /** ------------------------------------------------------------------
-   *  shuffleQueue
-   * ------------------------------------------------------------------ */
   const shuffleQueue = useCallback(() => {
     const shuffledQueue = [...queue];
     for (let i = shuffledQueue.length - 1; i > 0; i--) {
@@ -828,9 +922,6 @@ export default function SpotifyClone() {
     setShuffleOn(!shuffleOn);
   }, [queue, shuffleOn]);
 
-  /** ------------------------------------------------------------------
-   *  createPlaylist
-   * ------------------------------------------------------------------ */
   const createPlaylist = useCallback(() => {
     if (newPlaylistName) {
       const newPlaylist: Playlist = {
@@ -847,7 +938,7 @@ export default function SpotifyClone() {
       setShowSearchInPlaylistCreation(false);
       safeLocalStorageSetItem('playlists', JSON.stringify(updatedPlaylists));
     }
-  }, [newPlaylistName, newPlaylistImage, selectedTracksForNewPlaylist, playlists, safeLocalStorageSetItem]);
+  }, [newPlaylistImage, newPlaylistName, playlists, selectedTracksForNewPlaylist]);
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -860,9 +951,6 @@ export default function SpotifyClone() {
     }
   };
 
-  /** ------------------------------------------------------------------
-   *  getMostPlayedArtists & fetchRandomSongs
-   * ------------------------------------------------------------------ */
   const getMostPlayedArtists = useCallback((): string[] => {
     if (typeof window === 'undefined') return [];
     const recentlyPlayed = JSON.parse(safeLocalStorageGetItem('recentlyPlayed') || '[]') as Track[];
@@ -871,7 +959,7 @@ export default function SpotifyClone() {
       return acc;
     }, {});
     return Object.keys(artistCounts).sort((a, b) => artistCounts[b] - artistCounts[a]);
-  }, [safeLocalStorageGetItem]);
+  }, []);
 
   const fetchRandomSongs = useCallback(
     async (artists: string[]): Promise<Track[]> => {
@@ -892,9 +980,8 @@ export default function SpotifyClone() {
     []
   );
 
-  /** ------------------------------------------------------------------
-   *  Onboarding
-   * ------------------------------------------------------------------ */
+  // Onboarding
+  // Onboarding
   const startOnboarding = useCallback(() => {
     setShowOnboarding(true);
     setOnboardingStep(1);
@@ -906,7 +993,7 @@ export default function SpotifyClone() {
     setShowArtistSelection(false);
     setOnboardingStep(0);
     setView('home');
-  }, [safeLocalStorageSetItem]);
+  }, []);
 
   const handleStep1Complete = useCallback(() => {
     setOnboardingStep(2);
@@ -958,8 +1045,232 @@ export default function SpotifyClone() {
         console.error('Error in artist selection completion:', error);
       }
     },
-    [playlists, safeLocalStorageSetItem]
+    [playlists]
   );
+
+  interface ArtistSelectionProps {
+    onComplete: (selectedArtists: Artist[]) => void;
+  }
+
+  function safeClone<T>(obj: T): T {
+    const cache = new Set();
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (cache.has(value)) {
+          // Circular reference found, discard key
+          return undefined;
+        }
+        cache.add(value);
+      }
+  
+      // Exclude React's Fiber properties
+      if (key.startsWith('__react')) return undefined;
+  
+      // Exclude global objects
+      if (value === window) return undefined;
+  
+      return value;
+    }));
+  }
+  
+
+  const ArtistSelection: React.FC<ArtistSelectionProps> = ({ onComplete }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [artistSearchResults, setArtistSearchResults] = useState<Artist[]>([]);
+    const [selectedArtists, setSelectedArtists] = useState<Artist[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+    const performArtistSearch = useCallback(
+      async (value: string, currentSelectedArtists: Artist[]) => {
+        if (value.length > 2) {
+          setIsLoading(true);
+          try {
+            const response = await fetch(
+              `${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(value)}`
+            );
+            const data = await response.json();
+            const filteredResults = (data.results || []).filter(
+              (artist: Artist) => !currentSelectedArtists.some((a) => a.id === artist.id)
+            );
+            setArtistSearchResults(filteredResults);
+          } catch (error) {
+            console.error('Error searching artists:', error);
+            setArtistSearchResults([]);
+          } finally {
+            setIsLoading(false);
+          }
+        } else {
+          setArtistSearchResults([]);
+        }
+      },
+      []
+    );
+
+    const artistDebouncedSearch = useMemo(() => {
+      return debounce((value: string, currentSelectedArtists: Artist[]) => {
+        void performArtistSearch(value, currentSelectedArtists);
+      }, 300);
+    }, [performArtistSearch]);
+    
+
+    useEffect(() => {
+      return () => {
+        artistDebouncedSearch.cancel();
+      };
+    }, [artistDebouncedSearch]);
+
+
+
+
+    const handleSearchInput = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchTerm(value);
+        artistDebouncedSearch(value, selectedArtists);
+      },
+      [artistDebouncedSearch, selectedArtists]
+    );
+
+    const handleArtistSelect = useCallback(
+      (artist: Artist) => {
+        if (selectedArtists.length < 5) {
+          setSelectedArtists((prev) => [...prev, artist]);
+          setArtistSearchResults((prev) => prev.filter((a) => a.id !== artist.id));
+          setSearchTerm('');
+        }
+      },
+      [selectedArtists.length]
+    );
+
+    const handleArtistUnselect = useCallback((artist: Artist) => {
+      setSelectedArtists((prev) => prev.filter((a) => a.id !== artist.id));
+    }, []);
+
+
+    
+
+    return (
+      <div className="min-h-screen overflow-y-auto custom-scrollbar bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+          <div className="text-center space-y-6 mb-16">
+            <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300">
+              Pick Your Vibe
+            </h1>
+            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+              Select up to 5 artists you love and we&apos;ll create your perfect musical atmosphere
+            </p>
+          </div>
+          <div className="max-w-3xl mx-auto mb-12">
+            <div
+              className={`relative transform transition-all duration-200 ${
+                isSearchFocused ? 'scale-105' : 'scale-100'
+              }`}
+            >
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search for your favorite artists..."
+                  value={searchTerm}
+                  onChange={handleSearchInput}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                  className="w-full px-6 py-4 text-lg bg-white/10 backdrop-blur-xl border border-white/20 
+                  rounded-2xl text-white placeholder-gray-400 outline-none focus:ring-2 
+                  focus:ring-purple-500/50 transition-all duration-300"
+                  style={{ caretColor: 'white' }}
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  {isLoading ? (
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-500 border-t-transparent" />
+                  ) : (
+                    <Search className="h-6 w-6 text-gray-400" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          {selectedArtists.length > 0 && (
+            <div className="max-w-5xl mx-auto mb-12">
+              <h2 className="text-2xl font-bold text-white mb-6">Selected Artists</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {selectedArtists.map((artist) => (
+                  <div
+                    key={artist.id}
+                    className="group relative aspect-square rounded-2xl overflow-hidden 
+                    transform transition-all duration-300 hover:scale-95"
+                    onClick={() => handleArtistUnselect(artist)}
+                  >
+                    <img
+                      src={artist.picture_medium}
+                      alt={artist.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div
+                      className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent 
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-300 
+                      flex flex-col justify-end p-4"
+                    >
+                      <p className="text-white font-semibold">{artist.name}</p>
+                      <p className="text-red-400 text-sm">Click to remove</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {artistSearchResults.length > 0 && (
+            <div className="max-w-5xl mx-auto pb-20">
+              <h2 className="text-2xl font-bold text-white mb-6">Search Results</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {artistSearchResults.map((artist) => (
+                  <div
+                    key={artist.id}
+                    className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer 
+                    transform transition-all duration-300 hover:scale-105"
+                    onClick={() => handleArtistSelect(artist)}
+                  >
+                    <img
+                      src={artist.picture_medium}
+                      alt={artist.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div
+                      className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent 
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-300 
+                      flex flex-col justify-end p-4"
+                    >
+                      <p className="text-white font-semibold">{artist.name}</p>
+                      <p className="text-green-400 text-sm">Click to select</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="fixed bottom-0 inset-x-0 bg-black/80 backdrop-blur-xl border-t border-white/10">
+            <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
+              <p className="text-white">
+                <span className="text-2xl font-bold text-purple-400">{selectedArtists.length}</span>
+                <span className="ml-2 text-gray-400">of 5 artists selected</span>
+              </p>
+              <button
+                onClick={() => onComplete(selectedArtists)}
+                disabled={selectedArtists.length === 0}
+                className={`px-8 py-3 rounded-xl font-medium transition-all duration-300 ${
+                  selectedArtists.length === 0
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-pink-600 hover:to-purple-600 text-white transform hover:scale-105'
+                }`}
+              >
+                {selectedArtists.length === 0 ? 'Select Artists to Continue' : 'Complete Selection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const handleStep2Complete = useCallback(
     (artists: Artist[]) => {
@@ -970,19 +1281,13 @@ export default function SpotifyClone() {
     [handleArtistSelectionComplete, handleOnboardingComplete]
   );
 
-  /** ------------------------------------------------------------------
-   *  Check Onboarding on mount
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     const onboardingDone = safeLocalStorageGetItem('onboardingDone');
     if (!onboardingDone) {
       startOnboarding();
     }
-  }, [startOnboarding, safeLocalStorageGetItem]);
+  }, [startOnboarding]);
 
-  /** ------------------------------------------------------------------
-   *  Load from LocalStorage
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedVolume = safeLocalStorageGetItem('volume');
@@ -992,7 +1297,7 @@ export default function SpotifyClone() {
       if (savedShuffleOn) setShuffleOn(JSON.parse(savedShuffleOn));
 
       const savedPlaylists = JSON.parse(safeLocalStorageGetItem('playlists') || '[]') as Playlist[];
-      if (!savedPlaylists.some((p) => p.name === 'Liked Songs')) {
+      if (!savedPlaylists.some((playlist) => playlist.name === 'Liked Songs')) {
         savedPlaylists.push({ name: 'Liked Songs', image: '/images/liked-songs.webp', tracks: [] });
       }
       setPlaylists(savedPlaylists);
@@ -1017,91 +1322,99 @@ export default function SpotifyClone() {
         void fetchSearchResults(favoriteArtists[Math.floor(Math.random() * favoriteArtists.length)].name);
       }
     }
-  }, [fetchSearchResults, safeLocalStorageGetItem]);
+  }, [fetchSearchResults]);
 
-
-const handleSearch = useCallback(
-  async (query: string) => {
-    // Keep local state (searchQuery) in sync
-    setSearchQuery(query);
-
-    // If user cleared the input, empty results & bail out
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    // Update recent searches
-    setRecentSearches((prev: string[]) => {
-      // Remove this query if it exists
-      const filtered = prev.filter((item: string) => item !== query);
-      // Insert the new query at the front & limit to 5
-      const updated = [query, ...filtered].slice(0, 5);
-      safeLocalStorageSetItem('recentSearches', JSON.stringify(updated));
-      return updated;
-    });
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
-      );
-      const data = await response.json();
-      // Populate results if success
-      setSearchResults(data.results || []);
-    } catch (error) {
-      console.error('Error fetching search results:', error);
-      // Optionally clear or handle error state
-      setSearchResults([]);
-    }
-  },
-  [
-    setSearchQuery,
-    setSearchResults,
-    setRecentSearches,
-    safeLocalStorageSetItem
-  ]
-);
-
-  /** ------------------------------------------------------------------
-   *  Whenever queue changes, store & preload
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     if (typeof window !== 'undefined') {
       safeLocalStorageSetItem('queue', JSON.stringify(queue));
       void preloadQueueTracks(queue);
     }
-  }, [queue, preloadQueueTracks, safeLocalStorageSetItem]);
+  }, [queue, preloadQueueTracks]);
 
-  /** ------------------------------------------------------------------
-   *  Whenever currentTrack changes, update local + play
-   * ------------------------------------------------------------------ */
   useEffect(() => {
     if (currentTrack) {
       void playTrackFromSource(currentTrack); // Handles playback
       setIsPlaying(true); // Ensure play state is updated correctly
       updateRecentlyPlayed(currentTrack); // Updates recently played list
       safeLocalStorageSetItem('currentTrack', JSON.stringify(currentTrack));
-
+  
       // Ensure toggling likes does not unintentionally modify the queue
-      if (!queue.some((t) => t.id === currentTrack.id)) {
-        setQueue((prevQueue) => [currentTrack, ...prevQueue.filter((track) => track.id !== currentTrack.id)]);
+      if (!queue.some((track) => track.id === currentTrack.id)) {
+        setQueue((prevQueue) => [currentTrack, ...prevQueue.filter((t) => t.id !== currentTrack.id)]);
       }
-
+  
       setIsLiked(isTrackLiked(currentTrack)); // Check like status
       void fetchLyrics(currentTrack); // Fetch lyrics asynchronously
     }
-  }, [currentTrack, queue, playTrackFromSource, updateRecentlyPlayed, safeLocalStorageSetItem, isTrackLiked, fetchLyrics]);
-
+  }, [currentTrack, fetchLyrics, isTrackLiked, playTrackFromSource, queue, updateRecentlyPlayed ]);
+  
   useEffect(() => {
     if (currentTrack) {
       const counts = JSON.parse(safeLocalStorageGetItem('listenCounts') || '{}');
       setListenCount(counts[currentTrack.id] || 0);
     }
-  }, [currentTrack, safeLocalStorageGetItem]);
+  }, [currentTrack]);
 
-  /** ------------------------------------------------------------------
-   *  Onboarding Screens
-   * ------------------------------------------------------------------ */
+  function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-bl from-[#1e1e2f] via-[#282843] to-[#0d0d14] text-white">
+        <div className="relative text-center p-8 bg-gradient-to-br from-black/50 to-black/70 backdrop-blur-xl rounded-3xl shadow-2xl max-w-lg">
+          <div className="absolute -top-10 -left-10 w-32 h-32 bg-gradient-to-tr from-purple-600 via-pink-500 to-blue-500 opacity-30 blur-3xl" />
+          <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-800 opacity-20 blur-3xl" />
+          <div className="flex justify-center mb-8">
+            <div className="bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 rounded-full p-4 shadow-md">
+              <Music className="w-12 h-12 text-white" />
+            </div>
+          </div>
+          <h1 className="text-5xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-500 to-blue-400">
+            Welcome to Octave
+          </h1>
+          <p className="text-lg text-gray-300 mb-8 leading-relaxed">
+            Your gateway to a world of music tailored just for you. Let’s craft your ultimate
+            soundtrack together.
+          </p>
+          <button
+            onClick={onComplete}
+            className="px-10 py-4 text-lg font-bold bg-gradient-to-r from-pink-500 to-purple-500 hover:from-purple-500 hover:to-pink-500 text-white rounded-full shadow-xl transform transition-transform hover:translate-y-[-2px] focus:outline-none focus:ring-4 focus:ring-purple-500 focus:ring-opacity-50"
+          >
+            Get Started
+          </button>
+          <div className="mt-10 flex items-center justify-center space-x-2">
+            <div className="h-[2px] w-10 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
+            <p className="text-sm text-gray-400">A personalized music experience awaits</p>
+            <div className="h-[2px] w-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const handleSearch = useCallback(
+    async (query: string) => {
+      if (!query.trim()) return;
+      setSearchQuery(query);
+      setRecentSearches((prev) => {
+        const filtered = prev.filter((item) => item !== query);
+        const updated = [query, ...filtered].slice(0, 5);
+        safeLocalStorageSetItem('recentSearches', JSON.stringify(updated));
+        return updated;
+      });
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/search/${searchType}?query=${encodeURIComponent(query)}`
+        );
+        const data = await response.json();
+        setSearchResults(data.results || []);
+      } catch (error) {
+        console.error('Error searching:', error);
+      }
+    },
+    [searchType]
+  );
+
+
   if (showOnboarding) {
     return (
       <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
@@ -1119,19 +1432,19 @@ const handleSearch = useCallback(
     );
   }
 
-  /** ------------------------------------------------------------------
-   *  Render the UI
-   * ------------------------------------------------------------------ */
   return (
-    <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
-      {/* MOBILE LAYOUT */}
+  <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
+      {/* Mobile */}
       <div className="md:hidden flex flex-col h-[100dvh]">
-        {/* Mobile Header */}
         <header className="p-4 flex justify-between items-center">
-          <h1 className="text-xl md:text-2xl font-semibold">{greeting}</h1>
-          <div className="flex space-x-4">
+        <h1 className="text-xl md:text-2xl font-semibold">{greeting}</h1>
+        <div className="flex space-x-4">
+            {/* Bell Icon */}
             <Bell className="w-6 h-6" />
+
+            {/* Clock Icon */}
             <Clock className="w-6 h-6" />
+
             {/* Cog Icon with Dropdown */}
             <div className="relative">
               <button
@@ -1140,8 +1453,10 @@ const handleSearch = useCallback(
               >
                 <Cog className="w-6 h-6 text-white" />
               </button>
+
               {showSettingsMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-[#0a1929] rounded-lg shadow-xl z-10 border border-[#1e3a5f] animate-slideIn">
+                <div className="absolute right-0 mt-2 w-48 bg-[#0a1929] rounded-lg shadow-xl z-10 
+                                border border-[#1e3a5f] animate-slideIn">
                   {/* Install App Option */}
                   <button
                     className="flex items-center px-4 py-2.5 text-gray-300 hover:bg-[#1a237e] w-full text-left
@@ -1161,8 +1476,11 @@ const handleSearch = useCallback(
                   >
                     <Download className="w-4 h-4 mr-3 text-[#90caf9] group-hover:text-white" />
                     Install App
-                    <span className="ml-2 bg-[#1a237e] text-xs text-white px-2 py-0.5 rounded-full">New</span>
+                    <span className="ml-2 bg-[#1a237e] text-xs text-white px-2 py-0.5 rounded-full">
+                      New
+                    </span>
                   </button>
+
                   {/* Log Out Option */}
                   <button
                     className="flex items-center px-4 py-2.5 text-gray-300 hover:bg-gray-700 w-full text-left
@@ -1174,10 +1492,13 @@ const handleSearch = useCallback(
                   </button>
                 </div>
               )}
+
               {/* PWA Install Modal */}
               {showPwaModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300 animate-fadeIn">
-                  <div className="bg-[#0a1929] text-white rounded-xl p-8 w-[90%] max-w-md shadow-2xl border border-[#1e3a5f] animate-slideIn m-4">
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 
+                                transition-all duration-300 animate-fadeIn">
+                  <div className="bg-[#0a1929] text-white rounded-xl p-8 w-[90%] max-w-md shadow-2xl 
+                                border border-[#1e3a5f] animate-slideIn m-4">
                     <h2 className="text-2xl font-bold text-center mb-6 text-[#90caf9]">Install App</h2>
                     {(() => {
                       const userAgent = navigator.userAgent || navigator.vendor;
@@ -1186,18 +1507,10 @@ const handleSearch = useCallback(
                           <div className="space-y-4">
                             <p className="text-gray-300">For the best experience, add the app to your home screen:</p>
                             <ol className="list-decimal ml-6 mt-2 space-y-3 text-gray-300">
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Open Chrome on your Android device.
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Tap the <strong className="text-[#90caf9]">menu</strong> button (three vertical dots).
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Select <strong className="text-[#90caf9]">Add to Home Screen</strong>.
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Confirm by tapping <strong className="text-[#90caf9]">Add</strong>.
-                              </li>
+                              <li className="transition-colors duration-200 hover:text-white">Open Chrome on your Android device.</li>
+                              <li className="transition-colors duration-200 hover:text-white">Tap the <strong className="text-[#90caf9]">menu</strong> button (three vertical dots).</li>
+                              <li className="transition-colors duration-200 hover:text-white">Select <strong className="text-[#90caf9]">Add to Home Screen</strong>.</li>
+                              <li className="transition-colors duration-200 hover:text-white">Confirm by tapping <strong className="text-[#90caf9]">Add</strong>.</li>
                             </ol>
                           </div>
                         );
@@ -1206,18 +1519,10 @@ const handleSearch = useCallback(
                           <div className="space-y-4">
                             <p className="text-gray-300">For the best experience, add the app to your home screen:</p>
                             <ol className="list-decimal ml-6 mt-2 space-y-3 text-gray-300">
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Open Safari on your iOS device.
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Tap the <strong className="text-[#90caf9]">Share</strong> icon (a square with an arrow).
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Select <strong className="text-[#90caf9]">Add to Home Screen</strong>.
-                              </li>
-                              <li className="transition-colors duration-200 hover:text-white">
-                                Confirm by tapping <strong className="text-[#90caf9]">Add</strong>.
-                              </li>
+                              <li className="transition-colors duration-200 hover:text-white">Open Safari on your iOS device.</li>
+                              <li className="transition-colors duration-200 hover:text-white">Tap the <strong className="text-[#90caf9]">Share</strong> icon (a square with an arrow).</li>
+                              <li className="transition-colors duration-200 hover:text-white">Select <strong className="text-[#90caf9]">Add to Home Screen</strong>.</li>
+                              <li className="transition-colors duration-200 hover:text-white">Confirm by tapping <strong className="text-[#90caf9]">Add</strong>.</li>
                             </ol>
                           </div>
                         );
@@ -1227,7 +1532,11 @@ const handleSearch = useCallback(
                     })()}
                     <button
                       onClick={() => setShowPwaModal(false)}
-                      className="mt-8 px-6 py-3 bg-[#1a237e] text-white rounded-lg w-full transition-all duration-300 hover:bg-[#283593] focus:outline-none focus:ring-2 focus:ring-[#90caf9] focus:ring-offset-2 focus:ring-offset-[#0a1929] font-semibold shadow-lg hover:shadow-xl active:transform active:scale-95"
+                      className="mt-8 px-6 py-3 bg-[#1a237e] text-white rounded-lg w-full
+                                transition-all duration-300 hover:bg-[#283593] 
+                                focus:outline-none focus:ring-2 focus:ring-[#90caf9] focus:ring-offset-2
+                                focus:ring-offset-[#0a1929] font-semibold
+                                shadow-lg hover:shadow-xl active:transform active:scale-95"
                     >
                       Close
                     </button>
@@ -1237,8 +1546,6 @@ const handleSearch = useCallback(
             </div>
           </div>
         </header>
-
-        {/* Mobile Nav */}
         <nav className="px-4 mb-4">
           <ul className="flex space-x-2 overflow-x-auto custom-scrollbar">
             <li>
@@ -1256,12 +1563,9 @@ const handleSearch = useCallback(
             </li>
           </ul>
         </nav>
-
-        {/* Mobile Main Content */}
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
           {view === 'playlist' && currentPlaylist ? (
             <section>
-              {/* MOBILE PLAYLIST VIEW */}
               <div className="relative h-64 mb-4">
                 <img
                   src={currentPlaylist.image}
@@ -1323,9 +1627,7 @@ const handleSearch = useCallback(
                     </button>
                   </div>
                 ) : (
-                  currentPlaylist.tracks.map((track, index) => (
-                    <TrackItem key={index} track={track} />
-                  ))
+                  currentPlaylist.tracks.map((track, index) => <TrackItem key={index} track={track} />)
                 )}
               </div>
             </section>
@@ -1406,24 +1708,25 @@ const handleSearch = useCallback(
             <>
               <section className="mb-6">
                 <div className="grid grid-cols-2 gap-2">
-                  {playlists.map((playlist) => (
-                    <div
-                      key={playlist.name}
-                      className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
+                {playlists.map((playlist) => (
+                  <div
+                    key={playlist.name}
+                    className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
+                  >
+                    <img src={playlist.image} alt={playlist.name} className="w-10 h-10 rounded-md" />
+                    <span className="font-medium text-sm">{playlist.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePlaylist(playlist); // Call the delete function
+                      }}
+                      className="ml-auto p-1 text-red-400 hover:text-red-500"
                     >
-                      <img src={playlist.image} alt={playlist.name} className="w-10 h-10 rounded-md" />
-                      <span className="font-medium text-sm">{playlist.name}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deletePlaylist(playlist);
-                        }}
-                        className="ml-auto p-1 text-red-400 hover:text-red-500"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+
                 </div>
               </section>
               <section className="mb-6">
@@ -1500,8 +1803,6 @@ const handleSearch = useCallback(
             </>
           )}
         </main>
-
-        {/* Mobile Footer */}
         {!isPlayerOpen && (
           <footer
             className="bg-black p-4 flex justify-around fixed bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)]"
@@ -1530,8 +1831,6 @@ const handleSearch = useCallback(
               <Search className="w-6 h-6" />
               <span className="text-xs mt-1">Search</span>
             </button>
-
-            {/* Mobile Search Overlay */}
             {isSearchOpen && view === 'search' && (
               <motion.div
                 initial={{ y: '100%' }}
@@ -1565,7 +1864,7 @@ const handleSearch = useCallback(
                       onChange={(e) => {
                         const newQuery = e.target.value;
                         setSearchQuery(newQuery);
-                        handleSearch(newQuery);
+                        handleSearch(newQuery); // Trigger your search fetch logic
                       }}
                       className="w-full px-4 py-3 rounded-full bg-gray-800 text-white placeholder-gray-500 
                                 focus:outline-none focus:ring-2 focus:ring-green-500 pl-12 transition-all 
@@ -1578,11 +1877,9 @@ const handleSearch = useCallback(
                         key={type}
                         onClick={() => setSearchType(type)}
                         className={`px-4 py-2 rounded-full text-sm font-medium 
-                          ${
-                            searchType === type
-                              ? 'bg-white text-black'
-                              : 'bg-gray-800 text-white hover:bg-gray-700 transition-colors duration-200'
-                          }`}
+                          ${searchType === type 
+                            ? 'bg-white text-black' 
+                            : 'bg-gray-800 text-white hover:bg-gray-700 transition-colors duration-200'}`}
                       >
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </button>
@@ -1590,7 +1887,7 @@ const handleSearch = useCallback(
                   </div>
                 </div>
 
-                {/* Mobile Recent Searches */}
+                {/* Mobile Recent Searches (Shown if no query and we have recent searches) */}
                 {!searchQuery && recentSearches.length > 0 && (
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
                     <div className="flex justify-between items-center mb-4">
@@ -1637,7 +1934,7 @@ const handleSearch = useCallback(
                   </div>
                 )}
 
-                {/* Mobile Search Results */}
+                {/* Mobile Search Results (Shown if there's a query) */}
                 {searchQuery && (
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
                     {searchResults.length === 0 ? (
@@ -1652,6 +1949,7 @@ const handleSearch = useCallback(
                             <TrackItem
                               key={result.id}
                               track={result}
+                              // When a track is clicked on mobile, play it and then close the search overlay.
                               onTrackClick={(track) => {
                                 playTrack(track);
                                 setIsSearchOpen(false);
@@ -1670,6 +1968,7 @@ const handleSearch = useCallback(
             <button
               className="flex flex-col items-center text-gray-400 hover:text-white"
               onClick={() => {
+                setShowMobileLibrary(true);
                 setView('library');
               }}
             >
@@ -1678,8 +1977,6 @@ const handleSearch = useCallback(
             </button>
           </footer>
         )}
-
-        {/* Mobile Player */}
         {mounted && currentTrack && (
           <MobilePlayer
             currentTrack={currentTrack}
@@ -1693,12 +1990,7 @@ const handleSearch = useCallback(
             seekPosition={seekPosition}
             duration={duration}
             listenCount={listenCount}
-            handleSeek={(time) => {
-              if (audioRef.current) {
-                audioRef.current.currentTime = time;
-                setSeekPosition(time);
-              }
-            }}
+            handleSeek={handleSeek}
             isLiked={isLiked}
             repeatMode={repeatMode}
             setRepeatMode={setRepeatMode}
@@ -1717,7 +2009,7 @@ const handleSearch = useCallback(
         )}
       </div>
 
-      {/* DESKTOP LAYOUT */}
+      {/* Desktop layout */}
       <div className="hidden md:flex flex-1 gap-2 p-2 overflow-y-auto custom-scrollbar">
         {showContextMenu && (
           <CustomContextMenu
@@ -1751,6 +2043,13 @@ const handleSearch = useCallback(
                   <Library className="w-6 h-6 mr-3" />
                   Your Library
                 </div>
+                {false && (
+                  <Plus
+                    className="w-5 h-5 text-white hover:text-white cursor-pointer transition-colors duration-200"
+                    // onClick={() => setShowCreatePlaylist(true)}
+                  />
+                )}
+
               </div>
               <div className="space-y-2">
                 {playlists.map((playlist) => (
@@ -1789,13 +2088,12 @@ const handleSearch = useCallback(
           </nav>
         </aside>
 
-        {/* Desktop Main */}
+        {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-gradient-to-b from-gray-900 to-black rounded-lg p-6">
           <header className="flex justify-between items-center mb-8">
             <h1 className="text-xl md:text-2xl font-semibold">{greeting}</h1>
             <div className="relative flex items-center">
-              {mounted &&
-                typeof window !== 'undefined' &&
+              {mounted && typeof window !== 'undefined' &&
                 !(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) && (
                   <>
                     <button
@@ -1822,7 +2120,12 @@ const handleSearch = useCallback(
                           viewBox="0 0 24 24"
                           xmlns="http://www.w3.org/2000/svg"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                          />
                         </svg>
                         Install App
                       </span>
@@ -1833,7 +2136,7 @@ const handleSearch = useCallback(
                         <div className="bg-[#0a1929] text-white rounded-xl p-8 w-[90%] max-w-md shadow-2xl 
                               border border-[#1e3a5f] animate-slideIn">
                           <h2 className="text-2xl font-bold text-center mb-6 text-[#90caf9]">Install App</h2>
-                          {/* PWA instructions similarly as above */}
+                          {/* PWA instructions as before */}
                           <button
                             onClick={() => setShowPwaModal(false)}
                             className="mt-8 px-6 py-3 bg-[#1a237e] text-white rounded-lg w-full
@@ -1889,7 +2192,7 @@ const handleSearch = useCallback(
             </div>
           </header>
 
-          {view === 'settings' ? (
+        {view === 'settings' ? (
             <section>
               <h2 className="text-2xl font-bold mb-4">Settings</h2>
               <div className="space-y-4">
@@ -1916,7 +2219,9 @@ const handleSearch = useCallback(
                     />
                   </div>
                   <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Default Music Quality</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Default Music Quality
+                    </label>
                     <select
                       className="w-full p-2 rounded bg-gray-700 text-white"
                       onChange={(e) => {
@@ -1955,7 +2260,9 @@ const handleSearch = useCallback(
                   <h3 className="text-xl font-semibold mb-2">Beta Features</h3>
                   <p className="text-gray-400">Toggle beta features on or off.</p>
                   <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Enable Beta Features</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Enable Beta Features
+                    </label>
                     <input
                       type="checkbox"
                       checked={safeLocalStorageGetItem('betaFeatures') === 'true'}
@@ -2037,6 +2344,7 @@ const handleSearch = useCallback(
                   <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 text-transparent bg-clip-text text-center animate-gradient">
                     Discover Your Music
                   </h1>
+                  
                   {/* Search Form */}
                   <form onSubmit={(e) => e.preventDefault()} className="w-full max-w-2xl mx-auto">
                     <div className="relative group">
@@ -2069,6 +2377,7 @@ const handleSearch = useCallback(
                       )}
                     </div>
                   </form>
+          
                   {/* Filter Pills */}
                   <div className="flex gap-3 justify-center">
                     {(['tracks'] as const).map((type) => (
@@ -2076,65 +2385,64 @@ const handleSearch = useCallback(
                         key={type}
                         onClick={() => setSearchType(type)}
                         className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300
-                          ${
-                            searchType === type
-                              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
-                              : 'bg-black/20 backdrop-blur-lg text-white hover:bg-black/30 border border-purple-500/20'
-                          }`}
+                          ${searchType === type 
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90' 
+                            : 'bg-black/20 backdrop-blur-lg text-white hover:bg-black/30 border border-purple-500/20'}`}
                       >
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </button>
                     ))}
                   </div>
                 </div>
-
+          
                 {/* Recent Searches */}
                 {!searchQuery && recentSearches.length > 0 && (
                   <div className="animate-fadeIn">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold text-white/90">Recent Searches</h3>
-                      <button
-                        onClick={() => {
-                          setRecentSearches([]);
-                          safeLocalStorageSetItem('recentSearches', JSON.stringify([]));
-                        }}
-                        className="px-4 py-2 text-sm font-medium bg-red-500 rounded hover:bg-red-600 text-white"
-                      >
-                        Clear All
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {recentSearches.map((query, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors duration-200"
+                        <h3 className="text-xl font-bold text-white/90">Recent Searches</h3>
+                        <button
+                          onClick={() => {
+                            setRecentSearches([]);
+                            safeLocalStorageSetItem('recentSearches', JSON.stringify([]));
+                          }}
+                          className="px-4 py-2 text-sm font-medium bg-red-500 rounded hover:bg-red-600 text-white"
                         >
-                          <button
-                            onClick={() => {
-                              setSearchQuery(query);
-                              handleSearch(query);
-                            }}
-                            className="flex items-center space-x-4 text-left"
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {recentSearches.map((query, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors duration-200"
                           >
-                            <Clock className="w-5 h-5 text-purple-400" />
-                            <span className="truncate">{query}</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              const updatedSearches = recentSearches.filter((_, idx) => idx !== index);
-                              setRecentSearches(updatedSearches);
-                              safeLocalStorageSetItem('recentSearches', JSON.stringify(updatedSearches));
-                            }}
-                            className="text-red-400 hover:text-red-500"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                            <button
+                              onClick={() => {
+                                setSearchQuery(query);
+                                handleSearch(query);
+                              }}
+                              className="flex items-center space-x-4 text-left"
+                            >
+                              <Clock className="w-5 h-5 text-purple-400" />
+                              <span className="truncate">{query}</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                const updatedSearches = recentSearches.filter((_, idx) => idx !== index);
+                                setRecentSearches(updatedSearches);
+                                safeLocalStorageSetItem('recentSearches', JSON.stringify(updatedSearches));
+                              }}
+                              className="text-red-400 hover:text-red-500"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
                   </div>
                 )}
-
+          
                 {/* Search Results */}
                 {searchQuery && (
                   <div className="animate-fadeIn">
@@ -2174,7 +2482,11 @@ const handleSearch = useCallback(
                         className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center cursor-pointer"
                         onClick={() => openPlaylist(playlist)}
                       >
-                        <img src={playlist.image} alt={playlist.name} className="w-16 h-16 rounded mr-4" />
+                        <img
+                          src={playlist.image}
+                          alt={playlist.name}
+                          className="w-16 h-16 rounded mr-4"
+                        />
                         <span className="font-medium">{playlist.name}</span>
                       </div>
                     ))}
@@ -2217,7 +2529,6 @@ const handleSearch = useCallback(
           )}
         </main>
 
-        {/* Desktop Sidebar / Queue */}
         {showQueue && (
           <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
             <h2 className="text-xl font-bold mb-4">Queue</h2>
@@ -2246,7 +2557,6 @@ const handleSearch = useCallback(
         )}
       </div>
 
-      {/* Desktop Player */}
       {mounted && currentTrack && (
         <footer className="hidden md:block">
           <DesktopPlayer
@@ -2259,12 +2569,7 @@ const handleSearch = useCallback(
             previousTrack={previousTrackFunc}
             seekPosition={seekPosition}
             duration={duration}
-            handleSeek={(time) => {
-              if (audioRef.current) {
-                audioRef.current.currentTime = time;
-                setSeekPosition(time);
-              }
-            }}
+            handleSeek={handleSeek}
             isLiked={isLiked}
             repeatMode={repeatMode}
             setRepeatMode={setRepeatMode}
@@ -2289,136 +2594,149 @@ const handleSearch = useCallback(
         </footer>
       )}
 
-      {/* Create Playlist Modal */}
-      {showCreatePlaylist && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-8 w-full max-w-md border border-gray-800">
-            <h2 className="text-3xl font-bold mb-6 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
-              Create Your Playlist
-            </h2>
-            <div className="space-y-6">
-              {/* Playlist Name */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Give your playlist a name"
-                  value={newPlaylistName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPlaylistName(e.target.value)}
-                  className="w-full px-5 py-4 rounded-xl bg-gray-800/50 text-white placeholder-gray-400
-                           border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
-                           transition-all duration-300 text-lg"
-                />
-              </div>
-              {/* Image Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-3">Choose a Cover Image</label>
-                <div className="relative group">
-                  <label
-                    htmlFor="playlist-image"
-                    className="relative flex flex-col items-center justify-center w-full aspect-square
-                             rounded-xl cursor-pointer overflow-hidden transition-all duration-300
-                             bg-gradient-to-br from-gray-800/50 to-gray-900/50
-                             group-hover:from-gray-700/50 group-hover:to-gray-800/50
-                             border-2 border-dashed border-gray-600 group-hover:border-green-500"
-                  >
-                    {newPlaylistImage ? (
-                      <img
-                        src={newPlaylistImage}
-                        alt="Playlist Cover"
-                        className="w-full h-full object-cover absolute inset-0"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-16 h-16 mb-4 rounded-full bg-gray-700/50 flex items-center justify-center">
-                          <svg
-                            className="w-8 h-8 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                        </div>
-                        <p className="text-sm font-medium text-gray-300 mb-1">Drop your image here</p>
-                        <p className="text-xs text-gray-400">or click to browse</p>
-                      </div>
-                    )}
-                    <input id="playlist-image" type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
-                  </label>
-                </div>
-              </div>
-              {/* Action Buttons */}
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowCreatePlaylist(false)}
-                  className="flex-1 py-3 rounded-xl border border-gray-600 text-gray-300 font-medium
-                           hover:bg-gray-800/50 transition-all duration-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createPlaylist}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600
-                           hover:from-blue-600 hover:to-blue-700 text-white font-medium
-                           transform transition-all duration-300 hover:scale-[1.02]"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          </div>
+     {showCreatePlaylist && (
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-8 w-full max-w-md border border-gray-800">
+      <h2 className="text-3xl font-bold mb-6 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
+        Create Your Playlist
+      </h2>
+      
+      <div className="space-y-6">
+        {/* Playlist Name Input */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Give your playlist a name"
+            value={newPlaylistName}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPlaylistName(e.target.value)}
+            className="w-full px-5 py-4 rounded-xl bg-gray-800/50 text-white placeholder-gray-400
+                     border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
+                     transition-all duration-300 text-lg"
+          />
         </div>
-      )}
 
-      {/* Add Songs to Playlist Modal */}
-      {showSearchInPlaylistCreation && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-8 w-full max-w-2xl border border-gray-800">
-            <h2 className="text-3xl font-bold mb-6 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
-              Add Songs to Your Playlist
-            </h2>
-            <div className="relative mb-6">
-              <input
-                type="text"
-                placeholder="Search for songs..."
-                value={searchQuery}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                className="w-full px-5 py-4 rounded-xl bg-gray-800/50 text-white placeholder-gray-400
-                         border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
-                         transition-all duration-300"
-              />
-              <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            </div>
-            <div className="space-y-2 mb-6 max-h-[50vh] overflow-y-auto custom-scrollbar">
-              {searchResults.map((track) => (
-                <TrackItem key={track.id} track={track} inPlaylistCreation={true} />
-              ))}
-            </div>
-            <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-              <p className="text-sm font-medium text-gray-400">
-                {selectedTracksForNewPlaylist.length} songs selected
-              </p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowSearchInPlaylistCreation(false)}
-                  className="px-6 py-3 rounded-xl border border-gray-600 text-gray-300
-                           hover:bg-gray-800/50 transition-all duration-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setShowSearchInPlaylistCreation(false)}
-                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600
-                           hover:from-green-600 hover:to-green-700 text-white font-medium
-                           transform transition-all duration-300 hover:scale-[1.02]"
-                >
-                  Add Selected
-                </button>
-              </div>
-            </div>
+        {/* Image Upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-3">
+            Choose a Cover Image
+          </label>
+          <div className="relative group">
+            <label
+              htmlFor="playlist-image"
+              className="relative flex flex-col items-center justify-center w-full aspect-square
+                       rounded-xl cursor-pointer overflow-hidden transition-all duration-300
+                       bg-gradient-to-br from-gray-800/50 to-gray-900/50
+                       group-hover:from-gray-700/50 group-hover:to-gray-800/50
+                       border-2 border-dashed border-gray-600 group-hover:border-green-500"
+            >
+              {newPlaylistImage ? (
+                <img
+                  src={newPlaylistImage}
+                  alt="Playlist Cover"
+                  className="w-full h-full object-cover absolute inset-0"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                  <div className="w-16 h-16 mb-4 rounded-full bg-gray-700/50 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-300 mb-1">Drop your image here</p>
+                  <p className="text-xs text-gray-400">or click to browse</p>
+                </div>
+              )}
+              <input id="playlist-image" type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
+            </label>
           </div>
         </div>
-      )}
+
+        {/* Add Songs Button */}
+        {false && (
+          <button
+            // onClick={() => setShowSearchInPlaylistCreation(true)}
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 
+                      hover:from-green-600 hover:to-green-700 text-white font-medium"
+          >
+            Add Songs
+          </button>
+        )}
+
+
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={() => setShowCreatePlaylist(false)}
+            className="flex-1 py-3 rounded-xl border border-gray-600 text-gray-300 font-medium
+                     hover:bg-gray-800/50 transition-all duration-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={createPlaylist}
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600
+                     hover:from-blue-600 hover:to-blue-700 text-white font-medium
+                     transform transition-all duration-300 hover:scale-[1.02]"
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{showSearchInPlaylistCreation && (
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-8 w-full max-w-2xl border border-gray-800">
+      <h2 className="text-3xl font-bold mb-6 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
+        Add Songs to Your Playlist
+      </h2>
+      
+      <div className="relative mb-6">
+        <input
+          type="text"
+          placeholder="Search for songs..."
+          value={searchQuery}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+          className="w-full px-5 py-4 rounded-xl bg-gray-800/50 text-white placeholder-gray-400
+                   border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
+                   transition-all duration-300"
+        />
+        <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+      </div>
+
+      <div className="space-y-2 mb-6 max-h-[50vh] overflow-y-auto custom-scrollbar">
+        {searchResults.map((track) => (
+          <TrackItem key={track.id} track={track} inPlaylistCreation={true} />
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-gray-800">
+        <p className="text-sm font-medium text-gray-400">
+          {selectedTracksForNewPlaylist.length} songs selected
+        </p>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setShowSearchInPlaylistCreation(false)}
+            className="px-6 py-3 rounded-xl border border-gray-600 text-gray-300
+                     hover:bg-gray-800/50 transition-all duration-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => setShowSearchInPlaylistCreation(false)}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600
+                     hover:from-green-600 hover:to-green-700 text-white font-medium
+                     transform transition-all duration-300 hover:scale-[1.02]"
+          >
+            Add Selected
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
