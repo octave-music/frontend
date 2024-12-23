@@ -15,6 +15,8 @@
     "axios": "^1.7.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "discord-rich-presence": "^0.0.8",
+    "discord-rpc": "^4.0.1",
     "fast-average-color": "^9.4.0",
     "framer-motion": "^11.15.0",
     "lodash": "^4.17.21",
@@ -35,6 +37,7 @@
     "web-bluetooth-utils": "^1.1.1"
   },
   "devDependencies": {
+    "@types/discord-rpc": "^4.0.8",
     "@types/lodash": "^4.17.13",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.18",
