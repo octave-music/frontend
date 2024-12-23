@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import  SpotifyClone  from "../components"
+import SpotifyClone from "../components"
 
 export const metadata: Metadata = {
   title: 'Octave Streaming',
@@ -8,7 +8,20 @@ export const metadata: Metadata = {
     type: 'website',
     title: 'Octave Streaming',
     description: 'Made by Custom and Abdullah',
-    siteName: 'Oactive Streaming',
+    siteName: 'Octave Streaming',
+    images: [
+      {
+        url: "/images/OctaveBanner.png",
+        width: 1200,
+        height: 630,
+        alt: "Octave Streaming Banner",
+      },
+    ],
+  },
+  icons: {
+    icon: "/images/black_logo.png",
+    shortcut: "/images/black_logo.png",
+    apple: "/images/black_logo.png",
   },
 }
 
@@ -18,7 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover' // Add this line
+  viewportFit: 'cover'
 }
 
 export default function SpotifyPage() {

@@ -34,11 +34,11 @@ export const metadata: Metadata = {
     default: "Octave Streaming",
     template: "%s | Octave Streaming",
   },
-  description: "Made by Custom and Abdullah",
+  description: "Stream for Free Forever",
   keywords: ["music", "streaming", "spotify", "clone", "nextjs"],
   authors: [{ name: "Your Name" }],
-  creator: "Your Name",
-  publisher: "Your Name",
+  creator: "Abdullah (DebateMyRoomba)",
+  publisher: "Cu3t0m ",
   robots: {
     index: true,
     follow: true,
@@ -46,29 +46,29 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://your-domain.com",
+    url: "https://beta.Octave.gold",
     siteName: "Octave Streaming",
     title: "Octave Streaming",
-    description: "Made by Custom and Abdullah",
+    description: "Stream for Free Forever",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/images/OctaveBanner.png",
         width: 1200,
         height: 630,
-        alt: "Octave Streaming",
+        alt: "Octave Streaming Banner",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Oactave Streaming",
+    title: "Octave Streaming",
     description: "Made by Custom and Abdullah",
-    images: ["/og-image.jpg"],
+    images: ["/images/OctaveBanner.png"],
   },
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
-    apple: "/apple-touch-icon.png",
+    icon: "/images/black_logo.png",
+    shortcut: "/images/black_logo.png",
+    apple: "/images/black_logo.png",
   },
   manifest: "/manifest.json",
 }
@@ -90,7 +90,6 @@ export default function RootLayout({ children }: Readonly<RootLayoutProps>) {
           {children}
         </main>
 
-        {/* Skip to content button for accessibility */}
         <a
           href="#main-content"
           className="fixed top-0 left-0 p-2 -translate-y-full focus:translate-y-0 bg-background z-50"
@@ -102,6 +101,5 @@ export default function RootLayout({ children }: Readonly<RootLayoutProps>) {
   )
 }
 
-// Optional: Analytics or other global scripts
 export const runtime = "edge"
 export const preferredRegion = "auto"
