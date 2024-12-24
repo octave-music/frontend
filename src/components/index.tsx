@@ -608,15 +608,127 @@ export function SpotifyClone() {
   const onVolumeChange = useCallback((v: number) => {
     setVolume(v);
     void storeSetting('volume', String(v));
-    // if (sourceRef.current && audioContext) {
-    //   const g = sourceRef.current.context.createGain();
-    //   g.gain.value = v;
-    // }
+    if (sourceRef.current && audioContext) {
+      const g = sourceRef.current.context.createGain();
+      g.gain.value = v;
+    }
 
     if (gainNodeRef.current) {
       gainNodeRef.current.gain.value = v;
     }    
   }, []);
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      const mediaSession = navigator.mediaSession;
+  
+      // Function to update Media Session Metadata
+      const updateMetadata = (track: Track) => {
+        if (!track) return;
+        mediaSession.metadata = new MediaMetadata({
+          title: track.title,
+          artist: track.artist.name,
+          album: track.album.title,
+          artwork: [
+            { src: track.album.cover_small, sizes: '96x96', type: 'image/png' },
+            { src: track.album.cover_medium, sizes: '128x128', type: 'image/png' },
+            { src: track.album.cover_big, sizes: '192x192', type: 'image/png' },
+            { src: track.album.cover_xl, sizes: '256x256', type: 'image/png' },
+          ],
+        });
+      };
+  
+      // Playback Control Handlers
+      const handlePlay = () => {
+        if (!isPlaying) togglePlay();
+      };
+  
+      const handlePause = () => {
+        if (isPlaying) pauseAudio();
+      };
+  
+      const handleSeekBackward = () => {
+        handleSeek(Math.max(seekPosition - 10, 0));
+      };
+  
+      const handleSeekForward = () => {
+        handleSeek(Math.min(seekPosition + 10, duration));
+      };
+  
+      const handleSkipNext = () => skipTrack();
+  
+      const handleSkipPrevious = () => previousTrackFunc();
+  
+      const handleSeekTo = (details: MediaSessionActionDetails) => {
+        if (details.seekTime != null) {
+          handleSeek(details.seekTime);
+        }
+      };
+  
+      // Assign Handlers
+      mediaSession.setActionHandler('play', handlePlay);
+      mediaSession.setActionHandler('pause', handlePause);
+      mediaSession.setActionHandler('seekbackward', handleSeekBackward);
+      mediaSession.setActionHandler('seekforward', handleSeekForward);
+      mediaSession.setActionHandler('nexttrack', handleSkipNext);
+      mediaSession.setActionHandler('previoustrack', handleSkipPrevious);
+      mediaSession.setActionHandler('seekto', handleSeekTo);
+  
+      // Update Metadata When Track Changes
+      if (currentTrack) {
+        updateMetadata(currentTrack);
+      }
+    }
+  }, [
+    currentTrack,
+    isPlaying,
+    seekPosition,
+    duration,
+    togglePlay,
+    pauseAudio,
+    handleSeek,
+    skipTrack,
+    previousTrackFunc,
+  ]);
+
+  useEffect(() => {
+    if (currentTrack) {
+      storeSetting('currentTrack', JSON.stringify(currentTrack));
+    }
+  }, [currentTrack]);
+  
+  // Manage Audio Context for Visibility Change
+  useEffect(() => {
+    if (audioContext) {
+      const handleVisibilityChange = async () => {
+        if (document.visibilityState === 'visible') {
+          if (audioContext){
+            await audioContext.resume();
+          }
+          if (currentTrack) {
+            void playTrackFromSource(currentTrack);
+          }
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+  }, [currentTrack, playTrackFromSource]);
+  
+  // Handle Audio Focus Loss (e.g., on window blur)
+  useEffect(() => {
+
+    const handleAudioFocusLoss = () => {
+      if (isPlaying) pauseAudio();
+    };
+  
+    window.addEventListener('blur', handleAudioFocusLoss);
+    return () => {
+      window.removeEventListener('blur', handleAudioFocusLoss);
+    };
+  }, [isPlaying, pauseAudio]);  
+  
+  
 
   // Onboarding
   const startOnboarding = useCallback(() => {
@@ -644,6 +756,13 @@ export function SpotifyClone() {
 
       const onboard = await getSetting('onboardingDone');
       if (!onboard) setShowOnboarding(true);
+
+      const savedTrack = await getSetting('currentTrack');
+      if (savedTrack) {
+        const track = JSON.parse(savedTrack);
+        setCurrentTrack(track);
+        setIsPlaying(true);
+      }
     }
     void init();
   }, [startOnboarding]);
