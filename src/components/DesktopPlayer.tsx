@@ -1,15 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Heart, Play, Pause, Volume2, Volume1, VolumeX, Music2, Info, Maximize2, X, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, ListMusic,
-  Cast, Airplay, Download, Library, Radio, UserPlus, Ban, Share, Star, Flag, AlertCircle, Lock, Mic2,
+  Heart, Play, Pause, Volume2, Volume1, VolumeX, Music2, Info, Maximize2, X,
+  SkipBack, SkipForward, Shuffle, Repeat, Repeat1, ListMusic, Cast, Airplay, Download,
+  Library, Radio, UserPlus, Ban, Share, Star, Flag, AlertCircle, Lock, Mic2,
   Crown, Fan, CircleDollarSign, ListX, Plus, Disc, User, Guitar
 } from 'lucide-react';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 
-// types.ts
+// ----------------------
+//  T Y P E S
+// ----------------------
 interface Track {
   id: string;
   title: string;
@@ -25,19 +28,18 @@ interface Track {
   };
 }
 
-
 interface Lyric {
-  time: number; // Start time in seconds
-  endTime?: number; // End time in seconds
+  time: number;
+  endTime?: number;
   text: string;
 }
-
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = 'off' | 'all' | 'one';
 
+// Props for DesktopPlayer
 interface DesktopPlayerProps {
-  currentTrack: Track | null;
+  currentTrack: Track ;
   isPlaying: boolean;
   previousTracks: Track[];
   setQueue: React.Dispatch<React.SetStateAction<Track[]>>;
@@ -63,7 +65,7 @@ interface DesktopPlayerProps {
   onQueueItemClick: (track: Track, index: number) => void;
   setIsPlayerOpen: (_isOpen: boolean) => void;
 
-  volume: number; 
+  volume: number;
   onVolumeChange: (newVolume: number) => void;
   audioQuality: AudioQuality;
   onCycleAudioQuality: () => void;
@@ -71,6 +73,9 @@ interface DesktopPlayerProps {
   listenCount: number;
 }
 
+// ----------------------
+//  U T I L S
+// ----------------------
 function formatTimeDesktop(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
   const mins = Math.floor(seconds / 60);
@@ -78,7 +83,7 @@ function formatTimeDesktop(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-
+// Desktop Seekbar
 const DesktopSeekbar: React.FC<{
   progress: number;
   handleSeek: (time: number) => void;
@@ -99,15 +104,21 @@ const DesktopSeekbar: React.FC<{
     return Math.max(0, Math.min(1, ratio));
   }, []);
 
-  const startDrag = useCallback((x: number) => {
-    setIsDragging(true);
-    setLocalProgress(calculateProgress(x));
-  }, [calculateProgress]);
+  const startDrag = useCallback(
+    (x: number) => {
+      setIsDragging(true);
+      setLocalProgress(calculateProgress(x));
+    },
+    [calculateProgress]
+  );
 
-  const moveDrag = useCallback((x: number) => {
-    if (!isDragging) return;
-    setLocalProgress(calculateProgress(x));
-  }, [isDragging, calculateProgress]);
+  const moveDrag = useCallback(
+    (x: number) => {
+      if (!isDragging) return;
+      setLocalProgress(calculateProgress(x));
+    },
+    [isDragging, calculateProgress]
+  );
 
   const endDrag = useCallback(() => {
     if (!isDragging) return;
@@ -140,7 +151,7 @@ const DesktopSeekbar: React.FC<{
       <span className="text-neutral-400 text-xs min-w-[40px] text-right">
         {formatTimeDesktop(localProgress * duration)}
       </span>
-      <div 
+      <div
         ref={progressRef}
         className="relative flex-1 h-1.5 bg-neutral-700/50 rounded-full cursor-pointer group backdrop-blur-sm"
         onMouseDown={(e) => startDrag(e.clientX)}
@@ -150,7 +161,7 @@ const DesktopSeekbar: React.FC<{
           className="absolute left-0 top-0 h-full bg-white/90 rounded-full group-hover:bg-green-400 transition-colors"
           style={{ width: `${localProgress * 100}%` }}
         />
-        <div 
+        <div
           className="absolute -top-2 h-5 w-5 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
           style={{ left: `${localProgress * 100}%`, transform: 'translateX(-50%)' }}
         />
@@ -162,6 +173,9 @@ const DesktopSeekbar: React.FC<{
   );
 };
 
+// ----------------------
+//  M A I N   C O M P
+// ----------------------
 export default function DesktopPlayer({
   currentTrack,
   isPlaying,
@@ -192,42 +206,30 @@ export default function DesktopPlayer({
   removeFromQueue,
   showLyrics
 }: DesktopPlayerProps) {
-  const [showSidebar, setShowSidebar] = React.useState(false);
-  const [tab, setTab] = React.useState<'queue' | 'lyrics' | 'details'>('queue');
-  const [userScrollingLyrics, setUserScrollingLyrics] = React.useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [tab, setTab] = useState<'queue' | 'lyrics' | 'details'>('queue');
+  const [userScrollingLyrics, setUserScrollingLyrics] = useState(false);
   const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoScrollingRef = useRef(false);
   const lyricsRef = useRef<HTMLDivElement>(null);
+  
 
   const isMuted = volume === 0;
 
+  // For the “Audio Quality” icon & color
   const audioQualityIcons = {
     MAX: { icon: Crown, color: 'bg-gradient-to-r from-yellow-600 to-yellow-800', desc: 'HiFi Plus Quality (24-bit, up to 192kHz)' },
     HIGH: { icon: Star, color: 'bg-gradient-to-r from-purple-500 to-purple-700', desc: 'HiFi Quality (16-bit, 44.1kHz)' },
     NORMAL: { icon: Fan, color: 'bg-gradient-to-r from-blue-500 to-blue-700', desc: 'High Quality (320kbps AAC)' },
-    DATA_SAVER: { icon: CircleDollarSign, color: 'bg-gradient-to-r from-green-500 to-green-700', desc: 'Data Saver (128kbps AAC)' },
+    DATA_SAVER: { icon: CircleDollarSign, color: 'bg-gradient-to-r from-green-500 to-green-700', desc: 'Data Saver (128kbps AAC)' }
   };
 
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const sidebar = document.getElementById('sidebar');
-      if (sidebar && !sidebar.contains(event.target as Node)) {
-        setShowSidebar(false);
-      }
-    };
-    if (showSidebar) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSidebar]);
-
+  // Volume
   const toggleMute = () => {
     if (isMuted) {
-      onVolumeChange(1); 
+      onVolumeChange(1);
     } else {
-      onVolumeChange(0); 
+      onVolumeChange(0);
     }
   };
 
@@ -245,100 +247,66 @@ export default function DesktopPlayer({
     }
   };
 
+  // For lyrics
   const processedLyrics = useMemo(() => {
-    return lyrics.map((lyric, index) => ({
+    return lyrics.map((lyric, i) => ({
       ...lyric,
-      endTime: lyrics[index + 1]?.time || duration, // Use track duration for the last lyric
+      endTime: lyrics[i + 1]?.time || duration
     }));
   }, [lyrics, duration]);
 
   const getLyricProgress = () => {
     if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex]) return 0;
-    
-    const currentLyric = processedLyrics[currentLyricIndex];
-    const nextLyric = processedLyrics[currentLyricIndex + 1];
-    
-    const lyricStart = currentLyric.time;
-    const lyricEnd = nextLyric?.time || duration;
+    const current = processedLyrics[currentLyricIndex];
+    const lyricStart = current.time;
+    const lyricEnd = current.endTime || duration;
     const lyricDuration = lyricEnd - lyricStart;
-    
     const elapsed = seekPosition - lyricStart;
-    const progress = Math.min(Math.max(elapsed / lyricDuration, 0), 1);
-    
-    return progress;
+    return Math.min(Math.max(elapsed / lyricDuration, 0), 1);
   };
-  
   const lyricProgress = getLyricProgress();
-  
 
+  // Auto-scroll to current lyric
   const scrollToCurrentLyric = useCallback(() => {
+    if (!lyricsRef.current) return;
     if (!lyricsRef.current || currentLyricIndex === -1 || userScrollingLyrics) return;
-  
-    const lyricsContainer = lyricsRef.current;
-    const currentLyricElement = lyricsContainer.children[currentLyricIndex] as HTMLElement;
-    
-    if (currentLyricElement) {
+    const container = lyricsRef.current;
+    const currentLine = container.children[currentLyricIndex] as HTMLElement;
+    if (currentLine) {
       isAutoScrollingRef.current = true;
-      const elementOffset = currentLyricElement.offsetTop;
-      const elementHeight = currentLyricElement.offsetHeight;
-      const containerHeight = lyricsContainer.clientHeight;
-      const scrollPosition = elementOffset - (containerHeight / 2) + (elementHeight / 2);
-  
-      lyricsContainer.scrollTo({
-        top: scrollPosition,
-        behavior: 'smooth'
-      });
-  
-      // Reset auto-scrolling flag after animation completes
+      const offsetTop = currentLine.offsetTop;
+      const offsetHeight = currentLine.offsetHeight;
+      const containerHeight = container.clientHeight;
+      const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
+      container.scrollTo({ top: scrollPos, behavior: 'smooth' });
       setTimeout(() => {
         isAutoScrollingRef.current = false;
       }, 1000);
     }
   }, [currentLyricIndex, userScrollingLyrics]);
-  
-
-
 
   useEffect(() => {
     if (tab === 'lyrics' && !userScrollingLyrics && currentLyricIndex !== -1) {
       scrollToCurrentLyric();
     }
   }, [currentLyricIndex, tab, userScrollingLyrics, scrollToCurrentLyric]);
-  
-  // Update the handleLyricsScroll function
+
   const handleLyricsScroll = () => {
     if (isAutoScrollingRef.current) return;
-  
     setUserScrollingLyrics(true);
-  
-    if (userScrollTimeoutRef.current) {
-      clearTimeout(userScrollTimeoutRef.current);
-    }
-  
+    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
     userScrollTimeoutRef.current = setTimeout(() => {
       setUserScrollingLyrics(false);
-      // Add this line to trigger a scroll to current lyric after timeout
       if (tab === 'lyrics' && currentLyricIndex !== -1) {
         scrollToCurrentLyric();
       }
     }, 3000);
   };
 
-  
-  useEffect(() => {
-    return () => {
-      if (userScrollTimeoutRef.current) {
-        clearTimeout(userScrollTimeoutRef.current);
-      }
-    };
-  }, []);
-  
-  
-  
   const TABS = [
     { id: 'queue', label: 'Queue', icon: ListMusic },
     { id: 'lyrics', label: 'Lyrics', icon: Music2 },
-    { id: 'details', label: 'Details', icon: Info },
+    { id: 'details', label: 'Details', icon: Info }
   ] as const;
 
   return (
@@ -350,18 +318,18 @@ export default function DesktopPlayer({
             handleSeek={handleSeek}
             duration={duration}
           />
-
           <div className="h-20 flex items-center justify-between gap-4">
+            {/* Left side: track & actions */}
             <div className="flex items-center gap-4 min-w-0 flex-1">
               {currentTrack && (
                 <>
                   <div className="relative group">
-                    <img 
-                      src={currentTrack.album.cover_medium}
+                    <img
+                      src={currentTrack.album.cover_medium || ''}
                       alt={currentTrack.title}
                       className="w-14 h-14 rounded-md object-cover"
                     />
-                    <button 
+                    <button
                       onClick={() => {
                         setShowSidebar(true);
                         setTab('details');
@@ -380,28 +348,32 @@ export default function DesktopPlayer({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button 
-                      onClick={toggleLike}
-                      className={`p-2 rounded-full hover:bg-white/10 ${isLiked ? 'text-green-400' : 'text-neutral-400'}`}
-                    >
-                      <Heart className="w-5 h-5" />
-                    </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLike();
+                    }}
+                    className={`p-2 rounded-full hover:bg-white/10 ${
+                      isLiked ? 'text-green-400' : 'text-neutral-400'
+                    }`}
+                  >
+                    <Heart className="w-5 h-5" />
+                  </button>
                     <button
                       onClick={enterFullScreen}
                       className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                     >
                       <Maximize2 className="w-5 h-5" />
                     </button>
-
                     <button className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
                       <Share className="w-5 h-5 text-white" />
                     </button>
-
                   </div>
                 </>
               )}
             </div>
 
+            {/* Center: main controls */}
             <div className="flex flex-col items-center gap-2">
               <div className="flex items-center gap-3">
                 <button
@@ -412,7 +384,7 @@ export default function DesktopPlayer({
                 >
                   <Shuffle className="w-5 h-5" />
                 </button>
-                <button 
+                <button
                   onClick={previousTrack}
                   className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                 >
@@ -429,13 +401,17 @@ export default function DesktopPlayer({
                   )}
                 </button>
                 <button
-                  onClick={skipTrack} 
+                  onClick={skipTrack}
                   className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                 >
                   <SkipForward className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')}
+                  onClick={() => {
+                    const modes: RepeatMode[] = ['off', 'all', 'one'];
+                    const idx = modes.indexOf(repeatMode);
+                    setRepeatMode(modes[(idx + 1) % modes.length]);
+                  }}
                   className={`p-2 rounded-full hover:bg-white/10 ${
                     repeatMode !== 'off' ? 'text-green-400' : 'text-neutral-400'
                   }`}
@@ -445,35 +421,33 @@ export default function DesktopPlayer({
               </div>
             </div>
 
+            {/* Right side: lyrics, queue, volume, etc. */}
             <div className="flex items-center gap-3 flex-1 justify-end">
-              <button 
+              <button
                 onClick={() => {
                   toggleLyricsView();
                   setShowSidebar(true);
                   setTab('lyrics');
-                }} 
+                }}
                 className={`p-2 rounded-full hover:bg-white/10 ${showLyrics ? 'text-green-400' : 'text-neutral-400'}`}
               >
                 <Music2 className="w-5 h-5" />
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowSidebar(true);
                   setTab('queue');
-                }} 
+                }}
                 className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
               >
                 <ListMusic className="w-5 h-5" />
               </button>
-
-              {/* Audio Quality Button */}
               <button
                 onClick={onCycleAudioQuality}
                 className="p-2 rounded-full hover:bg-white/10 text-white flex items-center justify-center"
               >
-                {React.createElement(audioQualityIcons[audioQuality].icon, {className: 'w-5 h-5'})}
+                {React.createElement(audioQualityIcons[audioQuality].icon, { className: 'w-5 h-5' })}
               </button>
-
               {/* Volume */}
               <div className="flex items-center gap-2 min-w-[140px]">
                 <button
@@ -520,7 +494,7 @@ export default function DesktopPlayer({
                     {TABS.map((t) => (
                       <button
                         key={t.id}
-                        onClick={() => setTab(t.id as typeof tab)}
+                        onClick={() => setTab(t.id)}
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
                           t.id === tab ? 'bg-white/20 text-white' : 'text-neutral-400 hover:text-white'
                         }`}
@@ -540,6 +514,7 @@ export default function DesktopPlayer({
 
                 <div className="flex-1 overflow-hidden">
                   <SimpleBar style={{ maxHeight: '100%' }} className="h-full">
+                    {/* QUEUE */}
                     {tab === 'queue' && (
                       <div className="p-4 space-y-4">
                         <div className="flex items-center justify-between">
@@ -557,11 +532,15 @@ export default function DesktopPlayer({
                               key={`${track.id}-${index}`}
                               onClick={() => onQueueItemClick(track, index)}
                               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${
-                                index === currentTrackIndex ? 'bg-green-800/30' : (currentTrack?.id === track.id ? 'bg-white/10' : 'hover:bg-white/5')
+                                index === currentTrackIndex
+                                  ? 'bg-green-800/30'
+                                  : currentTrack?.id === track.id
+                                  ? 'bg-white/10'
+                                  : 'hover:bg-white/5'
                               }`}
                             >
                               <img
-                                src={track.album.cover_small}
+                                src={track.album.cover_small || ''}
                                 alt={track.title}
                                 className="w-10 h-10 rounded object-cover"
                               />
@@ -586,8 +565,9 @@ export default function DesktopPlayer({
                       </div>
                     )}
 
-                    {tab === 'lyrics' && (
-                      <div 
+                    {/* LYRICS */}
+                    {tab === 'lyrics' && currentTrack && (
+                      <div
                         className="p-4 h-full overflow-y-auto"
                         ref={lyricsRef}
                         onScroll={handleLyricsScroll}
@@ -596,7 +576,6 @@ export default function DesktopPlayer({
                           <div className="space-y-4">
                             {processedLyrics.map((lyric, index) => {
                               const isActive = index === currentLyricIndex;
-                              
                               if (!isActive) {
                                 return (
                                   <p
@@ -612,23 +591,21 @@ export default function DesktopPlayer({
                                   </p>
                                 );
                               }
-                              
-                              // For the active lyric, split into letters and apply fill based on progress
+                              // highlight letters if active
                               const letters = lyric.text.split('');
                               const totalLetters = letters.length;
-                              const filledLetters = Math.floor(lyricProgress * totalLetters);
-                              
+                              const filled = Math.floor(lyricProgress * totalLetters);
                               return (
                                 <p
                                   key={index}
                                   onClick={() => handleSeek(lyric.time)}
                                   className="text-lg cursor-pointer font-medium text-white"
                                 >
-                                  {letters.map((letter, idx) => (
+                                  {letters.map((letter, idx2) => (
                                     <span
-                                      key={idx}
+                                      key={idx2}
                                       className={`transition-colors duration-300 ${
-                                        idx < filledLetters ? 'text-white' : 'text-neutral-400'
+                                        idx2 < filled ? 'text-white' : 'text-neutral-400'
                                       }`}
                                     >
                                       {letter}
@@ -644,17 +621,16 @@ export default function DesktopPlayer({
                       </div>
                     )}
 
-
+                    {/* DETAILS */}
                     {tab === 'details' && currentTrack && (
                       <div className="p-4 space-y-6">
                         <div>
                           <img
-                            src={currentTrack.album.cover_xl}
+                            src={currentTrack.album.cover_xl || ''}
                             alt={currentTrack.title}
                             className="w-full aspect-square rounded-lg object-cover"
                           />
                         </div>
-                        
                         <div className="space-y-4">
                           <div>
                             <h2 className="text-2xl font-bold text-white">{currentTrack.title}</h2>
@@ -675,16 +651,12 @@ export default function DesktopPlayer({
                           <div className="pt-4 border-t border-white/10">
                             <h3 className="text-white font-medium mb-2">About</h3>
                             <div className="space-y-2 text-sm">
-                              <p className="text-neutral-400">
-                                Album • {currentTrack.album.title}
-                              </p>
+                              <p className="text-neutral-400">Album • {currentTrack.album.title}</p>
                               <p className="text-neutral-400">
                                 Duration • {formatTimeDesktop(duration)}
                               </p>
                             </div>
                           </div>
-
-                          {/* Additional icons section */}
                           <div className="pt-4 border-t border-white/10">
                             <h3 className="text-white font-medium mb-2">Actions</h3>
                             <div className="flex flex-wrap gap-2">
@@ -738,8 +710,6 @@ export default function DesktopPlayer({
                               </button>
                             </div>
                           </div>
-
-                          {/* Volume control in details tab as well */}
                           <div className="pt-4 border-t border-white/10">
                             <h3 className="text-white font-medium mb-2">Volume</h3>
                             <div className="flex items-center gap-2">
@@ -760,15 +730,13 @@ export default function DesktopPlayer({
                               />
                             </div>
                           </div>
-
-                          {/* Audio Quality Info */}
                           <div className="pt-4 border-t border-white/10">
                             <h3 className="text-white font-medium mb-2">Audio Quality</h3>
-                            <button 
+                            <button
                               onClick={onCycleAudioQuality}
                               className={`inline-flex items-center space-x-2 px-4 py-1 rounded-full text-xs font-medium ${audioQualityIcons[audioQuality].color} text-white`}
                             >
-                              {React.createElement(audioQualityIcons[audioQuality].icon, {className: 'w-4 h-4'})}
+                              {React.createElement(audioQualityIcons[audioQuality].icon, { className: 'w-4 h-4' })}
                               <span>{audioQuality}</span>
                             </button>
                             <p className="text-sm text-neutral-400 mt-2">{audioQualityIcons[audioQuality].desc}</p>

@@ -19,6 +19,7 @@
     "discord-rpc": "^4.0.1",
     "fast-average-color": "^9.4.0",
     "framer-motion": "^11.15.0",
+    "idb": "^8.0.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.441.0",
     "music-app": "file:",
@@ -32,7 +33,7 @@
     "simplebar": "^6.3.0",
     "simplebar-core": "^1.3.0",
     "simplebar-react": "^3.3.0",
-    "tailwind-merge": "^2.5.5",
+    "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "web-bluetooth-utils": "^1.1.1"
   },
