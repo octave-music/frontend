@@ -209,7 +209,7 @@ export function SpotifyClone() {
   const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<Track[]>([]);
   const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null);
   const [contextMenuOptions, setContextMenuOptions] = useState<ContextMenuOption[]>([]);
-  const [isLiked, setIsLiked] = useState(false);
+  // const [isLiked, setIsLiked] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -227,6 +227,7 @@ export function SpotifyClone() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showArtistSelection, setShowArtistSelection] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
 
   // Web Audio Refs
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -750,6 +751,8 @@ export function SpotifyClone() {
       storeSetting('currentTrack', JSON.stringify(currentTrack));
     }
   }, [currentTrack]);
+
+  
   
   // Manage Audio Context for Visibility Change
   useEffect(() => {
@@ -781,13 +784,6 @@ export function SpotifyClone() {
     };
   }, [currentTrack, isPlaying, playTrackFromSource, pausedAtRef, sourceRef]);
   
-  
-  
-  
-
-  
-  
-
   // Onboarding
   const startOnboarding = useCallback(() => {
     setShowOnboarding(true);
@@ -853,9 +849,9 @@ export function SpotifyClone() {
       // liked?
       const ls = playlists.find((p) => p.name === 'Liked Songs');
       if (ls && ls.tracks.some((t) => t.id === currentTrack.id)) {
-        setIsLiked(true);
+        // setIsLiked(true);
       } else {
-        setIsLiked(false);
+        // setIsLiked(false);
       }
       // recently
       void storeRecentlyPlayed(currentTrack).then((recent) => setJumpBackIn(recent));
@@ -889,6 +885,7 @@ export function SpotifyClone() {
     },
     [playlists]
   );
+  
 
   const sanitizeTrack = (track: Track): Track => {
     return {
@@ -911,7 +908,7 @@ export function SpotifyClone() {
   
   
   const toggleLike = useCallback(
-    (rawTrack = currentTrack) => {
+    (rawTrack: Track) => {
       if (!rawTrack) return;
   
       const track = sanitizeTrack(rawTrack);
@@ -934,7 +931,6 @@ export function SpotifyClone() {
       });
   
       setPlaylists(updatedPlaylists);
-      setIsLiked(!isAlreadyLiked);
   
       console.log("Updated playlists after toggle:", updatedPlaylists);
   
@@ -942,8 +938,26 @@ export function SpotifyClone() {
         console.error('Error storing updated playlists:', err)
       );
     },
-    [currentTrack, playlists]
+    [playlists]
   );
+  
+
+  const toggleLikeDesktop = useCallback(() => {
+    if (currentTrack) {
+      toggleLike(currentTrack);
+    } else {
+      console.warn("No current track to toggle like.");
+    }
+  }, [currentTrack, toggleLike]);
+  
+  // Wrapper for MobilePlayer
+  const toggleLikeMobile = useCallback(() => {
+    if (currentTrack) {
+      toggleLike(currentTrack);
+    } else {
+      console.warn("No current track to toggle like.");
+    }
+  }, [currentTrack, toggleLike]);
   
   
   
@@ -976,6 +990,8 @@ export function SpotifyClone() {
     setContextMenuTrack(tr);
     setShowAddToPlaylistModal(true);
   }, []);
+
+
   const handleContextMenu = useCallback(
     (evt: MouseEvent, item: Track | Playlist) => {
       evt.preventDefault();
@@ -1190,6 +1206,7 @@ export function SpotifyClone() {
 
         setQueue(shuffled);
         setSearchResults(shuffled);
+        setRecommendedTracks(shuffled);
 
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
@@ -1292,6 +1309,35 @@ export function SpotifyClone() {
       () => debounce(debouncedFetch, 300),
       [debouncedFetch]
     );
+
+    useEffect(() => {
+      async function fetchStoredRecommendations() {
+        try {
+          const storedArtists = await getSetting('favoriteArtists');
+          if (storedArtists) {
+            const artists: Artist[] = JSON.parse(storedArtists);
+            const fetchPromises = artists.map(async (artist) => {
+              const response = await fetch(
+                `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
+              );
+              const data = await response.json();
+              return (data.results || []).slice(0, 5);
+            });
+    
+            const artistTracks = await Promise.all(fetchPromises);
+            const all = artistTracks.flat();
+            const shuffled = all.sort(() => Math.random() - 0.5);
+    
+            setRecommendedTracks(shuffled);
+          }
+        } catch (error) {
+          console.error('Failed to fetch stored recommended tracks:', error);
+        }
+      }
+    
+      fetchStoredRecommendations();
+    }, []);
+    
 
 
     const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1879,26 +1925,28 @@ export function SpotifyClone() {
                   </div>
                 )}
               </section>
-              <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
-              <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
-              <div className="grid grid-cols-1 gap-4">
-              {searchResults.map((track, idx) => (
-                <TrackItem
-                  key={track.id}
-                  track={track}
-                  index={idx}
-                  onTrackClick={playTrack}
-                  addToQueue={addToQueue}
-                  openAddToPlaylistModal={(t) => {
-                    setContextMenuTrack(t);
-                    setShowAddToPlaylistModal(true);
-                  }}
-                  toggleLike={toggleLike}
-                  isLiked={isTrackLiked(track)}
-                />
-              ))}
-              </div>
-            </section>
+              <section className="flex-1 overflow-y-auto custom-scrollbar pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
+                <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recommendedTracks.length > 0 ? (
+                    recommendedTracks.map((track, idx) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        index={idx}
+                        onTrackClick={playTrack}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={openAddToPlaylistModal}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No recommendations available.</p>
+                  )}
+                </div>
+              </section>
+
 
             </>
           )}
@@ -2093,10 +2141,10 @@ export function SpotifyClone() {
             duration={duration}
             listenCount={listenCount}
             handleSeek={handleSeek}
-            isLiked={isLiked}
+            isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
             repeatMode={repeatMode}
             setRepeatMode={setRepeatMode}
-            toggleLike={toggleLike}
+            toggleLike={toggleLikeMobile}
             lyrics={lyrics}
             currentLyricIndex={currentLyricIndex}
             queue={queue}
@@ -2624,25 +2672,30 @@ export function SpotifyClone() {
                 </div>
               </section>
               <section className='flex-1 overflow-y-auto custom-scrollbar pb-32'>
-              <h2 className="text-2xl font-bold mb-4">Recommended</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {searchResults.map((r, idx) => (
-                  <TrackItem
-                  key={r.id}
-                  track={r}
-                  index={idx}
-                  onTrackClick={playTrack}
-                  addToQueue={addToQueue}
-                  openAddToPlaylistModal={(t) => {
-                    setContextMenuTrack(t);
-                    setShowAddToPlaylistModal(true);
-                  }}
-                  toggleLike={toggleLike}
-                  isLiked={isTrackLiked(r)}
-                />
-                ))}
-              </div>
-            </section>
+                <h2 className="text-2xl font-bold mb-4">Recommended</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recommendedTracks.length > 0 ? (
+                    recommendedTracks.map((track, idx) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        index={idx}
+                        onTrackClick={playTrack}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={(t) => {
+                          setContextMenuTrack(t);
+                          setShowAddToPlaylistModal(true);
+                        }}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No recommendations available.</p>
+                  )}
+                </div>
+              </section>
+
             </>
           )}
         </main>
@@ -2695,10 +2748,10 @@ export function SpotifyClone() {
             seekPosition={seekPosition}
             duration={duration}
             handleSeek={handleSeek}
-            isLiked={isLiked}
+            isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
             repeatMode={repeatMode}
             setRepeatMode={setRepeatMode}
-            toggleLike={toggleLike}
+            toggleLike={toggleLikeDesktop}
             lyrics={lyrics}
             currentLyricIndex={currentLyricIndex}
             showLyrics={showLyrics}
@@ -2916,14 +2969,12 @@ function TrackItem({
         <ActionButton
           onClick={() => addToQueue(track)}
           icon={<Plus className="w-4 h-4" />}
-          tooltip="Add to Queue"
         />
       )}
       {openAddToPlaylistModal && (
         <ActionButton
           onClick={() => openAddToPlaylistModal(track)}
           icon={<Library className="w-4 h-4" />}
-          tooltip="Add to Playlist"
         />
       )}
       {toggleLike && (
@@ -2936,7 +2987,6 @@ function TrackItem({
               }`}
             />
           }
-          tooltip={isLiked ? "Unlike" : "Like"}
         />
       )}
     </div>
@@ -2997,7 +3047,6 @@ function ActionButton({
 }: { 
   onClick: (e: React.MouseEvent) => void,
   icon: React.ReactNode,
-  tooltip: string
 }) {
   return (
     <button
