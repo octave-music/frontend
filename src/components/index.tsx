@@ -61,6 +61,9 @@ import { cn } from '../lib/utils';
 
 import Onboarding from './Onboarding';  // Adjust the path as needed
 
+import { handleFetchLyrics } from '../lib/lyrics'; // Adjust the path as needed
+
+
 // Types
 interface Track {
   id: string ;
@@ -259,7 +262,6 @@ export function SpotifyClone() {
     }
   }, []);
   
-  
 
   // Update greeting hourly
   useEffect(() => {
@@ -322,35 +324,16 @@ export function SpotifyClone() {
   );
   
 
-  // parse lyrics
-  const parseLyrics = (ly: string): Lyric[] => {
-    return ly.split('\n').map((l) => {
-      const [time, text] = l.split(']');
-      const [m, s] = time.replace('[', '').split(':');
-      const secs = parseFloat(m) * 60 + parseFloat(s);
-      return { time: parseFloat(secs.toFixed(1)), text: text.trim() };
-    });
-  };
-
-  // fetch lyrics
   const fetchLyrics = useCallback(async (track: Track) => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/lyrics`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: track.title, artist: track.artist.name })
-      });
-      const data = await resp.json();
-      if (data.success && data.synced) {
-        setLyrics(parseLyrics(data.lyrics));
-      } else {
-        setLyrics([]);
-      }
+      const lyrics = await handleFetchLyrics(track);
+      setLyrics(lyrics);
     } catch (err) {
       console.log('Lyrics error:', err);
       setLyrics([]);
     }
   }, []);
+
 
   // load buffer
   const loadAudioBuffer = useCallback(async (trackId: string): Promise<AudioBuffer | null> => {
@@ -541,11 +524,7 @@ export function SpotifyClone() {
         // If it's the last track, reset to start of queue
         const isLastTrack = queue.findIndex(t => t.id === currentTrack.id) === queue.length - 1;
         if (isLastTrack) {
-          if (queue.length > 0) {
-            setCurrentTrack(queue[0]);
-            // Maintain queue order for repeat all
-            setQueue(queue);
-          }
+          resetToStart(); 
         } else {
           skipTrack();
         }
@@ -566,7 +545,7 @@ export function SpotifyClone() {
         }
         break;
     }
-  }, [currentTrack, queue, repeatMode, skipTrack, playBuffer]);
+  }, [currentTrack, repeatMode, queue, playBuffer, resetToStart, skipTrack]);
   
   // Add this effect to handle playback when currentTrack changes
   useEffect(() => {
@@ -1259,14 +1238,7 @@ export function SpotifyClone() {
       }
     }
     fetchSearchResults(newQ);
-/*************  ✨ Codeium Command ⭐  *************/
-  /**
-   * Handles user input on the search bar.
-   * If the new query is longer than 3 characters, stores it in the "recentSearches" array.
-   * Then calls fetchSearchResults() with the new query.
-   * @param {string} newQ The new query string from the search bar.
-   */
-/******  3958aef2-a23e-488f-a528-65e0ff3bcd57  *******/  }
+  }
 
   return (
     <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
