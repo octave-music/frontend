@@ -619,78 +619,132 @@ export function SpotifyClone() {
   }, []);
 
   useEffect(() => {
-    if ('mediaSession' in navigator) {
-      const mediaSession = navigator.mediaSession;
+    if (!('mediaSession' in navigator) || !currentTrack || !audioContext) {
+      console.warn("MediaSession API not supported or no current track available.");
+      return;
+    }
   
-      // Function to update Media Session Metadata
-      const updateMetadata = (track: Track) => {
-        if (!track) return;
-        mediaSession.metadata = new MediaMetadata({
-          title: track.title,
-          artist: track.artist.name,
-          album: track.album.title,
-          artwork: [
-            { src: track.album.cover_small, sizes: '96x96', type: 'image/png' },
-            { src: track.album.cover_medium, sizes: '128x128', type: 'image/png' },
-            { src: track.album.cover_big, sizes: '192x192', type: 'image/png' },
-            { src: track.album.cover_xl, sizes: '256x256', type: 'image/png' },
-          ],
-        });
-      };
+    try {
+      // Update Media Session Metadata
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title,
+        artist: currentTrack.artist.name,
+        album: currentTrack.album.title,
+        artwork: [
+          { src: currentTrack.album.cover_small, sizes: '56x56', type: 'image/jpeg' },
+          { src: currentTrack.album.cover_medium, sizes: '128x128', type: 'image/jpeg' },
+          { src: currentTrack.album.cover_big, sizes: '256x256', type: 'image/jpeg' },
+          { src: currentTrack.album.cover_xl, sizes: '512x512', type: 'image/jpeg' },
+        ],
+      });
   
-      // Playback Control Handlers
-      const handlePlay = () => {
-        if (!isPlaying) togglePlay();
-      };
+      // Update Playback State
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   
-      const handlePause = () => {
-        if (isPlaying) pauseAudio();
-      };
+      // Action Handlers
+      navigator.mediaSession.setActionHandler('play', () => {
+        console.log("Play action triggered.");
+        if (!isPlaying && currentTrack) {
+          void playTrackFromSource(currentTrack, pausedAtRef.current);
+          setIsPlaying(true);
+        }
+      });
   
-      const handleSeekBackward = () => {
-        handleSeek(Math.max(seekPosition - 10, 0));
-      };
+      navigator.mediaSession.setActionHandler('pause', () => {
+        console.log("Pause action triggered.");
+        if (isPlaying) {
+          pauseAudio();
+          setIsPlaying(false);
+        }
+      });
   
-      const handleSeekForward = () => {
-        handleSeek(Math.min(seekPosition + 10, duration));
-      };
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        console.log("Previous track action triggered.");
+        previousTrackFunc();
+      });
   
-      const handleSkipNext = () => skipTrack();
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        console.log("Next track action triggered.");
+        skipTrack();
+      });
   
-      const handleSkipPrevious = () => previousTrackFunc();
-  
-      const handleSeekTo = (details: MediaSessionActionDetails) => {
-        if (details.seekTime != null) {
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        console.log("Seek action triggered:", details);
+        if (details.seekTime != null && trackBufferRef.current) {
           handleSeek(details.seekTime);
+          navigator.mediaSession.setPositionState({
+            duration: trackBufferRef.current.duration,
+            playbackRate: 1,
+            position: details.seekTime,
+          });
+        }
+      });
+  
+      navigator.mediaSession.setActionHandler('seekforward', () => {
+        console.log("Seek forward action triggered.");
+        if (trackBufferRef.current) {
+          const newTime = Math.min(getCurrentPlaybackTime() + 10, trackBufferRef.current.duration);
+          handleSeek(newTime);
+        }
+      });
+  
+      navigator.mediaSession.setActionHandler('seekbackward', () => {
+        console.log("Seek backward action triggered.");
+        const newTime = Math.max(getCurrentPlaybackTime() - 10, 0);
+        handleSeek(newTime);
+      });
+  
+      // Update Position State Periodically
+      const updatePositionState = () => {
+        if (trackBufferRef.current) {
+          navigator.mediaSession.setPositionState({
+            duration: trackBufferRef.current.duration,
+            playbackRate: 1,
+            position: getCurrentPlaybackTime(),
+          });
         }
       };
   
-      // Assign Handlers
-      mediaSession.setActionHandler('play', handlePlay);
-      mediaSession.setActionHandler('pause', handlePause);
-      mediaSession.setActionHandler('seekbackward', handleSeekBackward);
-      mediaSession.setActionHandler('seekforward', handleSeekForward);
-      mediaSession.setActionHandler('nexttrack', handleSkipNext);
-      mediaSession.setActionHandler('previoustrack', handleSkipPrevious);
-      mediaSession.setActionHandler('seekto', handleSeekTo);
+      // Initial Position State Update
+      updatePositionState();
+      const positionUpdateInterval = setInterval(updatePositionState, 1000);
   
-      // Update Metadata When Track Changes
-      if (currentTrack) {
-        updateMetadata(currentTrack);
-      }
+      // Cleanup Handlers on Unmount
+      return () => {
+        clearInterval(positionUpdateInterval);
+      
+        const actions: MediaSessionAction[] = [
+          'play',
+          'pause',
+          'previoustrack',
+          'nexttrack',
+          'seekto',
+          'seekforward',
+          'seekbackward',
+        ];
+      
+        actions.forEach((action) => {
+          try {
+            navigator.mediaSession.setActionHandler(action, null);
+          } catch (e) {
+            console.warn(`Failed to clear ${action} handler:`, e);
+          };
+        });
+      };
+    } catch (error) {
+      console.error("Media Session API error:", error);
     }
   }, [
     currentTrack,
     isPlaying,
-    seekPosition,
-    duration,
-    togglePlay,
     pauseAudio,
-    handleSeek,
-    skipTrack,
+    playTrackFromSource,
     previousTrackFunc,
+    skipTrack,
+    handleSeek,
+    getCurrentPlaybackTime,
   ]);
-
+  
   useEffect(() => {
     if (currentTrack) {
       storeSetting('currentTrack', JSON.stringify(currentTrack));
@@ -699,34 +753,38 @@ export function SpotifyClone() {
   
   // Manage Audio Context for Visibility Change
   useEffect(() => {
-    if (audioContext) {
-      const handleVisibilityChange = async () => {
-        if (document.visibilityState === 'visible') {
-          if (audioContext){
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          // Resume the audio context if suspended
+          if (audioContext && audioContext.state === 'suspended') {
             await audioContext.resume();
           }
-          if (currentTrack) {
-            void playTrackFromSource(currentTrack);
+          
+          // Only resume playback if it was previously playing
+          if (currentTrack && isPlaying && sourceRef.current === null) {
+            console.log('Resuming playback from paused position.');
+            void playTrackFromSource(currentTrack, pausedAtRef.current);
           }
+        } catch (err) {
+          console.error('Error resuming AudioContext or playback:', err);
         }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }
-  }, [currentTrack, playTrackFromSource]);
-  
-  // Handle Audio Focus Loss (e.g., on window blur)
-  useEffect(() => {
-
-    const handleAudioFocusLoss = () => {
-      if (isPlaying) pauseAudio();
+      } else {
+        // When the tab is hidden, let the browser handle audio suspension.
+        console.log('Tab hidden, letting browser manage AudioContext suspension.');
+      }
     };
   
-    window.addEventListener('blur', handleAudioFocusLoss);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('blur', handleAudioFocusLoss);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isPlaying, pauseAudio]);  
+  }, [currentTrack, isPlaying, playTrackFromSource, pausedAtRef, sourceRef]);
+  
+  
+  
+  
+
   
   
 
@@ -1160,14 +1218,6 @@ export function SpotifyClone() {
     },
     [playlists, handleOnboardingComplete]
   );
-
-  const handleStep2Complete = useCallback(
-    (artists: Artist[]) => {
-      void handleArtistSelectionComplete(artists).then(() => handleOnboardingComplete());
-    },
-    [handleArtistSelectionComplete, handleOnboardingComplete]
-  );
-
   // COMPONENTS
   function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
     return (
