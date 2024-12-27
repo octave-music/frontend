@@ -225,14 +225,6 @@ export function SpotifyClone() {
   const [mounted, setMounted] = useState(false);
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
 
-  // Web Audio Refs
-  // const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  // const gainNodeRef = useRef<GainNode | null>(null);
-  // const startTimeRef = useRef(0);
-  // const pausedAtRef = useRef(0);
-  // const trackDurationRef = useRef(0);
-  // const trackBufferRef = useRef<AudioBuffer | null>(null);
-
   const {
     // State
     isPlaying,
@@ -249,7 +241,7 @@ export function SpotifyClone() {
     handleSeek,
     playTrackFromSource,
     onVolumeChange,
-    loadAudioBuffer, // Added this
+    loadAudioBuffer, 
   
     // Refs
     trackBufferRef,
@@ -298,15 +290,6 @@ export function SpotifyClone() {
     }, 60 * 60 * 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // For lyrics sync
-  // const getCurrentPlaybackTime = useCallback(() => {
-  //   if (!audioContext || !sourceRef.current || trackDurationRef.current === 0) return 0;
-  //   if (!isPlaying) return pausedAtRef.current;
-  //   const now = audioContext.currentTime;
-  //   const elapsed = now - startTimeRef.current;
-  //   return Math.min(elapsed, trackDurationRef.current);
-  // }, [isPlaying]);
 
   useEffect(() => {
     let animFrame: number | null = null;
@@ -361,116 +344,6 @@ export function SpotifyClone() {
       setLyrics([]);
     }
   }, []);
-
-
-  // load buffer
-  // const loadAudioBuffer = useCallback(async (trackId: string): Promise<AudioBuffer | null> => {
-  //   if (!audioContext) return null;
-  //   // check IDB
-  //   const offlineData = await getOfflineBlob(trackId);
-  //   let arrBuf: ArrayBuffer | null = null;
-  //   if (offlineData) {
-  //     arrBuf = await offlineData.arrayBuffer();
-  //   } else {
-  //     // fetch
-  //     const url = `${API_BASE_URL}/api/track/${trackId}.mp3`;
-  //     const resp = await fetch(url);
-  //     if (!resp.ok) return null;
-  //     const mp3 = await resp.blob();
-  //     arrBuf = await mp3.arrayBuffer();
-  //     await storeTrackBlob(trackId, mp3);
-  //   }
-  //   if (!arrBuf) return null;
-  //   return audioContext.decodeAudioData(arrBuf);
-  // }, []);
-
-  // play buffer
-  // const playBuffer = useCallback(
-  //   async (buffer: AudioBuffer, offset = 0) => {
-  //     if (!audioContext) return;
-  
-  //     // Only disconnect and stop if a new playback is initiated
-  //     if (sourceRef.current) {
-  //       sourceRef.current.stop();
-  //       sourceRef.current.disconnect();
-  //       sourceRef.current = null;
-  //     }
-  
-  //     const source = audioContext.createBufferSource();
-  //     source.buffer = buffer;
-  
-  //     if (!gainNodeRef.current) {
-  //       gainNodeRef.current = audioContext.createGain();
-  //       gainNodeRef.current.connect(audioContext.destination);
-  //     }
-  
-  //     // Reuse the same gainNode
-  //     source.connect(gainNodeRef.current);
-  
-  //     sourceRef.current = source;
-  //     startTimeRef.current = audioContext.currentTime - offset;
-  //     pausedAtRef.current = offset;
-  //     trackDurationRef.current = buffer.duration;
-  //     setDuration(buffer.duration);
-  
-  //     source.start(0, offset);
-  //     setIsPlaying(true);
-  //   },
-  //   []
-  // );
-  
-
-  // pause
-  // const pauseAudio = useCallback(() => {
-  //   if (!audioContext || !sourceRef.current) return;
-  //   const ct = getCurrentPlaybackTime();
-  //   sourceRef.current.stop();
-  //   sourceRef.current.disconnect();
-  //   sourceRef.current = null;
-  //   pausedAtRef.current = ct;
-  //   setIsPlaying(false);
-  // }, [getCurrentPlaybackTime]);
-
-  // seek
-  // const handleSeek = useCallback(
-  //   (time: number) => {
-  //     if (!trackBufferRef.current) return;
-  //     if (sourceRef.current) {
-  //       sourceRef.current.stop();
-  //       sourceRef.current.disconnect();
-  //       sourceRef.current = null;
-  //     }
-  //     void playBuffer(trackBufferRef.current, time);
-  //     setSeekPosition(time);
-  //   },
-  //   [playBuffer]
-  // );
-
-  // track from source
-//   const playTrackFromSource = useCallback(
-//   async (track: Track, timeOffset = 0) => {
-//     try {
-//       // Stop any currently playing audio immediately
-//       if (sourceRef.current) {
-//         sourceRef.current.stop();
-//         sourceRef.current.disconnect();
-//         sourceRef.current = null;
-//       }
-
-//       const buffer = await loadAudioBuffer(track.id);
-//       if (!buffer) {
-//         console.error('Could not load audio buffer for track:', track);
-//         return;
-//       }
-
-//       trackBufferRef.current = buffer;
-//       await playBuffer(buffer, timeOffset);
-//     } catch (err) {
-//       console.error('Error playing track:', err);
-//     }
-//   },
-//   [loadAudioBuffer, playBuffer]
-// );
 
 
   // main play
@@ -604,19 +477,6 @@ export function SpotifyClone() {
     setAudioQuality(next);
     void storeSetting('audioQuality', next);
   }, [audioQuality]);
-
-  // const onVolumeChange = useCallback((v: number) => {
-  //   setVolume(v);
-  //   void storeSetting('volume', String(v));
-  //   if (sourceRef.current && audioContext) {
-  //     const g = sourceRef.current.context.createGain();
-  //     g.gain.value = v;
-  //   }
-
-  //   if (gainNodeRef.current) {
-  //     gainNodeRef.current.gain.value = v;
-  //   }    
-  // }, []);
 
   useEffect(() => {
     if (!('mediaSession' in navigator) || !currentTrack || !audioContext) {
