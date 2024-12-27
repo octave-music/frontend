@@ -56,6 +56,8 @@ import {
 
 import MobilePlayer from './mobilePlayer';
 import DesktopPlayer from './DesktopPlayer';
+import { setupMediaSession } from '../lib/useMediaSession';
+
 
 // Utility (for example usage)
 import { cn } from '../lib/utils';
@@ -478,124 +480,50 @@ export function SpotifyClone() {
     void storeSetting('audioQuality', next);
   }, [audioQuality]);
 
-  useEffect(() => {
-    if (!('mediaSession' in navigator) || !currentTrack || !audioContext) {
-      console.warn("MediaSession API not supported or no current track available.");
-      return;
-    }
-  
-    try {
-      // Update Media Session Metadata
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title,
-        artist: currentTrack.artist.name,
-        album: currentTrack.album.title,
-        artwork: [
-          { src: currentTrack.album.cover_small, sizes: '56x56', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_medium, sizes: '128x128', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_big, sizes: '256x256', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_xl, sizes: '512x512', type: 'image/jpeg' },
-        ],
-      });
-  
-      // Update Playback State
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  
-      // Action Handlers
-      navigator.mediaSession.setActionHandler('play', () => {
-        console.log("Play action triggered.");
-        if (!isPlaying && currentTrack) {
-          void playTrackFromSource(currentTrack, pausedAtRef.current);
-          setIsPlaying(true);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('pause', () => {
-        console.log("Pause action triggered.");
-        if (isPlaying) {
-          pauseAudio();
-          setIsPlaying(false);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        console.log("Previous track action triggered.");
-        previousTrackFunc();
-      });
-  
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        console.log("Next track action triggered.");
-        skipTrack();
-      });
-  
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        console.log("Seek action triggered:", details);
-        if (details.seekTime != null && trackBufferRef.current) {
-          handleSeek(details.seekTime);
-          navigator.mediaSession.setPositionState({
-            duration: trackBufferRef.current.duration,
-            playbackRate: 1,
-            position: details.seekTime,
-          });
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('seekforward', () => {
-        console.log("Seek forward action triggered.");
-        if (trackBufferRef.current) {
-          const newTime = Math.min(getCurrentPlaybackTime() + 10, trackBufferRef.current.duration);
-          handleSeek(newTime);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('seekbackward', () => {
-        console.log("Seek backward action triggered.");
-        const newTime = Math.max(getCurrentPlaybackTime() - 10, 0);
-        handleSeek(newTime);
-      });
-  
-      // Update Position State Periodically
-      const updatePositionState = () => {
-        if (trackBufferRef.current) {
-          navigator.mediaSession.setPositionState({
-            duration: trackBufferRef.current.duration,
-            playbackRate: 1,
-            position: getCurrentPlaybackTime(),
-          });
-        }
-      };
-  
-      // Initial Position State Update
-      updatePositionState();
-      const positionUpdateInterval = setInterval(updatePositionState, 1000);
-  
-      // Cleanup Handlers on Unmount
+
+  // Media Session
+  const isMounted = useRef(false);
+
+    useEffect(() => {
+      isMounted.current = true;
       return () => {
-        clearInterval(positionUpdateInterval);
-      
-        const actions: MediaSessionAction[] = [
-          'play',
-          'pause',
-          'previoustrack',
-          'nexttrack',
-          'seekto',
-          'seekforward',
-          'seekbackward',
-        ];
-      
-        actions.forEach((action) => {
-          try {
-            navigator.mediaSession.setActionHandler(action, null);
-          } catch (e) {
-            console.warn(`Failed to clear ${action} handler:`, e);
-          };
-        });
+        isMounted.current = false;
       };
-    } catch (error) {
-      console.error("Media Session API error:", error);
-    }
-  }, [currentTrack, isPlaying, pauseAudio, playTrackFromSource, previousTrackFunc, skipTrack, handleSeek, getCurrentPlaybackTime, pausedAtRef, trackBufferRef, setIsPlaying]);
-  
+    }, []);
+
+useEffect(() => {
+  if (typeof window !== 'undefined' && isMounted.current) {
+    const cleanup = setupMediaSession(
+      currentTrack,
+      isPlaying,
+      audioContext,
+      {
+        getCurrentPlaybackTime,
+        handleSeek,
+        playTrackFromSource,
+        pauseAudio,
+        previousTrackFunc,
+        skipTrack,
+        setIsPlaying,
+        trackBufferRef
+      }
+    );
+
+    return cleanup;
+  }
+}, [
+  currentTrack,
+  isPlaying,
+  pauseAudio,
+  playTrackFromSource,
+  previousTrackFunc,
+  skipTrack,
+  handleSeek,
+  getCurrentPlaybackTime,
+  trackBufferRef,
+  setIsPlaying
+]);
+
   useEffect(() => {
     if (currentTrack) {
       storeSetting('currentTrack', JSON.stringify(currentTrack));
