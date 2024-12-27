@@ -480,8 +480,6 @@ export function SpotifyClone() {
     void storeSetting('audioQuality', next);
   }, [audioQuality]);
 
-
-  // Media Session
   const isMounted = useRef(false);
 
     useEffect(() => {

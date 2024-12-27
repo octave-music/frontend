@@ -139,29 +139,29 @@ export function useAudio() {
   }, []);
 
   return {
-    // State
-    isPlaying,
-    setIsPlaying,
-    duration,
-    setDuration,
-    volume,
-    setVolume,
+  // State
+  isPlaying,
+  setIsPlaying,
+  duration,
+  setDuration,
+  volume,
+  setVolume,
+
+  // Functions
+  getCurrentPlaybackTime,
+  playBuffer,
+  pauseAudio,
+  handleSeek,
+  playTrackFromSource,
+  onVolumeChange,
+  loadAudioBuffer, // Added this
   
-    // Functions
-    getCurrentPlaybackTime,
-    playBuffer,
-    pauseAudio,
-    handleSeek,
-    playTrackFromSource,
-    onVolumeChange,
-    loadAudioBuffer, // Added this
-    
-    // Refs
-    trackBufferRef,
-    sourceRef,
-    gainNodeRef,
-    startTimeRef,
-    pausedAtRef,
-    trackDurationRef,
-  };
+  // Refs
+  trackBufferRef,
+  sourceRef,
+  gainNodeRef,
+  startTimeRef,
+  pausedAtRef,
+  trackDurationRef,
+};
 }

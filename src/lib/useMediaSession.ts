@@ -23,29 +23,16 @@ interface Track {
   }
   
   export function setupMediaSession(
-    currentTrack: Track | null,
-    isPlaying: boolean,
-    audioContext: AudioContext | null,
-    handlers: MediaSessionHandlers
-  ) {
-    // Check if we're in the browser environment
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-      return () => {};
-    }
-  
-    // Check for MediaSession support
-    if (!('mediaSession' in navigator)) {
-      console.warn("MediaSession API not supported in this browser.");
-      return () => {};
-    }
-  
-    // Check for required data
-    if (!currentTrack || !audioContext) {
-      return () => {};
-    }
+currentTrack: Track | null, isPlaying: boolean, audioContext: AudioContext | null, handlers: MediaSessionHandlers  ) {
+    // Ensure browser environment
+    if (typeof window === 'undefined' || !('mediaSession' in navigator) || !currentTrack) {
+        console.log('No browser environment or mediaSession not available.');
+        return () => {};
+      }
+
   
     try {
-      // Update Media Session Metadata
+      // Update Media Session metadata
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentTrack.title,
         artist: currentTrack.artist.name,
@@ -58,29 +45,41 @@ interface Track {
         ],
       });
   
-      // Update Playback State
+      // Update playback state
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   
-      // Action Handlers
-      navigator.mediaSession.setActionHandler('play', () => {
+      // Set up MediaSession action handlers
+      navigator.mediaSession.setActionHandler('play', async () => {
+        console.log('MediaSession play triggered');
         if (!isPlaying && currentTrack) {
-          void handlers.playTrackFromSource(currentTrack, handlers.getCurrentPlaybackTime());
+          await handlers.playTrackFromSource(currentTrack, handlers.getCurrentPlaybackTime());
           handlers.setIsPlaying(true);
+          navigator.mediaSession.playbackState = 'playing';
         }
       });
   
       navigator.mediaSession.setActionHandler('pause', () => {
+        console.log('MediaSession pause triggered');
         if (isPlaying) {
           handlers.pauseAudio();
           handlers.setIsPlaying(false);
+          navigator.mediaSession.playbackState = 'paused';
         }
       });
   
-      navigator.mediaSession.setActionHandler('previoustrack', handlers.previousTrackFunc);
-      navigator.mediaSession.setActionHandler('nexttrack', handlers.skipTrack);
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        console.log('MediaSession previous track triggered');
+        handlers.previousTrackFunc();
+      });
+  
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        console.log('MediaSession next track triggered');
+        handlers.skipTrack();
+      });
   
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime != null && handlers.trackBufferRef.current) {
+          console.log(`MediaSession seekto triggered: ${details.seekTime}`);
           handlers.handleSeek(details.seekTime);
           navigator.mediaSession.setPositionState({
             duration: handlers.trackBufferRef.current.duration,
@@ -92,17 +91,22 @@ interface Track {
   
       navigator.mediaSession.setActionHandler('seekforward', () => {
         if (handlers.trackBufferRef.current) {
-          const newTime = Math.min(handlers.getCurrentPlaybackTime() + 10, handlers.trackBufferRef.current.duration);
+          const newTime = Math.min(
+            handlers.getCurrentPlaybackTime() + 10,
+            handlers.trackBufferRef.current.duration
+          );
+          console.log(`MediaSession seekforward triggered: New time is ${newTime}`);
           handlers.handleSeek(newTime);
         }
       });
   
       navigator.mediaSession.setActionHandler('seekbackward', () => {
         const newTime = Math.max(handlers.getCurrentPlaybackTime() - 10, 0);
+        console.log(`MediaSession seekbackward triggered: New time is ${newTime}`);
         handlers.handleSeek(newTime);
       });
   
-      // Update Position State Periodically
+      // Periodically update position state
       const updatePositionState = () => {
         if (handlers.trackBufferRef.current) {
           navigator.mediaSession.setPositionState({
@@ -113,14 +117,14 @@ interface Track {
         }
       };
   
-      // Initial Position State Update
+      // Update position state every second
       updatePositionState();
-      const positionUpdateInterval = setInterval(updatePositionState, 1000);
+      const positionInterval = setInterval(updatePositionState, 1000);
   
       // Return cleanup function
       return () => {
-        clearInterval(positionUpdateInterval);
-        
+        clearInterval(positionInterval);
+  
         const actions: MediaSessionAction[] = [
           'play',
           'pause',
@@ -130,17 +134,18 @@ interface Track {
           'seekforward',
           'seekbackward',
         ];
-        
+  
         actions.forEach((action) => {
           try {
             navigator.mediaSession.setActionHandler(action, null);
           } catch (e) {
-            console.warn(`Failed to clear ${action} handler:`, e);
+            console.warn(`Failed to clear handler for ${action}:`, e);
           }
         });
       };
     } catch (error) {
-      console.error("Media Session API error:", error);
+      console.error("MediaSession API encountered an error:", error);
       return () => {};
     }
   }
+  
