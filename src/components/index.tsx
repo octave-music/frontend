@@ -116,12 +116,13 @@ interface TrackItemProps {
   track: Track;
   showArtist?: boolean;
   inPlaylistCreation?: boolean;
-  onTrackClick?: (track: Track, index: number) => void;  // Updated to include index
+  onTrackClick?: (track: Track, index: number) => void;
   addToQueue?: (track: Track) => void;
   openAddToPlaylistModal?: (track: Track) => void;
   toggleLike?: (track: Track) => void;
   isLiked?: boolean;
-  index?: number;  // Add this new prop
+  index?: number;
+  isPrevious?: boolean; // New prop
 }
 
 interface Artist {
@@ -227,6 +228,8 @@ export function SpotifyClone() {
   const [mounted, setMounted] = useState(false);
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
 
+
+
   const {
     // State
     isPlaying,
@@ -252,6 +255,8 @@ export function SpotifyClone() {
     startTimeRef,
     pausedAtRef,
     trackDurationRef,
+    silentAudioRef,
+    setOnTrackEndCallback,
   } = useAudio();
 
   
@@ -283,6 +288,25 @@ export function SpotifyClone() {
         .catch(() => {});
     }
   }, [gainNodeRef]);
+
+  useEffect(() => {
+    // Create silent audio element
+    if (typeof window !== 'undefined' && !silentAudioRef.current) {
+      const audio = document.createElement('audio');
+      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      audio.loop = true;
+      document.body.appendChild(audio);
+      silentAudioRef.current = audio;
+    }
+  
+    return () => {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+        silentAudioRef.current.remove();
+        silentAudioRef.current = null;
+      }
+    };
+  }, [silentAudioRef]);
   
 
   // Update greeting hourly
@@ -350,47 +374,97 @@ export function SpotifyClone() {
 
   // main play
   const playTrack = useCallback((track: Track) => {
+    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+    
     setQueue((prev) => {
+      // Remove the track if it's already in the queue to prevent duplicates
       const filtered = prev.filter((t) => t.id !== track.id);
       return [track, ...filtered];
     });
+  
     setCurrentTrack(track);
     setIsPlaying(true);
-  }, [setIsPlaying]);
+  
+    if (silentAudioRef.current) {
+      void silentAudioRef.current.play();
+    }
+  }, [currentTrack, silentAudioRef, setIsPlaying]);
+  
+  
 
   const togglePlay = useCallback(() => {
     if (!currentTrack) return;
     if (isPlaying) {
       pauseAudio();
+      // Add this
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+      }
     } else {
       void playTrackFromSource(currentTrack, pausedAtRef.current);
+      // Add this
+      if (silentAudioRef.current) {
+        void silentAudioRef.current.play();
+      }
     }
     setIsPlaying(!isPlaying);
-  }, [currentTrack, isPlaying, setIsPlaying, pauseAudio, playTrackFromSource, pausedAtRef]);
+  }, [currentTrack, isPlaying, setIsPlaying, pauseAudio, silentAudioRef, playTrackFromSource, pausedAtRef]);
+  
 
   const previousTrackFunc = useCallback(() => {
-    setPreviousTracks((prev) => {
-      if (!prev.length) return prev;
-      const [last, ...rest] = prev;
-      setCurrentTrack(last);
-      setQueue((q) => {
-        const fil = q.filter((tk) => tk.id !== last.id);
-        return [last, ...fil];
-      });
-      return rest;
+    if (!previousTracks.length) {
+      alert('Cannot go to the previous track: no track in history.');
+      return;
+    }
+    const lastTrack = previousTracks[0];
+    
+    setPreviousTracks((prev) => prev.slice(1));
+    setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
+    setCurrentTrack(lastTrack);
+    setIsPlaying(true); // Ensure playback is active
+  
+    void playTrackFromSource(lastTrack, 0).catch((error) => {
+      console.error('Error playing previous track:', error);
     });
-  }, []);
+  }, [previousTracks, setIsPlaying, playTrackFromSource]);
+  
+  
 
   const isProcessingRef = useRef(false);
 
   const skipTrack = useCallback(() => {
-    if (!currentTrack || queue.length <= 1) return;
-    
-    setPreviousTracks((p) => [currentTrack, ...p]);
-    const [, ...rest] = queue;
-    setCurrentTrack(rest[0]);
-    setQueue(rest);
-  }, [currentTrack, queue]);
+    console.log('Attempting to skip track.');
+    console.log('Current Track:', currentTrack);
+    console.log('Queue:', queue);
+  
+    if (!currentTrack || queue.length <= 1) {
+      alert('Cannot skip track: no next track available.');
+      return;
+    }
+  
+    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+  
+    setQueue((q) => {
+      const [, ...rest] = q;
+      console.log('New Queue after skipping:', rest);
+      if (rest.length === 0) {
+        setCurrentTrack(null);
+        setIsPlaying(false);
+      } else {
+        setCurrentTrack(rest[0]);
+        console.log('Now playing:', rest[0]);
+        void playTrackFromSource(rest[0], 0).catch((error) => {
+          console.error('Error playing next track:', error);
+        });
+      }
+      return rest;
+    });
+  }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
+  
+  
+
+  
+  
   
   const resetToStart = useCallback(() => {
     if (queue.length === 0) return;
@@ -403,42 +477,30 @@ export function SpotifyClone() {
   const handleTrackEnd = useCallback(() => {
     if (!currentTrack) return;
   
-    // Update listen count only once per actual play
-    if (!isProcessingRef.current) {
-      isProcessingRef.current = true;
-      void getListenCounts().then((counts) => {
-        const newCount = (counts[currentTrack.id] || 0) + 1;
-        void storeListenCount(currentTrack.id, newCount).then(() => {
-          setListenCount(newCount);
-          isProcessingRef.current = false;
-        });
-      });
-    }
-  
-    // Handle different repeat modes
     switch (repeatMode) {
       case 'one':
         if (trackBufferRef.current) {
-          void playBuffer(trackBufferRef.current, 0);
+          void playBuffer(trackBufferRef.current, 0).catch((error) => {
+            console.error('Error repeating track:', error);
+          });
         }
         break;
   
-      case 'all':
-        // If it's the last track, reset to start of queue
-        const isLastTrack = queue.findIndex(t => t.id === currentTrack.id) === queue.length - 1;
+      case 'all': {
+        const isLastTrack = queue.findIndex((t) => t.id === currentTrack.id) === queue.length - 1;
         if (isLastTrack) {
-          resetToStart(); 
+          resetToStart();
         } else {
           skipTrack();
         }
         break;
+      }
   
       case 'off':
       default:
         if (queue.length > 1) {
           skipTrack();
         } else {
-          // Stop playback when reaching the end with repeat off
           setIsPlaying(false);
           if (sourceRef.current) {
             sourceRef.current.stop();
@@ -454,8 +516,10 @@ export function SpotifyClone() {
   useEffect(() => {
     if (currentTrack && trackBufferRef.current) {
       void playBuffer(trackBufferRef.current, 0);
+      setIsPlaying(true); // Ensure playing state is true
     }
-  }, [currentTrack, playBuffer, trackBufferRef]);
+  }, [currentTrack, playBuffer, setIsPlaying, trackBufferRef]);
+  
 
   useEffect(() => {
     let anim: number;
@@ -489,38 +553,46 @@ export function SpotifyClone() {
       };
     }, []);
 
-useEffect(() => {
-  if (typeof window !== 'undefined' && isMounted.current) {
-    const cleanup = setupMediaSession(
+    useEffect(() => {
+      setOnTrackEndCallback(handleTrackEnd);
+    }, [handleTrackEnd, setOnTrackEndCallback]);
+
+    useEffect(() => {
+      if (typeof window !== 'undefined' && isMounted.current) {
+        const cleanup = setupMediaSession(
+          currentTrack,
+          isPlaying,
+          audioContext,
+          {
+            getCurrentPlaybackTime,
+            handleSeek,
+            playTrackFromSource,
+            pauseAudio,
+            previousTrackFunc,
+            skipTrack,
+            setIsPlaying,
+            trackBufferRef,
+            playBuffer,
+            silentAudio: silentAudioRef.current
+          }
+        );
+    
+        return cleanup;
+      }
+    }, [
       currentTrack,
       isPlaying,
-      audioContext,
-      {
-        getCurrentPlaybackTime,
-        handleSeek,
-        playTrackFromSource,
-        pauseAudio,
-        previousTrackFunc,
-        skipTrack,
-        setIsPlaying,
-        trackBufferRef
-      }
-    );
-
-    return cleanup;
-  }
-}, [
-  currentTrack,
-  isPlaying,
-  pauseAudio,
-  playTrackFromSource,
-  previousTrackFunc,
-  skipTrack,
-  handleSeek,
-  getCurrentPlaybackTime,
-  trackBufferRef,
-  setIsPlaying
-]);
+      pauseAudio,
+      playTrackFromSource,
+      previousTrackFunc,
+      skipTrack,
+      handleSeek,
+      getCurrentPlaybackTime,
+      trackBufferRef,
+      setIsPlaying,
+      silentAudioRef,
+      playBuffer
+    ]);    
 
   useEffect(() => {
     if (currentTrack) {
@@ -568,33 +640,46 @@ useEffect(() => {
   // init
   useEffect(() => {
     async function init() {
-      const vol = await getSetting('volume');
-      if (vol) setVolume(parseFloat(vol));
-
-      const sOn = await getSetting('shuffleOn');
-      if (sOn) setShuffleOn(JSON.parse(sOn));
-
-      const qual = await getSetting('audioQuality');
-      if (qual) setAudioQuality(qual as 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER');
-
-      const pls = await getAllPlaylists();
-      setPlaylists(pls);
-
-      const rec = await getRecentlyPlayed();
-      setJumpBackIn(rec);
-
-      const onboard = await getSetting('onboardingDone');
-      if (!onboard) setShowOnboarding(true);
-
-      const savedTrack = await getSetting('currentTrack');
-      if (savedTrack) {
-        const track = JSON.parse(savedTrack);
-        setCurrentTrack(track);
-        setIsPlaying(true);
+      try {
+        // Load settings
+        const [vol, sOn, qual, pls, rec, onboard, savedTrack, savedQueue] = await Promise.all([
+          getSetting('volume'),
+          getSetting('shuffleOn'),
+          getSetting('audioQuality'),
+          getAllPlaylists(),
+          getRecentlyPlayed(),
+          getSetting('onboardingDone'),
+          getSetting('currentTrack'),
+          getQueue(),
+        ]);
+  
+        if (vol) setVolume(parseFloat(vol));
+        if (sOn) setShuffleOn(JSON.parse(sOn));
+        if (qual) setAudioQuality(qual as 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER');
+        if (pls) setPlaylists(pls);
+        if (rec) setJumpBackIn(rec);
+        if (!onboard) setShowOnboarding(true);
+  
+        if (savedTrack) {
+          const track: Track = JSON.parse(savedTrack);
+          setCurrentTrack(track);
+          setIsPlaying(true);
+        }
+  
+        if (savedQueue && savedQueue.length > 0) {
+          setQueue(savedQueue);
+        } else if (savedTrack) {
+          // Initialize queue with currentTrack if queue is empty
+          setQueue([JSON.parse(savedTrack)]);
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
       }
     }
+  
     void init();
-  }, [setIsPlaying, setVolume, startOnboarding]);
+  }, [setIsPlaying, setVolume]);
+  
   
 
   useEffect(() => {
@@ -741,20 +826,26 @@ useEffect(() => {
       return [...prev, ...filtered];
     });
   }, []);
+  
   const removeFromQueue = useCallback((idx: number) => {
     setQueue((q) => q.filter((_, i) => i !== idx));
   }, []);
-  const onQueueItemClick = useCallback(
-    (tr: Track, idx: number) => {
-      // negative => previous
-      if (idx < 0) {
-        const absI = Math.abs(idx + 1);
-        setPreviousTracks((p) => p.slice(0, absI));
-      }
-      setCurrentTrack(tr);
-    },
-    []
-  );
+
+
+  const onQueueItemClick = useCallback((track: Track, idx: number) => {
+    if (idx < 0) {
+      // From previousTracks
+      setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
+      setQueue((q) => [track, ...q]);
+    } else {
+      // From queue
+      setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+      setQueue((q) => q.filter((_, i) => i !== idx));
+    }
+    setCurrentTrack(track);
+  }, [currentTrack]);
+  
+  
 
   // context menu
   const openAddToPlaylistModal = useCallback((tr: Track) => {
@@ -1002,6 +1093,29 @@ useEffect(() => {
     [sourceRef, playlists, handleOnboardingComplete, setIsPlaying]
   );
 
+
+  useEffect(() => {
+    if (previousTracks.length > 0) {
+      void storeSetting('previousTracks', JSON.stringify(previousTracks)).catch((err) =>
+        console.error('Failed to store previous tracks:', err)
+      );
+    }
+  }, [previousTracks]);
+  
+  useEffect(() => {
+    async function loadPreviousTracks() {
+      try {
+        const savedPrevious = await getSetting('previousTracks');
+        if (savedPrevious) {
+          setPreviousTracks(JSON.parse(savedPrevious));
+        }
+      } catch (error) {
+        console.error('Failed to load previous tracks:', error);
+      }
+    }
+    void loadPreviousTracks();
+  }, []);
+  
   
   
   useEffect(() => {
@@ -2208,76 +2322,111 @@ useEffect(() => {
         </main>
 
         {/* showQueue aside if wanted */}
-        {showQueue && (
-          <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
-            <h2 className="text-xl font-bold mb-4">Queue</h2>
-            {queue.length === 0 ? (
-              <div>
-                <p className="text-gray-400 mb-4">Your queue is empty.</p>
-                <button
-                  className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
-                  onClick={() => {}}
-                >
-                  Add Suggestions
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {queue.map((t, idx) => (
-                  <TrackItem 
-                    key={idx} 
-                    track={t} 
-                    index={idx}
-                    showArtist={false}
-                    onTrackClick={onQueueItemClick}
-                    addToQueue={addToQueue} 
-                    openAddToPlaylistModal={openAddToPlaylistModal} 
-                    toggleLike={toggleLike} 
-                    isLiked={isTrackLiked(t)} 
-                  />
-                ))}
-              </div>
-            )}
-          </aside>
+{showQueue && (
+  <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
+    <h2 className="text-xl font-bold mb-4">Queue</h2>
+    {queue.length === 0 && previousTracks.length === 0 ? (
+      <div>
+        <p className="text-gray-400 mb-4">Your queue is empty.</p>
+        <button
+          className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
+          onClick={() => {
+            // Implement Add Suggestions or relevant functionality
+          }}
+        >
+          Add Suggestions
+        </button>
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {previousTracks.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-2 text-gray-300">Previous Tracks</h3>
+            {previousTracks.map((track, idx) => (
+              <TrackItem
+                key={`prev-${track.id}`} // Unique key
+                track={track}
+                index={idx}
+                isPrevious={true}
+                onTrackClick={onQueueItemClick}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                toggleLike={toggleLike}
+                isLiked={isTrackLiked(track)}
+              />
+            ))}
+          </div>
+        )}
+        {queue.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-2 text-gray-300">Up Next</h3>
+            {queue.map((track, idx) => (
+              <TrackItem
+                key={`queue-${track.id}`} // Unique key
+                track={track}
+                index={idx}
+                isPrevious={false}
+                onTrackClick={onQueueItemClick}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                toggleLike={toggleLike}
+                isLiked={isTrackLiked(track)}
+              />
+            ))}
+          </div>
         )}
       </div>
+    )}
+  </aside>
+)}
 
-      {mounted && currentTrack && (
-        <footer className="hidden md:block">
-          <DesktopPlayer
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            previousTracks={previousTracks}
-            setQueue={setQueue}
-            togglePlay={togglePlay}
-            skipTrack={skipTrack}
-            previousTrack={previousTrackFunc}
-            seekPosition={seekPosition}
-            duration={duration}
-            handleSeek={handleSeek}
-            isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
-            repeatMode={repeatMode}
-            setRepeatMode={setRepeatMode}
-            toggleLike={toggleLikeDesktop}
-            lyrics={lyrics}
-            currentLyricIndex={currentLyricIndex}
-            showLyrics={showLyrics}
-            toggleLyricsView={toggleLyricsView}
-            shuffleOn={shuffleOn}
-            shuffleQueue={shuffleQueue}
-            queue={queue}
-            currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-            removeFromQueue={removeFromQueue}
-            onQueueItemClick={onQueueItemClick}
-            setIsPlayerOpen={setIsPlayerOpen}
-            volume={volume}
-            onVolumeChange={onVolumeChange}
-            audioQuality={audioQuality}
-            onCycleAudioQuality={onCycleAudioQuality}
-            listenCount={listenCount}
-          />
-        </footer>
-      )}
+      </div>
+
+      {mounted && (
+  currentTrack ? (
+    <footer className="fixed bottom-0 left-0 right-0">
+      <DesktopPlayer
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        previousTracks={previousTracks}
+        setQueue={setQueue}
+        togglePlay={togglePlay}
+        skipTrack={skipTrack}
+        previousTrack={previousTrackFunc}
+        seekPosition={seekPosition}
+        duration={duration}
+        handleSeek={handleSeek}
+        isLiked={isTrackLiked(currentTrack)}
+        repeatMode={repeatMode}
+        setRepeatMode={setRepeatMode}
+        toggleLike={toggleLikeDesktop}
+        lyrics={lyrics}
+        currentLyricIndex={currentLyricIndex}
+        showLyrics={showLyrics}
+        toggleLyricsView={toggleLyricsView}
+        shuffleOn={shuffleOn}
+        shuffleQueue={shuffleQueue}
+        queue={queue}
+        currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+        removeFromQueue={removeFromQueue}
+        onQueueItemClick={onQueueItemClick}
+        setIsPlayerOpen={setIsPlayerOpen}
+        volume={volume}
+        onVolumeChange={onVolumeChange}
+        audioQuality={audioQuality}
+        onCycleAudioQuality={onCycleAudioQuality}
+        listenCount={listenCount}
+      />
+    </footer>
+  ) : (
+    <footer className="fixed bottom-0 left-0 right-0">
+      {/* Optional: Placeholder or message when no track is playing */}
+      <div className="bg-gray-800 text-white p-4 text-center">
+        No track is currently playing.
+      </div>
+    </footer>
+  )
+)}
 
       {/* Create Playlist Modal */}
       {showCreatePlaylist && (
@@ -2459,17 +2608,25 @@ function TrackItem({
   openAddToPlaylistModal,
   toggleLike,
   isLiked,
-  index = 0  // Add default value
+  index = 0,
+  isPrevious = false, // Destructure the new prop
 }: TrackItemProps) {
   const [isHovered, setIsHovered] = useState(false);
-  
+
   const handleClick = (evt: React.MouseEvent) => {
     if (!inPlaylistCreation && onTrackClick) {
-      onTrackClick(track, index);  // Pass both track and index
+      onTrackClick(track, index);
     }
   };
 
-  // Extracted action buttons into a separate component for reusability
+  // Determine classes based on whether it's a previous track
+  const trackClasses = cn(
+    'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
+    'hover:bg-gray-700/40 transition-colors duration-200',
+    inPlaylistCreation ? 'selectable' : 'cursor-pointer',
+    isPrevious && 'opacity-50' // Dim previous tracks
+  );
+
   const ActionButtons = () => (
     <div className="flex items-center space-x-2 transition-all duration-200">
       {addToQueue && (
@@ -2501,11 +2658,7 @@ function TrackItem({
 
   return (
     <div
-      className={cn(
-        'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
-        'hover:bg-gray-700/40 transition-colors duration-200',
-        inPlaylistCreation ? 'selectable' : 'cursor-pointer'
-      )}
+      className={trackClasses}
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -2530,7 +2683,7 @@ function TrackItem({
 
       <div className={cn(
         'transition-opacity duration-200',
-        isHovered ? 'opacity-100' : 'opacity-0'
+        isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
       )}>
         {inPlaylistCreation ? (
           <input

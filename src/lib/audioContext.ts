@@ -22,7 +22,10 @@ const initializeAudioContext = (): AudioContext | null => {
     console.error("Failed to initialize AudioContext:", error);
     return null;
   }
+  
 };
+
+
 
 // Lazily initialize the AudioContext
 const audioContext: AudioContext | null = initializeAudioContext();

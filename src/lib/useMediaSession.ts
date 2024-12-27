@@ -20,10 +20,25 @@ interface Track {
     skipTrack: () => void;
     setIsPlaying: (playing: boolean) => void;
     trackBufferRef: React.MutableRefObject<AudioBuffer | null>;
+    silentAudio: HTMLAudioElement | null;
+    playBuffer: (buffer: AudioBuffer, offset?: number) => Promise<void>;
   }
   
   export function setupMediaSession(
-currentTrack: Track | null, isPlaying: boolean, audioContext: AudioContext | null, handlers: MediaSessionHandlers  ) {
+    currentTrack: Track | null,
+    isPlaying: boolean,
+    audioContext: AudioContext | null,
+    handlers: MediaSessionHandlers
+  ) {
+    let silentAudio: HTMLAudioElement | null = null;
+
+    if (typeof window !== 'undefined') {
+        silentAudio = document.createElement('audio');
+        silentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'; // 1ms silent audio
+        silentAudio.loop = true;
+        document.body.appendChild(silentAudio);
+      }
+
     // Ensure browser environment
     if (typeof window === 'undefined' || !('mediaSession' in navigator) || !currentTrack) {
         console.log('No browser environment or mediaSession not available.');
@@ -49,33 +64,39 @@ currentTrack: Track | null, isPlaying: boolean, audioContext: AudioContext | nul
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   
       // Set up MediaSession action handlers
-      navigator.mediaSession.setActionHandler('play', async () => {
-        console.log('MediaSession play triggered');
+      navigator.mediaSession.setActionHandler('play', () => {
         if (!isPlaying && currentTrack) {
-          await handlers.playTrackFromSource(currentTrack, handlers.getCurrentPlaybackTime());
+          const currentTime = handlers.getCurrentPlaybackTime();
+          if (handlers.trackBufferRef.current) {
+            handlers.playBuffer(handlers.trackBufferRef.current, currentTime);
+          } else {
+            void handlers.playTrackFromSource(currentTrack, currentTime);
+          }
           handlers.setIsPlaying(true);
           navigator.mediaSession.playbackState = 'playing';
         }
       });
+      
+          
+        
+        navigator.mediaSession.setActionHandler('pause', () => {
+            if (isPlaying) {
+            handlers.pauseAudio();
+            handlers.setIsPlaying(false);
+            navigator.mediaSession.playbackState = 'paused';
+            }
+        });
   
-      navigator.mediaSession.setActionHandler('pause', () => {
-        console.log('MediaSession pause triggered');
-        if (isPlaying) {
-          handlers.pauseAudio();
-          handlers.setIsPlaying(false);
-          navigator.mediaSession.playbackState = 'paused';
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        console.log('MediaSession previous track triggered');
-        handlers.previousTrackFunc();
-      });
-  
+      // In useMediaSession.ts
       navigator.mediaSession.setActionHandler('nexttrack', () => {
-        console.log('MediaSession next track triggered');
-        handlers.skipTrack();
+        if (!isPlaying) return;
+        handlers.skipTrack(); // This function should already handle playing the next track
       });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        if (!isPlaying) return;
+        handlers.previousTrackFunc(); // This function should already handle playing the previous track
+      });
+
   
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime != null && handlers.trackBufferRef.current) {
@@ -109,21 +130,26 @@ currentTrack: Track | null, isPlaying: boolean, audioContext: AudioContext | nul
       // Periodically update position state
       const updatePositionState = () => {
         if (handlers.trackBufferRef.current) {
+          const position = handlers.getCurrentPlaybackTime();
           navigator.mediaSession.setPositionState({
             duration: handlers.trackBufferRef.current.duration,
             playbackRate: 1,
-            position: handlers.getCurrentPlaybackTime(),
+            position,
           });
         }
       };
-  
       // Update position state every second
       updatePositionState();
-      const positionInterval = setInterval(updatePositionState, 1000);
+      const positionInterval = setInterval(updatePositionState, 250); // Update every 250ms
   
       // Return cleanup function
       return () => {
         clearInterval(positionInterval);
+
+        if (silentAudio) {
+            silentAudio.pause();
+            silentAudio.remove();
+          }
   
         const actions: MediaSessionAction[] = [
           'play',

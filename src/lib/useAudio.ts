@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import audioContext from '../lib/audioContext';
 import { getOfflineBlob, storeTrackBlob, storeSetting } from '../lib/idbWrapper';
 
@@ -15,6 +15,7 @@ interface Track {
   };
 }
 
+
 const API_BASE_URL = 'https://mbck.cloudgen.xyz';
 
 export function useAudio() {
@@ -28,6 +29,36 @@ export function useAudio() {
   const pausedAtRef = useRef(0);
   const trackDurationRef = useRef(0);
   const trackBufferRef = useRef<AudioBuffer | null>(null);
+
+  const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+
+
+  const setOnTrackEndCallback = useCallback((callback: () => void) => {
+    onTrackEndCallbackRef.current = callback;
+  }, []);
+
+
+  // Initialize silent audio on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const audio = new Audio();
+    audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    audio.loop = true;
+    silentAudioRef.current = audio;
+
+    return () => {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+        silentAudioRef.current = null;
+      }
+    };
+  }, []);
+
 
   const getCurrentPlaybackTime = useCallback(() => {
     if (!audioContext || !sourceRef.current || trackDurationRef.current === 0) return 0;
@@ -58,6 +89,11 @@ export function useAudio() {
   const playBuffer = useCallback(async (buffer: AudioBuffer, offset = 0) => {
     if (!audioContext) return;
 
+    // Ensure AudioContext is running
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
     if (sourceRef.current) {
       sourceRef.current.stop();
       sourceRef.current.disconnect();
@@ -73,6 +109,13 @@ export function useAudio() {
     }
 
     source.connect(gainNodeRef.current);
+    
+    // Add onended handler using the ref
+    source.onended = () => {
+      if (onTrackEndCallbackRef.current) {
+        onTrackEndCallbackRef.current();
+      }
+    };
 
     sourceRef.current = source;
     startTimeRef.current = audioContext.currentTime - offset;
@@ -82,6 +125,15 @@ export function useAudio() {
 
     source.start(0, offset);
     setIsPlaying(true);
+
+    // Play silent audio
+    if (silentAudioRef.current) {
+      try {
+        await silentAudioRef.current.play();
+      } catch (err) {
+        console.warn('Silent audio play failed:', err);
+      }
+    }
   }, []);
 
   const pauseAudio = useCallback(() => {
@@ -92,6 +144,11 @@ export function useAudio() {
     sourceRef.current = null;
     pausedAtRef.current = ct;
     setIsPlaying(false);
+
+    // Pause silent audio
+    if (silentAudioRef.current) {
+      silentAudioRef.current.pause();
+    }
   }, [getCurrentPlaybackTime]);
 
   const handleSeek = useCallback((time: number) => {
@@ -106,24 +163,34 @@ export function useAudio() {
 
   const playTrackFromSource = useCallback(async (track: Track, timeOffset = 0) => {
     try {
+      if (track.id !== currentTrack?.id) {
+        // Load the new track buffer if it's not already loaded
+        const buffer = await loadAudioBuffer(track.id);
+        if (buffer) {
+          trackBufferRef.current = buffer;
+        }
+      }
+  
+      // Stop and clean up the current source node
       if (sourceRef.current) {
         sourceRef.current.stop();
         sourceRef.current.disconnect();
         sourceRef.current = null;
       }
-
-      const buffer = await loadAudioBuffer(track.id);
+  
+      // Play the new track
+      const buffer = trackBufferRef.current || (await loadAudioBuffer(track.id));
       if (!buffer) {
         console.error('Could not load audio buffer for track:', track);
         return;
       }
-
-      trackBufferRef.current = buffer;
-      await playBuffer(buffer, timeOffset);
+  
+      await playBuffer(buffer, timeOffset); // Use the playBuffer function
+      setCurrentTrack(track);
     } catch (err) {
       console.error('Error playing track:', err);
     }
-  }, [loadAudioBuffer, playBuffer]); // Removed loadAudioBuffer from dependencies
+  }, [currentTrack?.id, loadAudioBuffer, playBuffer]);  
 
   const onVolumeChange = useCallback((v: number) => {
     setVolume(v);
@@ -163,5 +230,7 @@ export function useAudio() {
   startTimeRef,
   pausedAtRef,
   trackDurationRef,
+  silentAudioRef,
+  setOnTrackEndCallback,  
 };
 }
