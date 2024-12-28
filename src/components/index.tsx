@@ -17,13 +17,12 @@ import {
   Plus,
   User,
   Download,
-  Music,
   LogOut,
   ChevronLeft,
   X,
   ChevronRight,
   Heart,
-  Trash
+  MoreVertical
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
@@ -171,14 +170,11 @@ export function SpotifyClone() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  // const [isPlaying, setIsPlaying] = useState(false);
-  const [queue, setQueue] = useState<Track[]>([]); // Initialize queue state
+  const [queue, setQueue] = useState<Track[]>([]); 
   const [previousTracks, setPreviousTracks] = useState<Track[]>([]);
   const [shuffleOn, setShuffleOn] = useState(false);
-  // const [volume, setVolume] = useState(1);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   const [seekPosition, setSeekPosition] = useState(0);
-  // const [duration, setDuration] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<Position>({ x: 0, y: 0 });
@@ -194,7 +190,6 @@ export function SpotifyClone() {
   const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<Track[]>([]);
   const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null);
   const [contextMenuOptions, setContextMenuOptions] = useState<ContextMenuOption[]>([]);
-  // const [isLiked, setIsLiked] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -212,11 +207,12 @@ export function SpotifyClone() {
   const [showArtistSelection, setShowArtistSelection] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
-
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const pausedAtRef = useRef(0);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+
+
+
 
 
   const {
@@ -233,6 +229,21 @@ export function SpotifyClone() {
     loadAudioBuffer,
     setOnTrackEndCallback,
   } = useAudio();
+
+  const confirmDeletePlaylist = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist);
+    setShowDeleteConfirmation(true);
+  };
+
+  const deleteConfirmedPlaylist = () => {
+    if (selectedPlaylist) {
+      void deletePlaylistByName(selectedPlaylist.name).then((updatedPlaylists) => {
+        setPlaylists(updatedPlaylists);
+        setSelectedPlaylist(null);
+        setShowDeleteConfirmation(false);
+      });
+    }
+  };
   
   
 
@@ -286,6 +297,15 @@ export function SpotifyClone() {
       }, 300),
     []
   );
+  
+
+  useEffect(() => {
+    const handleKeyDown = (e: { key: string; }) => {
+      if (e.key === "Escape") setShowContextMenu(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
   
 
   const fetchLyrics = useCallback(async (track: Track) => {
@@ -539,6 +559,14 @@ export function SpotifyClone() {
   useEffect(() => {
     async function init() {
       try {
+
+        const savedRecommendedTracks = await getQueue();
+        if (savedRecommendedTracks && savedRecommendedTracks.length > 0) {
+            setRecommendedTracks(savedRecommendedTracks);
+            setQueue(savedRecommendedTracks);
+        }
+
+
         // Load settings
         const [vol, sOn, qual, pls, rec, onboard, savedTrack, savedQueue] = await Promise.all([
           getSetting('volume'),
@@ -766,28 +794,27 @@ export function SpotifyClone() {
             action: () => toggleLike(item) 
           }
         ];
-      } else {
-        // playlist
+      } if ('tracks' in item) { // Playlist-specific options
         options = [
           {
-            label: 'Pin Playlist',
+            label: item.pinned ? 'Unpin Playlist' : 'Pin Playlist',
             action: () => {
-              const up = playlists.map((pl) => {
-                if (pl.name === item.name) return { ...pl, pinned: !pl.pinned };
-                return pl;
-              });
-              setPlaylists(up);
-              void Promise.all(up.map((p) => storePlaylist(p)));
-            }
+              const updatedPlaylists = playlists.map((pl) =>
+                pl.name === item.name ? { ...pl, pinned: !pl.pinned } : pl
+              );
+              setPlaylists(updatedPlaylists);
+              void Promise.all(updatedPlaylists.map((pl) => storePlaylist(pl)));
+            },
           },
           {
             label: 'Delete Playlist',
             action: () => {
               void deletePlaylistByName(item.name).then((nl) => setPlaylists(nl));
-            }
-          }
+            },
+          },
         ];
-      }
+    }
+    
       setContextMenuOptions(options);
       setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
       setShowContextMenu(true);
@@ -809,7 +836,7 @@ export function SpotifyClone() {
     },
     [playlists]
   );
-  
+
   const handleAddToPlaylist = useCallback(() => {
     if (!selectedPlaylistForAdd || !contextMenuTrack) return;
     void addToPlaylist(contextMenuTrack, selectedPlaylistForAdd);
@@ -962,6 +989,8 @@ export function SpotifyClone() {
         setQueue(shuffled);
         setSearchResults(shuffled);
         setRecommendedTracks(shuffled);
+        await storeQueue(shuffled);
+
 
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
@@ -1017,18 +1046,19 @@ export function SpotifyClone() {
   
   useEffect(() => {
     async function loadQueue() {
-      try {
-        const savedQueue = await getQueue(); // Fetch the saved queue
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue); // Update the state with the loaded queue
+        try {
+            const savedQueue = await getQueue();
+            if (savedQueue && savedQueue.length > 0) {
+                setQueue(savedQueue);
+                setRecommendedTracks(savedQueue); // Set recommended tracks from saved queue
+            }
+        } catch (error) {
+            console.error('Failed to load queue from IndexedDB:', error);
         }
-      } catch (error) {
-        console.error('Failed to load queue from IndexedDB:', error);
-      }
     }
-    void loadQueue(); // Trigger the function
-  }, []); // Empty dependency array ensures this runs only once on mount
-  
+    void loadQueue();
+}, []);
+
 
   // RENDER
   if (showOnboarding) {
@@ -1307,6 +1337,7 @@ export function SpotifyClone() {
                       void Promise.all(up.map((pl) => storePlaylist(pl)));
                     }}
                     onClick={() => openPlaylist(playlist)}
+                    onContextMenu={(e) => handleContextMenu(e, playlist)} // Attach handler here
                     style={{ userSelect: 'none' }}
                   >
                     <img 
@@ -1327,14 +1358,14 @@ export function SpotifyClone() {
                             e.stopPropagation();
                             const opts: ContextMenuOption[] = [
                               {
-                                label: 'Pin Playlist',
+                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist', // Dynamic label
                                 action: () => {
-                                  const u2 = playlists.map((pl) =>
+                                  const updatedPlaylists = playlists.map((pl) =>
                                     pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
                                   );
-                                  setPlaylists(u2);
-                                  void Promise.all(u2.map((p) => storePlaylist(p)));
-                                }
+                                  setPlaylists(updatedPlaylists);
+                                  void Promise.all(updatedPlaylists.map((pl) => storePlaylist(pl)));
+                                },
                               },
                               {
                                 label: 'Delete Playlist',
@@ -1352,7 +1383,7 @@ export function SpotifyClone() {
                             setShowContextMenu(true);
                           }}
                         >
-                          <span className="w-4 h-4 text-white">•••</span>
+                          <span className="w-4 h-4 text-white"><MoreVertical /></span>
                         </button>
                       </>
                     )}
@@ -1365,26 +1396,37 @@ export function SpotifyClone() {
               {/* HOME */}
               <section className="mb-6">
                 <div className="grid grid-cols-2 gap-2">
-                  {playlists.map((pl) => (
-                    <div
-                      key={pl.name}
-                      className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
-                    >
-                      <img src={pl.image || 'assets/'} alt={pl.name || 'Playlist Cover'} className="w-10 h-10 rounded-md" />
-                      <span className="font-medium text-sm">{pl.name}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void deletePlaylistByName(pl.name).then((nl) => setPlaylists(nl));
-                        }}
-                        className="ml-auto p-1 text-red-400 hover:text-red-500"
+                  {playlists
+                    .filter((pl) => pl.pinned) // Only show pinned playlists
+                    .map((pl) => (
+                      <div
+                        key={pl.name}
+                        className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
                       >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                        <img
+                          src={pl.image || 'assets/'}
+                          alt={pl.name || 'Playlist Cover'}
+                          className="w-10 h-10 rounded-md"
+                        />
+                        <span className="font-medium text-sm">{pl.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updatedPlaylists = playlists.map((playlist) =>
+                              playlist.name === pl.name ? { ...playlist, pinned: false } : playlist
+                            );
+                            setPlaylists(updatedPlaylists);
+                            void Promise.all(updatedPlaylists.map((playlist) => storePlaylist(playlist)));
+                          }}
+                          className="ml-auto p-1 text-red-400 hover:text-red-500"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </section>
+
               <section className="mb-6">
                 {jumpBackIn.length > 0 && <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>}
                 {jumpBackIn.length > 0 ? (
@@ -1681,6 +1723,36 @@ export function SpotifyClone() {
         )}
       </div>
 
+      {showContextMenu && contextMenuOptions && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20"
+          onClick={() => setShowContextMenu(false)}
+        >
+          <div
+            className="absolute bg-gray-800 text-white rounded-md shadow-2xl z-50 min-w-[180px] border border-gray-700"
+            style={{
+              top: Math.min(contextMenuPosition.y, window.innerHeight - 150) + 'px',
+              left: Math.min(contextMenuPosition.x, window.innerWidth - 200) + 'px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenuOptions.map((option, index) => (
+              <button
+                key={index}
+                className="block w-full px-4 py-2 text-sm text-left transition-colors duration-200 hover:bg-gray-700 focus:outline-none focus:bg-gray-600"
+                onClick={() => {
+                  option.action();
+                  setShowContextMenu(false);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+
       {/* DESKTOP LAYOUT */}
       <div className="hidden md:flex flex-1 gap-2 p-2 overflow-y-auto custom-scrollbar">
         {showContextMenu && (
@@ -1691,6 +1763,7 @@ export function SpotifyClone() {
             options={contextMenuOptions}
           />
         )}
+
         {/* Collapsible sidebar if wanted: an example toggle or just show it */}
         <aside
           className={cn(
@@ -2192,29 +2265,28 @@ export function SpotifyClone() {
                   ))}
                 </div>
               </section>
-              <section className='flex-1 overflow-y-auto custom-scrollbar pb-32'>
+              <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
                 <h2 className="text-2xl font-bold mb-4">Recommended</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {recommendedTracks.length > 0 ? (
-                    recommendedTracks.map((track, idx) => (
-                      <TrackItem
-                        key={track.id}
-                        track={track}
-                        index={idx}
-                        onTrackClick={playTrack}
-                        addToQueue={addToQueue}
-                        openAddToPlaylistModal={openAddToPlaylistModal} 
-                        toggleLike={toggleLike}
-                        isLiked={isTrackLiked(track)}
-                        onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
-                      />
-                    ))
-                  ) : (
-                    <p className="text-gray-400">No recommendations available.</p>
-                  )}
+                    {recommendedTracks.length > 0 ? (
+                        recommendedTracks.map((track, idx) => (
+                            <TrackItem
+                                key={track.id}
+                                track={track}
+                                index={idx}
+                                onTrackClick={playTrack}
+                                addToQueue={addToQueue}
+                                openAddToPlaylistModal={openAddToPlaylistModal} 
+                                toggleLike={toggleLike}
+                                isLiked={isTrackLiked(track)}
+                                onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                            />
+                        ))
+                    ) : (
+                        <p className="text-gray-400">No recommendations available.</p>
+                    )}
                 </div>
-              </section>
-
+            </section>
             </>
           )}
         </main>
@@ -2356,6 +2428,18 @@ export function SpotifyClone() {
                 >
                   Add
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirmation && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/70">
+            <div className="bg-gray-800 rounded-lg p-6">
+              <p className="text-white">Are you sure you want to delete the playlist "{selectedPlaylist?.name}"?</p>
+              <div className="flex justify-end mt-4">
+                <button className="text-gray-400 mr-4" onClick={() => setShowDeleteConfirmation(false)}>Cancel</button>
+                <button className="text-red-500" onClick={deleteConfirmedPlaylist}>Yes, Delete</button>
               </div>
             </div>
           </div>
@@ -2534,6 +2618,7 @@ function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
     </div>
   );
 }
+
 
 function TrackItem({
   track,

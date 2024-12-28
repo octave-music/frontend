@@ -438,3 +438,9 @@ html {
   animation-delay: 0s; /* Start immediately, customize with inline styles */
 }
 
+div[role="menu"] {
+  max-width: 95%; /* Prevents menu from exceeding screen width */
+  word-wrap: break-word; /* Ensures text wraps properly */
+  overflow: hidden; /* Hides any overflowing content */
+  border: 1px solid #333; /* Adds a subtle border */
+}
