@@ -3,14 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  MouseEvent,
-  useMemo
-} from 'react';
+import React, { useState, useEffect, useRef, useCallback, MouseEvent, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
@@ -24,17 +17,16 @@ import {
   Plus,
   User,
   Download,
-  Music,
   LogOut,
   ChevronLeft,
   X,
   ChevronRight,
   Heart,
-  Trash
+  MoreVertical
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
-// IDB wrapper
+import { useAudio } from "../lib/useAudio";
 import {
   openIDB,
   storeQueue,
@@ -55,40 +47,14 @@ import {
 
 import MobilePlayer from './mobilePlayer';
 import DesktopPlayer from './DesktopPlayer';
-
-// Utility (for example usage)
+import { setupMediaSession } from '../lib/useMediaSession';
 import { cn } from '../lib/utils';
+import Onboarding from './Onboarding';
+import { handleFetchLyrics } from '../lib/lyrics';
+import audioElement from '../lib/audioManager';
 
-// Discord RPC placeholder (stub)
-async function setupDiscordRPC(trackTitle: string, artistName: string) {
-  // In a real environment, you'd use a library or custom code to set the Discord Rich Presence
-  // via websockets or an extension. We'll just log here:
-  console.log('[Discord RPC] Setting presence:', { trackTitle, artistName });
-}
-
-
-
-// WebAudio: global reference
-import audioContext from '../lib/audioContext';
-
-// Replace with your real endpoint
-const API_BASE_URL = 'https://mbck.cloudgen.xyz';
-
-// For data-saver detection (this can be adapted for more advanced usage)
-// Will work once we get data saver fucnitonality for tracks
-function isDataSaverMode() {
-  // If user has requested reduced data usage, or a custom check for connection type
-  // Example: check if navigator.connection.effectiveType is '2g' or 'slow-2g'
-  // or if 'saveData' is set.
-  const nav = navigator as any;
-  if (nav.connection && nav.connection.saveData) return true;
-  if (nav.connection && nav.connection.effectiveType === '2g') return true;
-  return false;
-}
-
-// Types
 interface Track {
-  id: string ;
+  id: string;
   title: string;
   artist: { name: string };
   album: {
@@ -135,12 +101,14 @@ interface TrackItemProps {
   track: Track;
   showArtist?: boolean;
   inPlaylistCreation?: boolean;
-  onTrackClick?: (track: Track, index: number) => void;  // Updated to include index
+  onTrackClick?: (track: Track, index: number) => void;
   addToQueue?: (track: Track) => void;
   openAddToPlaylistModal?: (track: Track) => void;
   toggleLike?: (track: Track) => void;
   isLiked?: boolean;
-  index?: number;  // Add this new prop
+  index?: number;
+  isPrevious?: boolean;
+  onContextMenu?: React.MouseEventHandler<HTMLDivElement>; // Added prop with correct type
 }
 
 interface Artist {
@@ -154,27 +122,43 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+interface AudioState {
+  audioElement: HTMLAudioElement | null;
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+}
+
+
 declare global {
   interface Window {
     deferredPrompt?: BeforeInstallPromptEvent;
   }
 }
 
-// Greeting
+const API_BASE_URL = 'https://mbck.cloudgen.xyz';
+
+async function setupDiscordRPC(trackTitle: string, artistName: string) {
+  console.log('[Discord RPC] Setting presence:', { trackTitle, artistName });
+}
+
+function isDataSaverMode() {
+  const nav = navigator as any;
+  if (nav.connection && nav.connection.saveData) return true;
+  if (nav.connection && nav.connection.effectiveType === '2g') return true;
+  return false;
+}
+
 function getDynamicGreeting() {
   const now = new Date();
   const currentHour = now.getHours();
-
-  if (currentHour >= 5 && currentHour < 12) {
-    return 'Good Morning!';
-  } else if (currentHour >= 12 && currentHour < 17) {
-    return 'Good Afternoon!';
-  } else if (currentHour >= 17 && currentHour < 21) {
-    return 'Good Evening!';
-  } else {
-    return 'Good Night!';
-  }
+  if (currentHour >= 5 && currentHour < 12) return 'Good Morning!';
+  else if (currentHour >= 12 && currentHour < 17) return 'Good Afternoon!';
+  else if (currentHour >= 17 && currentHour < 21) return 'Good Evening!';
+  else return 'Good Night!';
 }
+
 
 export function SpotifyClone() {
   // STATE
@@ -186,14 +170,11 @@ export function SpotifyClone() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [queue, setQueue] = useState<Track[]>([]); // Initialize queue state
+  const [queue, setQueue] = useState<Track[]>([]); 
   const [previousTracks, setPreviousTracks] = useState<Track[]>([]);
   const [shuffleOn, setShuffleOn] = useState(false);
-  const [volume, setVolume] = useState(1);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   const [seekPosition, setSeekPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<Position>({ x: 0, y: 0 });
@@ -209,7 +190,6 @@ export function SpotifyClone() {
   const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<Track[]>([]);
   const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null);
   const [contextMenuOptions, setContextMenuOptions] = useState<ContextMenuOption[]>([]);
-  const [isLiked, setIsLiked] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -223,48 +203,47 @@ export function SpotifyClone() {
   const [searchType, setSearchType] = useState('tracks');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [audioQuality, setAudioQuality] = useState<'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER'>('HIGH');
-  const [onboardingStep, setOnboardingStep] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showArtistSelection, setShowArtistSelection] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
 
-  // Web Audio Refs
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
-  const startTimeRef = useRef(0);
-  const pausedAtRef = useRef(0);
-  const trackDurationRef = useRef(0);
-  const trackBufferRef = useRef<AudioBuffer | null>(null);
 
-  
 
-  // INTRO: Setup / OnMount
-  useEffect(() => {
-    setMounted(true);
 
-    // Data-saver check
-    if (isDataSaverMode()) {
-      setAudioQuality('DATA_SAVER');
-      void storeSetting('audioQuality', 'DATA_SAVER');
+
+  const {
+    isPlaying,
+    setIsPlaying,
+    duration,
+    volume,
+    setVolume,
+    getCurrentPlaybackTime,
+    pauseAudio,
+    handleSeek,
+    playTrackFromSource,
+    onVolumeChange,
+    loadAudioBuffer,
+    setOnTrackEndCallback,
+  } = useAudio();
+
+  const confirmDeletePlaylist = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist);
+    setShowDeleteConfirmation(true);
+  };
+
+  const deleteConfirmedPlaylist = () => {
+    if (selectedPlaylist) {
+      void deletePlaylistByName(selectedPlaylist.name).then((updatedPlaylists) => {
+        setPlaylists(updatedPlaylists);
+        setSelectedPlaylist(null);
+        setShowDeleteConfirmation(false);
+      });
     }
-
-    // Attempt to resume audio context
-    if (audioContext && audioContext.state === 'suspended') {
-      audioContext
-        .resume()
-        .then(() => {
-          // Create gain node if not exist
-          if (!gainNodeRef.current) {
-            if (audioContext) {
-              gainNodeRef.current = audioContext.createGain();
-              gainNodeRef.current.gain.value = 1;
-              gainNodeRef.current.connect(audioContext.destination);
-            }
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
+  };
   
   
 
@@ -276,23 +255,14 @@ export function SpotifyClone() {
     return () => clearInterval(timer);
   }, []);
 
-  // For lyrics sync
-  const getCurrentPlaybackTime = useCallback(() => {
-    if (!audioContext || !sourceRef.current || trackDurationRef.current === 0) return 0;
-    if (!isPlaying) return pausedAtRef.current;
-    const now = audioContext.currentTime;
-    const elapsed = now - startTimeRef.current;
-    return Math.min(elapsed, trackDurationRef.current);
-  }, [isPlaying]);
-
   useEffect(() => {
     let animFrame: number | null = null;
     function updateLyric() {
-      if (!audioContext || !sourceRef.current || !trackBufferRef.current) {
+      if (!audioElement) {
         animFrame = requestAnimationFrame(updateLyric);
         return;
       }
-      const currentTime = getCurrentPlaybackTime();
+      const currentTime = audioElement.currentTime;
       const activeIndex = lyrics.findIndex((ly, i) => {
         const isLast = i === lyrics.length - 1;
         const nextTime = isLast ? Infinity : lyrics[i + 1].time;
@@ -307,7 +277,7 @@ export function SpotifyClone() {
     return () => {
       if (animFrame) cancelAnimationFrame(animFrame);
     };
-  }, [lyrics, currentLyricIndex, getCurrentPlaybackTime]);
+  }, [lyrics, currentLyricIndex]);
 
   // Debounced search
   const fetchSearchResults = useMemo(
@@ -329,189 +299,94 @@ export function SpotifyClone() {
   );
   
 
-  // parse lyrics
-  const parseLyrics = (ly: string): Lyric[] => {
-    return ly.split('\n').map((l) => {
-      const [time, text] = l.split(']');
-      const [m, s] = time.replace('[', '').split(':');
-      const secs = parseFloat(m) * 60 + parseFloat(s);
-      return { time: parseFloat(secs.toFixed(1)), text: text.trim() };
-    });
-  };
+  useEffect(() => {
+    const handleKeyDown = (e: { key: string; }) => {
+      if (e.key === "Escape") setShowContextMenu(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+  
 
-  // fetch lyrics
   const fetchLyrics = useCallback(async (track: Track) => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/lyrics`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: track.title, artist: track.artist.name })
-      });
-      const data = await resp.json();
-      if (data.success && data.synced) {
-        setLyrics(parseLyrics(data.lyrics));
-      } else {
-        setLyrics([]);
-      }
+      const lyrics = await handleFetchLyrics(track);
+      setLyrics(lyrics);
     } catch (err) {
       console.log('Lyrics error:', err);
       setLyrics([]);
     }
   }, []);
 
-  // load buffer
-  const loadAudioBuffer = useCallback(async (trackId: string): Promise<AudioBuffer | null> => {
-    if (!audioContext) return null;
-    // check IDB
-    const offlineData = await getOfflineBlob(trackId);
-    let arrBuf: ArrayBuffer | null = null;
-    if (offlineData) {
-      arrBuf = await offlineData.arrayBuffer();
-    } else {
-      // fetch
-      const url = `${API_BASE_URL}/api/track/${trackId}.mp3`;
-      const resp = await fetch(url);
-      if (!resp.ok) return null;
-      const mp3 = await resp.blob();
-      arrBuf = await mp3.arrayBuffer();
-      await storeTrackBlob(trackId, mp3);
-    }
-    if (!arrBuf) return null;
-    return audioContext.decodeAudioData(arrBuf);
-  }, []);
-
-  // play buffer
-  const playBuffer = useCallback(
-    async (buffer: AudioBuffer, offset = 0) => {
-      if (!audioContext) return;
-  
-      // Only disconnect and stop if a new playback is initiated
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-        sourceRef.current.disconnect();
-        sourceRef.current = null;
-      }
-  
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-  
-      if (!gainNodeRef.current) {
-        gainNodeRef.current = audioContext.createGain();
-        gainNodeRef.current.connect(audioContext.destination);
-      }
-  
-      // Reuse the same gainNode
-      source.connect(gainNodeRef.current);
-  
-      sourceRef.current = source;
-      startTimeRef.current = audioContext.currentTime - offset;
-      pausedAtRef.current = offset;
-      trackDurationRef.current = buffer.duration;
-      setDuration(buffer.duration);
-  
-      source.start(0, offset);
-      setIsPlaying(true);
-    },
-    []
-  );
-  
-
-  // pause
-  const pauseAudio = useCallback(() => {
-    if (!audioContext || !sourceRef.current) return;
-    const ct = getCurrentPlaybackTime();
-    sourceRef.current.stop();
-    sourceRef.current.disconnect();
-    sourceRef.current = null;
-    pausedAtRef.current = ct;
-    setIsPlaying(false);
-  }, [getCurrentPlaybackTime]);
-
-  // seek
-  const handleSeek = useCallback(
-    (time: number) => {
-      if (!trackBufferRef.current) return;
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-        sourceRef.current.disconnect();
-        sourceRef.current = null;
-      }
-      void playBuffer(trackBufferRef.current, time);
-      setSeekPosition(time);
-    },
-    [playBuffer]
-  );
-
-  // track from source
-  const playTrackFromSource = useCallback(
-  async (track: Track, timeOffset = 0) => {
-    try {
-      // Stop any currently playing audio immediately
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-        sourceRef.current.disconnect();
-        sourceRef.current = null;
-      }
-
-      const buffer = await loadAudioBuffer(track.id);
-      if (!buffer) {
-        console.error('Could not load audio buffer for track:', track);
-        return;
-      }
-
-      trackBufferRef.current = buffer;
-      await playBuffer(buffer, timeOffset);
-    } catch (err) {
-      console.error('Error playing track:', err);
-    }
-  },
-  [loadAudioBuffer, playBuffer]
-);
-
 
   // main play
   const playTrack = useCallback((track: Track) => {
+    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+    
     setQueue((prev) => {
       const filtered = prev.filter((t) => t.id !== track.id);
       return [track, ...filtered];
     });
+  
     setCurrentTrack(track);
     setIsPlaying(true);
-  }, []);
+    void playTrackFromSource(track, 0);
+  }, [currentTrack, setIsPlaying, playTrackFromSource]);
+  
+  
 
   const togglePlay = useCallback(() => {
-    if (!currentTrack) return;
+    if (!currentTrack || !audioElement) return;
+    
     if (isPlaying) {
-      pauseAudio();
+      audioElement.pause();
     } else {
-      void playTrackFromSource(currentTrack, pausedAtRef.current);
+      void audioElement.play();
     }
+    
     setIsPlaying(!isPlaying);
-  }, [isPlaying, currentTrack, pauseAudio, playTrackFromSource]);
+  }, [currentTrack, isPlaying, setIsPlaying]);
 
   const previousTrackFunc = useCallback(() => {
-    setPreviousTracks((prev) => {
-      if (!prev.length) return prev;
-      const [last, ...rest] = prev;
-      setCurrentTrack(last);
-      setQueue((q) => {
-        const fil = q.filter((tk) => tk.id !== last.id);
-        return [last, ...fil];
-      });
+    if (!previousTracks.length || !audioElement) {
+      alert('Cannot go to the previous track: no track in history.');
+      return;
+    }
+    
+    const lastTrack = previousTracks[0];
+    setPreviousTracks((prev) => prev.slice(1));
+    setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
+    setCurrentTrack(lastTrack);
+    
+    void playTrackFromSource(lastTrack, 0);
+  }, [previousTracks, playTrackFromSource]);
+  
+  
+  const skipTrack = useCallback(() => {
+    if (!currentTrack || queue.length <= 1 || !audioElement) {
+      alert('Cannot skip track: no next track available.');
+      return;
+    }
+
+    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+
+    setQueue((q) => {
+      const [, ...rest] = q;
+      if (rest.length === 0) {
+        setCurrentTrack(null);
+        setIsPlaying(false);
+      } else {
+        setCurrentTrack(rest[0]);
+        void playTrackFromSource(rest[0], 0);
+      }
       return rest;
     });
-  }, []);
+  }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
+  
+  
 
-  const isProcessingRef = useRef(false);
-
-  const skipTrack = useCallback(() => {
-    if (!currentTrack || queue.length <= 1) return;
-    
-    setPreviousTracks((p) => [currentTrack, ...p]);
-    const [, ...rest] = queue;
-    setCurrentTrack(rest[0]);
-    setQueue(rest);
-  }, [currentTrack, queue]);
+  
+  
   
   const resetToStart = useCallback(() => {
     if (queue.length === 0) return;
@@ -522,79 +397,90 @@ export function SpotifyClone() {
   }, [queue]);
   
   const handleTrackEnd = useCallback(() => {
-    if (!currentTrack) return;
+    if (!currentTrack || !audioElement) return;
   
-    // Update listen count only once per actual play
-    if (!isProcessingRef.current) {
-      isProcessingRef.current = true;
-      void getListenCounts().then((counts) => {
-        const newCount = (counts[currentTrack.id] || 0) + 1;
-        void storeListenCount(currentTrack.id, newCount).then(() => {
-          setListenCount(newCount);
-          isProcessingRef.current = false;
-        });
-      });
-    }
-  
-    // Handle different repeat modes
     switch (repeatMode) {
       case 'one':
-        if (trackBufferRef.current) {
-          void playBuffer(trackBufferRef.current, 0);
-        }
+        audioElement.currentTime = 0;
+        void audioElement.play();
         break;
   
-      case 'all':
-        // If it's the last track, reset to start of queue
-        const isLastTrack = queue.findIndex(t => t.id === currentTrack.id) === queue.length - 1;
+      case 'all': {
+        const isLastTrack = queue.findIndex((t) => t.id === currentTrack.id) === queue.length - 1;
         if (isLastTrack) {
-          if (queue.length > 0) {
-            setCurrentTrack(queue[0]);
-            // Maintain queue order for repeat all
-            setQueue(queue);
-          }
+          setCurrentTrack(queue[0]);
+          void playTrackFromSource(queue[0], 0);
         } else {
           skipTrack();
         }
         break;
+      }
   
       case 'off':
       default:
         if (queue.length > 1) {
           skipTrack();
         } else {
-          // Stop playback when reaching the end with repeat off
           setIsPlaying(false);
-          if (sourceRef.current) {
-            sourceRef.current.stop();
-            sourceRef.current.disconnect();
-            sourceRef.current = null;
-          }
+          audioElement.pause();
         }
         break;
     }
-  }, [currentTrack, queue, repeatMode, skipTrack, playBuffer]);
+  }, [currentTrack, repeatMode, queue, playTrackFromSource, skipTrack, setIsPlaying]);
+
+   // INTRO: Setup / OnMount
+   useEffect(() => {
+    setMounted(true);
+    
+    if (isDataSaverMode()) {
+      setAudioQuality('DATA_SAVER');
+      void storeSetting('audioQuality', 'DATA_SAVER');
+    }
+
+    if (audioElement) {
+      audioElement.volume = volume;
+      audioElement.addEventListener('timeupdate', () => {
+        if (audioElement) {
+          setCurrentTime(audioElement.currentTime);
+          setSeekPosition(audioElement.currentTime);
+        }
+      });
+      
+      audioElement.addEventListener('ended', handleTrackEnd);
+    }
+
+    return () => {
+      if (audioElement) {
+        audioElement.removeEventListener('timeupdate', () => {});
+        audioElement.removeEventListener('ended', handleTrackEnd);
+      }
+    };
+  }, [handleTrackEnd, volume]);
+
   
   // Add this effect to handle playback when currentTrack changes
   useEffect(() => {
-    if (currentTrack && trackBufferRef.current) {
-      void playBuffer(trackBufferRef.current, 0);
+    if (currentTrack && audioElement) {
+      void playTrackFromSource(currentTrack, 0);
+      setIsPlaying(true); // Ensure playing state is true
     }
-  }, [currentTrack, playBuffer]);
+  }, [currentTrack, playTrackFromSource, setIsPlaying]);
 
   useEffect(() => {
-    let anim: number;
-    function check() {
-      const cur = getCurrentPlaybackTime();
-      const len = trackDurationRef.current;
-      if (cur >= len && len !== 0) {
-        handleTrackEnd();
+    if (!audioElement) return;
+  
+    const handleEnded = () => {
+      handleTrackEnd();
+    };
+  
+    audioElement.addEventListener('ended', handleEnded);
+  
+    return () => {
+      if (audioElement) {
+        audioElement.removeEventListener('ended', handleEnded);
       }
-      anim = requestAnimationFrame(check);
-    }
-    anim = requestAnimationFrame(check);
-    return () => cancelAnimationFrame(anim);
-  }, [handleTrackEnd, getCurrentPlaybackTime]);
+    };
+  }, [handleTrackEnd]);
 
   // cycle audio
   const onCycleAudioQuality = useCallback(() => {
@@ -605,229 +491,121 @@ export function SpotifyClone() {
     void storeSetting('audioQuality', next);
   }, [audioQuality]);
 
-  const onVolumeChange = useCallback((v: number) => {
-    setVolume(v);
-    void storeSetting('volume', String(v));
-    if (sourceRef.current && audioContext) {
-      const g = sourceRef.current.context.createGain();
-      g.gain.value = v;
-    }
+  const isMounted = useRef(false);
 
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = v;
-    }    
-  }, []);
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator) || !currentTrack || !audioContext) {
-      console.warn("MediaSession API not supported or no current track available.");
-      return;
-    }
-  
-    try {
-      // Update Media Session Metadata
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title,
-        artist: currentTrack.artist.name,
-        album: currentTrack.album.title,
-        artwork: [
-          { src: currentTrack.album.cover_small, sizes: '56x56', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_medium, sizes: '128x128', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_big, sizes: '256x256', type: 'image/jpeg' },
-          { src: currentTrack.album.cover_xl, sizes: '512x512', type: 'image/jpeg' },
-        ],
-      });
-  
-      // Update Playback State
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  
-      // Action Handlers
-      navigator.mediaSession.setActionHandler('play', () => {
-        console.log("Play action triggered.");
-        if (!isPlaying && currentTrack) {
-          void playTrackFromSource(currentTrack, pausedAtRef.current);
-          setIsPlaying(true);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('pause', () => {
-        console.log("Pause action triggered.");
-        if (isPlaying) {
-          pauseAudio();
-          setIsPlaying(false);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        console.log("Previous track action triggered.");
-        previousTrackFunc();
-      });
-  
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        console.log("Next track action triggered.");
-        skipTrack();
-      });
-  
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        console.log("Seek action triggered:", details);
-        if (details.seekTime != null && trackBufferRef.current) {
-          handleSeek(details.seekTime);
-          navigator.mediaSession.setPositionState({
-            duration: trackBufferRef.current.duration,
-            playbackRate: 1,
-            position: details.seekTime,
-          });
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('seekforward', () => {
-        console.log("Seek forward action triggered.");
-        if (trackBufferRef.current) {
-          const newTime = Math.min(getCurrentPlaybackTime() + 10, trackBufferRef.current.duration);
-          handleSeek(newTime);
-        }
-      });
-  
-      navigator.mediaSession.setActionHandler('seekbackward', () => {
-        console.log("Seek backward action triggered.");
-        const newTime = Math.max(getCurrentPlaybackTime() - 10, 0);
-        handleSeek(newTime);
-      });
-  
-      // Update Position State Periodically
-      const updatePositionState = () => {
-        if (trackBufferRef.current) {
-          navigator.mediaSession.setPositionState({
-            duration: trackBufferRef.current.duration,
-            playbackRate: 1,
-            position: getCurrentPlaybackTime(),
-          });
-        }
-      };
-  
-      // Initial Position State Update
-      updatePositionState();
-      const positionUpdateInterval = setInterval(updatePositionState, 1000);
-  
-      // Cleanup Handlers on Unmount
+    useEffect(() => {
+      isMounted.current = true;
       return () => {
-        clearInterval(positionUpdateInterval);
-      
-        const actions: MediaSessionAction[] = [
-          'play',
-          'pause',
-          'previoustrack',
-          'nexttrack',
-          'seekto',
-          'seekforward',
-          'seekbackward',
-        ];
-      
-        actions.forEach((action) => {
-          try {
-            navigator.mediaSession.setActionHandler(action, null);
-          } catch (e) {
-            console.warn(`Failed to clear ${action} handler:`, e);
-          };
-        });
+        isMounted.current = false;
       };
-    } catch (error) {
-      console.error("Media Session API error:", error);
-    }
-  }, [
-    currentTrack,
-    isPlaying,
-    pauseAudio,
-    playTrackFromSource,
-    previousTrackFunc,
-    skipTrack,
-    handleSeek,
-    getCurrentPlaybackTime,
-  ]);
-  
+    }, []);
+
+    useEffect(() => {
+      setOnTrackEndCallback(handleTrackEnd);
+    }, [handleTrackEnd, setOnTrackEndCallback]);
+
+    // Corresponding useEffect in index.tsx:
+    useEffect(() => {
+      if (!audioElement) {
+        console.warn("Audio element is null during setup");
+        return;
+      }
+    
+      const cleanup = setupMediaSession(
+        currentTrack,
+        isPlaying,
+        {
+          getCurrentPlaybackTime: () => audioElement?.currentTime || 0,
+          handleSeek: (time) => {
+            if (audioElement) {
+              audioElement.currentTime = time;
+            }
+          },
+          playTrackFromSource,
+          pauseAudio,
+          previousTrackFunc,
+          skipTrack,
+          setIsPlaying,
+          audioRef: { current: audioElement },
+        }
+      );
+    
+      return () => {
+        cleanup();
+      };
+    }, [
+      currentTrack,
+      isPlaying,
+      pauseAudio,
+      playTrackFromSource,
+      previousTrackFunc,
+      skipTrack,
+      setIsPlaying,
+    ]);
+    
   useEffect(() => {
     if (currentTrack) {
       storeSetting('currentTrack', JSON.stringify(currentTrack));
     }
   }, [currentTrack]);
-  
-  // Manage Audio Context for Visibility Change
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          // Resume the audio context if suspended
-          if (audioContext && audioContext.state === 'suspended') {
-            await audioContext.resume();
-          }
-          
-          // Only resume playback if it was previously playing
-          if (currentTrack && isPlaying && sourceRef.current === null) {
-            console.log('Resuming playback from paused position.');
-            void playTrackFromSource(currentTrack, pausedAtRef.current);
-          }
-        } catch (err) {
-          console.error('Error resuming AudioContext or playback:', err);
-        }
-      } else {
-        // When the tab is hidden, let the browser handle audio suspension.
-        console.log('Tab hidden, letting browser manage AudioContext suspension.');
-      }
-    };
-  
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentTrack, isPlaying, playTrackFromSource, pausedAtRef, sourceRef]);
-  
-  
-  
-  
 
   
-  
-
   // Onboarding
   const startOnboarding = useCallback(() => {
     setShowOnboarding(true);
-    setOnboardingStep(1);
   }, []);
 
   // init
   useEffect(() => {
     async function init() {
-      const vol = await getSetting('volume');
-      if (vol) setVolume(parseFloat(vol));
+      try {
 
-      const sOn = await getSetting('shuffleOn');
-      if (sOn) setShuffleOn(JSON.parse(sOn));
+        const savedRecommendedTracks = await getQueue();
+        if (savedRecommendedTracks && savedRecommendedTracks.length > 0) {
+            setRecommendedTracks(savedRecommendedTracks);
+            setQueue(savedRecommendedTracks);
+        }
 
-      const qual = await getSetting('audioQuality');
-      if (qual) setAudioQuality(qual as 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER');
 
-      const pls = await getAllPlaylists();
-      setPlaylists(pls);
-
-      const rec = await getRecentlyPlayed();
-      setJumpBackIn(rec);
-
-      const onboard = await getSetting('onboardingDone');
-      if (!onboard) setShowOnboarding(true);
-
-      const savedTrack = await getSetting('currentTrack');
-      if (savedTrack) {
-        const track = JSON.parse(savedTrack);
-        setCurrentTrack(track);
-        setIsPlaying(true);
+        // Load settings
+        const [vol, sOn, qual, pls, rec, onboard, savedTrack, savedQueue] = await Promise.all([
+          getSetting('volume'),
+          getSetting('shuffleOn'),
+          getSetting('audioQuality'),
+          getAllPlaylists(),
+          getRecentlyPlayed(),
+          getSetting('onboardingDone'),
+          getSetting('currentTrack'),
+          getQueue(),
+        ]);
+  
+        if (vol) setVolume(parseFloat(vol));
+        if (sOn) setShuffleOn(JSON.parse(sOn));
+        if (qual) setAudioQuality(qual as 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER');
+        if (pls) setPlaylists(pls);
+        if (rec) setJumpBackIn(rec);
+        if (!onboard) setShowOnboarding(true);
+  
+        if (savedTrack) {
+          const track: Track = JSON.parse(savedTrack);
+          setCurrentTrack(track);
+          setIsPlaying(true);
+        }
+  
+        if (savedQueue && savedQueue.length > 0) {
+          setQueue(savedQueue);
+        } else if (savedTrack) {
+          // Initialize queue with currentTrack if queue is empty
+          setQueue([JSON.parse(savedTrack)]);
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
       }
     }
+  
     void init();
-  }, [startOnboarding]);
-
-  useEffect(() => {
-    console.log('showOnboarding:', showOnboarding, 'onboardingStep:', onboardingStep);
-  }, [showOnboarding, onboardingStep]);
+  }, [setIsPlaying, setVolume]);
+  
   
 
   useEffect(() => {
@@ -853,9 +631,9 @@ export function SpotifyClone() {
       // liked?
       const ls = playlists.find((p) => p.name === 'Liked Songs');
       if (ls && ls.tracks.some((t) => t.id === currentTrack.id)) {
-        setIsLiked(true);
+        // setIsLiked(true);
       } else {
-        setIsLiked(false);
+        // setIsLiked(false);
       }
       // recently
       void storeRecentlyPlayed(currentTrack).then((recent) => setJumpBackIn(recent));
@@ -889,6 +667,7 @@ export function SpotifyClone() {
     },
     [playlists]
   );
+  
 
   const sanitizeTrack = (track: Track): Track => {
     return {
@@ -911,7 +690,7 @@ export function SpotifyClone() {
   
   
   const toggleLike = useCallback(
-    (rawTrack = currentTrack) => {
+    (rawTrack: Track) => {
       if (!rawTrack) return;
   
       const track = sanitizeTrack(rawTrack);
@@ -934,7 +713,6 @@ export function SpotifyClone() {
       });
   
       setPlaylists(updatedPlaylists);
-      setIsLiked(!isAlreadyLiked);
   
       console.log("Updated playlists after toggle:", updatedPlaylists);
   
@@ -942,8 +720,26 @@ export function SpotifyClone() {
         console.error('Error storing updated playlists:', err)
       );
     },
-    [currentTrack, playlists]
+    [playlists]
   );
+  
+
+  const toggleLikeDesktop = useCallback(() => {
+    if (currentTrack) {
+      toggleLike(currentTrack);
+    } else {
+      console.warn("No current track to toggle like.");
+    }
+  }, [currentTrack, toggleLike]);
+  
+  // Wrapper for MobilePlayer
+  const toggleLikeMobile = useCallback(() => {
+    if (currentTrack) {
+      toggleLike(currentTrack);
+    } else {
+      console.warn("No current track to toggle like.");
+    }
+  }, [currentTrack, toggleLike]);
   
   
   
@@ -956,26 +752,34 @@ export function SpotifyClone() {
       return [...prev, ...filtered];
     });
   }, []);
+  
   const removeFromQueue = useCallback((idx: number) => {
     setQueue((q) => q.filter((_, i) => i !== idx));
   }, []);
-  const onQueueItemClick = useCallback(
-    (tr: Track, idx: number) => {
-      // negative => previous
-      if (idx < 0) {
-        const absI = Math.abs(idx + 1);
-        setPreviousTracks((p) => p.slice(0, absI));
-      }
-      setCurrentTrack(tr);
-    },
-    []
-  );
+
+
+  const onQueueItemClick = useCallback((track: Track, idx: number) => {
+    if (idx < 0) {
+      // From previousTracks
+      setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
+      setQueue((q) => [track, ...q]);
+    } else {
+      // From queue
+      setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+      setQueue((q) => q.filter((_, i) => i !== idx));
+    }
+    setCurrentTrack(track);
+  }, [currentTrack]);
+  
+
 
   // context menu
   const openAddToPlaylistModal = useCallback((tr: Track) => {
     setContextMenuTrack(tr);
     setShowAddToPlaylistModal(true);
   }, []);
+
+
   const handleContextMenu = useCallback(
     (evt: MouseEvent, item: Track | Playlist) => {
       evt.preventDefault();
@@ -985,35 +789,37 @@ export function SpotifyClone() {
         options = [
           { label: 'Add to Queue', action: () => addToQueue(item) },
           { label: 'Add to Playlist', action: () => openAddToPlaylistModal(item) },
-          { label: 'Add to Liked Songs', action: () => toggleLike(item) }
+          { 
+            label: isTrackLiked(item) ? 'Remove from Liked Songs' : 'Add to Liked Songs', 
+            action: () => toggleLike(item) 
+          }
         ];
-      } else {
-        // playlist
+      } if ('tracks' in item) { // Playlist-specific options
         options = [
           {
-            label: 'Pin Playlist',
+            label: item.pinned ? 'Unpin Playlist' : 'Pin Playlist',
             action: () => {
-              const up = playlists.map((pl) => {
-                if (pl.name === item.name) return { ...pl, pinned: !pl.pinned };
-                return pl;
-              });
-              setPlaylists(up);
-              void Promise.all(up.map((p) => storePlaylist(p)));
-            }
+              const updatedPlaylists = playlists.map((pl) =>
+                pl.name === item.name ? { ...pl, pinned: !pl.pinned } : pl
+              );
+              setPlaylists(updatedPlaylists);
+              void Promise.all(updatedPlaylists.map((pl) => storePlaylist(pl)));
+            },
           },
           {
             label: 'Delete Playlist',
             action: () => {
               void deletePlaylistByName(item.name).then((nl) => setPlaylists(nl));
-            }
-          }
+            },
+          },
         ];
-      }
+    }
+    
       setContextMenuOptions(options);
       setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
       setShowContextMenu(true);
     },
-    [addToQueue, openAddToPlaylistModal, toggleLike, playlists]
+    [isTrackLiked, addToQueue, openAddToPlaylistModal, toggleLike, playlists]
   );
 
   const addToPlaylist = useCallback(
@@ -1030,12 +836,14 @@ export function SpotifyClone() {
     },
     [playlists]
   );
+
   const handleAddToPlaylist = useCallback(() => {
     if (!selectedPlaylistForAdd || !contextMenuTrack) return;
     void addToPlaylist(contextMenuTrack, selectedPlaylistForAdd);
     setShowAddToPlaylistModal(false);
     setSelectedPlaylistForAdd(null);
   }, [selectedPlaylistForAdd, contextMenuTrack, addToPlaylist]);
+  
 
   const loadImage = useCallback((src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
@@ -1045,7 +853,7 @@ export function SpotifyClone() {
       img.onerror = reject;
       img.src = src;
     });
-}, []); // Empty dependencies array since this function doesn't depend on any props or state
+  }, []); // Empty dependencies array since this function doesn't depend on any props or state
 
   const createCompositeImage = useCallback(async (urls: string[]): Promise<string> => {
     const canvas = document.createElement('canvas');
@@ -1063,7 +871,7 @@ export function SpotifyClone() {
       ctx.drawImage(img, x, y, size, size);
     }
     return canvas.toDataURL('image/png');
-}, [loadImage]);
+  }, [loadImage]);
   
 
   // new playlist
@@ -1157,23 +965,13 @@ export function SpotifyClone() {
     void storeSetting('onboardingDone', 'true');
     setShowOnboarding(false);
     setShowArtistSelection(false);
-    setOnboardingStep(0);
     setView('home');
-  }, []);
-
-  const handleStep1Complete = useCallback(() => {
-    setOnboardingStep(2);
   }, []);
 
   // Example: fetch from top artists -> recommended queue
   const handleArtistSelectionComplete = useCallback(
     async (artists: Artist[]) => {
       try {
-        if (sourceRef.current) {
-          sourceRef.current.stop();
-          sourceRef.current.disconnect();
-          sourceRef.current = null;
-        }
         await storeSetting('favoriteArtists', JSON.stringify(artists));
         setShowArtistSelection(false);
 
@@ -1190,6 +988,9 @@ export function SpotifyClone() {
 
         setQueue(shuffled);
         setSearchResults(shuffled);
+        setRecommendedTracks(shuffled);
+        await storeQueue(shuffled);
+
 
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
@@ -1198,7 +999,6 @@ export function SpotifyClone() {
         const r4 = shuffled.slice(0, 4);
         setJumpBackIn(r4);
 
-        // ensure liked songs
         if (!playlists.some((p) => p.name === 'Liked Songs')) {
           const newPL = {
             name: 'Liked Songs',
@@ -1216,271 +1016,65 @@ export function SpotifyClone() {
         console.log('Artist selection error:', err);
       }
     },
-    [playlists, handleOnboardingComplete]
+    [playlists, handleOnboardingComplete, setIsPlaying]
   );
-  // COMPONENTS
-  function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-bl from-[#1e1e2f] via-[#282843] to-[#0d0d14] text-white">
-        <div className="relative text-center p-8 bg-gradient-to-br from-black/50 to-black/70 backdrop-blur-xl rounded-3xl shadow-2xl max-w-lg">
-          <div className="flex justify-center mb-8">
-            <div className="bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 rounded-full p-4 shadow-md">
-              <Music className="w-12 h-12 text-white" />
-            </div>
-          </div>
-          <h1 className="text-5xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-500 to-blue-400">
-            Welcome to Octave
-          </h1>
-          <p className="text-lg text-gray-300 mb-8 leading-relaxed">
-            Your gateway to a world of music tailored just for you. Let’s craft your ultimate
-            soundtrack together.
-          </p>
-          <button
-            onClick={onComplete}
-            className="px-10 py-4 text-lg font-bold bg-gradient-to-r from-pink-500 to-purple-500 hover:from-purple-500 hover:to-pink-500 text-white rounded-full shadow-xl transform transition-transform hover:translate-y-[-2px]"
-          >
-            Get Started
-          </button>
-          <div className="mt-10 flex items-center justify-center space-x-2">
-            <div className="h-[2px] w-10 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
-            <p className="text-sm text-gray-400">A personalized music experience awaits</p>
-            <div className="h-[2px] w-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  function ArtistSelection({
-    onComplete
-  }: {
-    onComplete: (selectedArtists: Artist[]) => void;
-  }) {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [artistSearchResults, setArtistSearchResults] = useState<Artist[]>([]);
-    const [selectedArtists, setSelectedArtists] = useState<Artist[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  useEffect(() => {
+    if (previousTracks.length > 0) {
+      void storeSetting('previousTracks', JSON.stringify(previousTracks)).catch((err) =>
+        console.error('Failed to store previous tracks:', err)
+      );
+    }
+  }, [previousTracks]);
   
-    const debouncedFetch = useCallback(
-      async (val: string) => {
-        if (!val || val.length < 2) {
-          setArtistSearchResults([]);
-          return;
+  useEffect(() => {
+    async function loadPreviousTracks() {
+      try {
+        const savedPrevious = await getSetting('previousTracks');
+        if (savedPrevious) {
+          setPreviousTracks(JSON.parse(savedPrevious));
         }
-        setIsLoading(true);
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(val)}`);
-          const data = await response.json();
-          if (data.results) {
-            const filtered = data.results.filter(
-              (a: Artist) => !selectedArtists.some((sa) => sa.id === a.id)
-            );
-            setArtistSearchResults(filtered);
-          }
-        } catch (error) {
-          console.error('Artist search error:', error);
-          setArtistSearchResults([]);
-        } finally {
-          setIsLoading(false);
-        }
-      },
-      [selectedArtists, setArtistSearchResults, setIsLoading]
-    );
-    
-    const fetchArtistSearchResults = useMemo(
-      () => debounce(debouncedFetch, 300),
-      [debouncedFetch]
-    );
-
-
-    const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      console.log('Artist Input:', val); // Debug
-      setSearchTerm(val);
-      fetchArtistSearchResults(val);
-    };
+      } catch (error) {
+        console.error('Failed to load previous tracks:', error);
+      }
+    }
+    void loadPreviousTracks();
+  }, []);
   
-    const handleArtistSelect = (artist: Artist) => {
-      if (selectedArtists.length >= 5) return;
-      setSelectedArtists((prev) => [...prev, artist]);
-      setArtistSearchResults((prev) => prev.filter((a) => a.id !== artist.id));
-      setSearchTerm('');
-    };
   
-    const handleArtistUnselect = (artist: Artist) => {
-      setSelectedArtists((prev) => prev.filter((a) => a.id !== artist.id));
-    };
-  
-    useEffect(() => {
-      return () => {
-        fetchArtistSearchResults.cancel();
-      };
-    }, [fetchArtistSearchResults]);
-  
-    return (
-      <div className="min-h-screen overflow-y-auto custom-scrollbar bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-          <div className="text-center space-y-6 mb-16">
-            <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300">
-              Pick Your Vibe
-            </h1>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-              Select up to 5 artists you love and we&apos;ll create your perfect musical atmosphere
-            </p>
-          </div>
-          <div className="max-w-3xl mx-auto mb-12">
-            <div
-              className={`relative transform transition-all duration-200 ${
-                isSearchFocused ? 'scale-105' : 'scale-100'
-              }`}
-            >
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search for your favorite artists..."
-                  value={searchTerm}
-                  onChange={handleSearchInput}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
-                  className="w-full px-6 py-4 text-lg bg-white/10 backdrop-blur-xl border border-white/20 
-                    rounded-2xl text-white placeholder-gray-400 outline-none focus:ring-2 
-                    focus:ring-purple-500/50 transition-all duration-300"
-                  style={{ caretColor: 'white' }}
-                />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {isLoading ? (
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-500 border-t-transparent" />
-                  ) : (
-                    <Search className="h-6 w-6 text-gray-400" />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          {selectedArtists.length > 0 && (
-            <div className="max-w-5xl mx-auto mb-12">
-              <h2 className="text-2xl font-bold text-white mb-6">Selected Artists</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                {selectedArtists.map((artist) => (
-                  <div
-                    key={artist.id}
-                    className="group relative aspect-square rounded-2xl overflow-hidden 
-                      transform transition-all duration-300 hover:scale-95"
-                    onClick={() => handleArtistUnselect(artist)}
-                  >
-                    <img
-                      src={artist.picture_medium || '/images/placeholder-image.png'}
-                      alt={artist.name || "Artist"}
-                      className="w-full h-full object-cover"
-                    />
-                    <div
-                      className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent 
-                      opacity-0 group-hover:opacity-100 transition-opacity duration-300 
-                      flex flex-col justify-end p-4"
-                    >
-                      <p className="text-white font-semibold">{artist.name}</p>
-                      <p className="text-red-400 text-sm">Click to remove</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {artistSearchResults.length > 0 && (
-            <div className="max-w-5xl mx-auto pb-20">
-              <h2 className="text-2xl font-bold text-white mb-6">Search Results</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                {artistSearchResults.map((artist) => (
-                  <div
-                    key={artist.id}
-                    className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer 
-                      transform transition-all duration-300 hover:scale-105"
-                    onClick={() => handleArtistSelect(artist)}
-                  >
-                    <img
-                      src={artist.picture_medium || '/images/placeholder-image.png'}
-                      alt={artist.name || "Artist"}
-                      className="w-full h-full object-cover"
-                    />
-                    <div
-                      className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent 
-                      opacity-0 group-hover:opacity-100 transition-opacity duration-300 
-                      flex flex-col justify-end p-4"
-                    >
-                      <p className="text-white font-semibold">{artist.name}</p>
-                      <p className="text-green-400 text-sm">Click to select</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="fixed bottom-0 inset-x-0 bg-black/80 backdrop-blur-xl border-t border-white/10">
-            <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
-              <p className="text-white">
-                <span className="text-2xl font-bold text-purple-400">{selectedArtists.length}</span>
-                <span className="ml-2 text-gray-400">of 5 artists selected</span>
-              </p>
-              <button
-                onClick={() => onComplete(selectedArtists)}
-                disabled={selectedArtists.length === 0}
-                className={`px-8 py-3 rounded-xl font-medium transition-all duration-300 ${
-                  selectedArtists.length === 0
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-pink-600 hover:to-purple-600 text-white transform hover:scale-105'
-                }`}
-              >
-                {selectedArtists.length === 0 ? 'Select Artists to Continue' : 'Complete Selection'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  if (showOnboarding && onboardingStep === 0) {
-    setOnboardingStep(1); // Default to the first step
-  }
   
   useEffect(() => {
     async function loadQueue() {
-      try {
-        const savedQueue = await getQueue(); // Fetch the saved queue
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue); // Update the state with the loaded queue
+        try {
+            const savedQueue = await getQueue();
+            if (savedQueue && savedQueue.length > 0) {
+                setQueue(savedQueue);
+                setRecommendedTracks(savedQueue); // Set recommended tracks from saved queue
+            }
+        } catch (error) {
+            console.error('Failed to load queue from IndexedDB:', error);
         }
-      } catch (error) {
-        console.error('Failed to load queue from IndexedDB:', error);
-      }
     }
-    void loadQueue(); // Trigger the function
-  }, []); // Empty dependency array ensures this runs only once on mount
-  
+    void loadQueue();
+}, []);
+
 
   // RENDER
   if (showOnboarding) {
     return (
       <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
-        {onboardingStep === 1 && <OnboardingStep1 onComplete={handleStep1Complete} />}
-        {onboardingStep === 2 && <ArtistSelection onComplete={handleArtistSelectionComplete} />}
-        {onboardingStep !== 1 && onboardingStep !== 2 && (
-          <p className="text-center text-white">Invalid onboarding step</p>
-        )}
+        <Onboarding
+          onComplete={handleOnboardingComplete}
+          onArtistSelectionComplete={handleArtistSelectionComplete}
+          API_BASE_URL={API_BASE_URL}
+          setRecommendedTracks={setRecommendedTracks}
+        />
       </div>
     );
   }
-  
   
 
-  if (showArtistSelection) {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black">
-        <ArtistSelection onComplete={handleArtistSelectionComplete} />
-      </div>
-    );
-  }
 
   function handleSearch(newQ: string) {
     // Only store in "recentSearches" after they've typed a full word or pressed enter
@@ -1672,6 +1266,7 @@ export function SpotifyClone() {
                       openAddToPlaylistModal={openAddToPlaylistModal} 
                       toggleLike={toggleLike} 
                       isLiked={isTrackLiked(track)} 
+                      onContextMenu={(e) => handleContextMenu(e, track)}
                     />
                   ))
                   
@@ -1696,6 +1291,7 @@ export function SpotifyClone() {
                       openAddToPlaylistModal={openAddToPlaylistModal} 
                       toggleLike={toggleLike} 
                       isLiked={isTrackLiked(t)} 
+                      onContextMenu={(e) => handleContextMenu(e, t)} // Attach handler
                     />
                   ))
                 ) : (
@@ -1712,113 +1308,125 @@ export function SpotifyClone() {
                 </button>
               </div>
               <div className={cn(
-  "grid gap-4",
-  sidebarCollapsed ? "grid-cols-1" : "grid-cols-1"
-)}>
-  {playlists.map((playlist) => (
-    <div
-      key={playlist.name}
-      className={cn(
-        "bg-gray-800 bg-opacity-40 rounded-lg flex items-center cursor-pointer relative",
-        sidebarCollapsed ? "p-2 justify-center" : "p-4",
-        playlist.pinned && "border-2 border-blue-900"
-      )}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/plain', playlist.name);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const name = e.dataTransfer.getData('text/plain');
-        const di = playlists.findIndex((p) => p.name === name);
-        const ti = playlists.findIndex((p) => p.name === playlist.name);
-        const up = [...playlists];
-        const [dragPL] = up.splice(di, 1);
-        up.splice(ti, 0, dragPL);
-        setPlaylists(up);
-        void Promise.all(up.map((pl) => storePlaylist(pl)));
-      }}
-      onClick={() => openPlaylist(playlist)}
-      style={{ userSelect: 'none' }}
-    >
-      <img 
-        src={playlist.image || 'assets/'} 
-        alt={playlist.name || 'Playlist Cover'} 
-        className={cn(
-          "rounded",
-          sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
-        )} 
-      />
-      {!sidebarCollapsed && (
-        <>
-          <span className="font-medium text-sm flex-1">{playlist.name}</span>
-          {playlist.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
-          <button
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const opts: ContextMenuOption[] = [
-                {
-                  label: 'Pin Playlist',
-                  action: () => {
-                    const u2 = playlists.map((pl) =>
-                      pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
-                    );
-                    setPlaylists(u2);
-                    void Promise.all(u2.map((p) => storePlaylist(p)));
-                  }
-                },
-                {
-                  label: 'Delete Playlist',
-                  action: () => {
-                    void deletePlaylistByName(playlist.name).then((nl) => setPlaylists(nl));
-                  }
-                },
-                {
-                  label: 'Download Playlist',
-                  action: () => downloadPlaylist(playlist)
-                }
-              ];
-              setContextMenuPosition({ x: e.clientX, y: e.clientY });
-              setContextMenuOptions(opts);
-              setShowContextMenu(true);
-            }}
-          >
-            <span className="w-4 h-4 text-white">•••</span>
-          </button>
-        </>
-      )}
-    </div>
-  ))}
-</div>
+                "grid gap-4",
+                sidebarCollapsed ? "grid-cols-1" : "grid-cols-1"
+              )}>
+                {playlists.map((playlist) => (
+                  <div
+                    key={playlist.name}
+                    className={cn(
+                      "bg-gray-800 bg-opacity-40 rounded-lg flex items-center cursor-pointer relative",
+                      sidebarCollapsed ? "p-2 justify-center" : "p-4",
+                      playlist.pinned && "border-2 border-blue-900"
+                    )}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', playlist.name);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const name = e.dataTransfer.getData('text/plain');
+                      const di = playlists.findIndex((p) => p.name === name);
+                      const ti = playlists.findIndex((p) => p.name === playlist.name);
+                      const up = [...playlists];
+                      const [dragPL] = up.splice(di, 1);
+                      up.splice(ti, 0, dragPL);
+                      setPlaylists(up);
+                      void Promise.all(up.map((pl) => storePlaylist(pl)));
+                    }}
+                    onClick={() => openPlaylist(playlist)}
+                    onContextMenu={(e) => handleContextMenu(e, playlist)} // Attach handler here
+                    style={{ userSelect: 'none' }}
+                  >
+                    <img 
+                      src={playlist.image || 'assets/'} 
+                      alt={playlist.name || 'Playlist Cover'} 
+                      className={cn(
+                        "rounded",
+                        sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
+                      )} 
+                    />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="font-medium text-sm flex-1">{playlist.name}</span>
+                        {playlist.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
+                        <button
+                          className="absolute top-2 right-2 p-1 rounded-full hover:bg-white/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const opts: ContextMenuOption[] = [
+                              {
+                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist', // Dynamic label
+                                action: () => {
+                                  const updatedPlaylists = playlists.map((pl) =>
+                                    pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
+                                  );
+                                  setPlaylists(updatedPlaylists);
+                                  void Promise.all(updatedPlaylists.map((pl) => storePlaylist(pl)));
+                                },
+                              },
+                              {
+                                label: 'Delete Playlist',
+                                action: () => {
+                                  void deletePlaylistByName(playlist.name).then((nl) => setPlaylists(nl));
+                                }
+                              },
+                              {
+                                label: 'Download Playlist',
+                                action: () => downloadPlaylist(playlist)
+                              }
+                            ];
+                            setContextMenuPosition({ x: e.clientX, y: e.clientY });
+                            setContextMenuOptions(opts);
+                            setShowContextMenu(true);
+                          }}
+                        >
+                          <span className="w-4 h-4 text-white"><MoreVertical /></span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
             </section>
           ) : (
             <>
               {/* HOME */}
               <section className="mb-6">
                 <div className="grid grid-cols-2 gap-2">
-                  {playlists.map((pl) => (
-                    <div
-                      key={pl.name}
-                      className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
-                    >
-                      <img src={pl.image || 'assets/'} alt={pl.name || 'Playlist Cover'} className="w-10 h-10 rounded-md" />
-                      <span className="font-medium text-sm">{pl.name}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void deletePlaylistByName(pl.name).then((nl) => setPlaylists(nl));
-                        }}
-                        className="ml-auto p-1 text-red-400 hover:text-red-500"
+                  {playlists
+                    .filter((pl) => pl.pinned) // Only show pinned playlists
+                    .map((pl) => (
+                      <div
+                        key={pl.name}
+                        className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
                       >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                        <img
+                          src={pl.image || 'assets/'}
+                          alt={pl.name || 'Playlist Cover'}
+                          className="w-10 h-10 rounded-md"
+                        />
+                        <span className="font-medium text-sm">{pl.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updatedPlaylists = playlists.map((playlist) =>
+                              playlist.name === pl.name ? { ...playlist, pinned: false } : playlist
+                            );
+                            setPlaylists(updatedPlaylists);
+                            void Promise.all(updatedPlaylists.map((playlist) => storePlaylist(playlist)));
+                          }}
+                          className="ml-auto p-1 text-red-400 hover:text-red-500"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </section>
+
               <section className="mb-6">
                 {jumpBackIn.length > 0 && <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>}
                 {jumpBackIn.length > 0 ? (
@@ -1879,26 +1487,29 @@ export function SpotifyClone() {
                   </div>
                 )}
               </section>
-              <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
-              <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
-              <div className="grid grid-cols-1 gap-4">
-              {searchResults.map((track, idx) => (
-                <TrackItem
-                  key={track.id}
-                  track={track}
-                  index={idx}
-                  onTrackClick={playTrack}
-                  addToQueue={addToQueue}
-                  openAddToPlaylistModal={(t) => {
-                    setContextMenuTrack(t);
-                    setShowAddToPlaylistModal(true);
-                  }}
-                  toggleLike={toggleLike}
-                  isLiked={isTrackLiked(track)}
-                />
-              ))}
-              </div>
-            </section>
+              <section className="flex-1 overflow-y-auto custom-scrollbar pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
+                <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recommendedTracks.length > 0 ? (
+                    recommendedTracks.map((track, idx) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        index={idx}
+                        onTrackClick={playTrack}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={openAddToPlaylistModal}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No recommendations available.</p>
+                  )}
+                </div>
+              </section>
+
 
             </>
           )}
@@ -2059,6 +1670,7 @@ export function SpotifyClone() {
                               setIsSearchOpen(false);
                               setView('home');
                             }}
+                            onContextMenu={(e) => handleContextMenu(e, res)} // Attach handler
                           />
                         ))}
                         </div>
@@ -2093,10 +1705,10 @@ export function SpotifyClone() {
             duration={duration}
             listenCount={listenCount}
             handleSeek={handleSeek}
-            isLiked={isLiked}
+            isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
             repeatMode={repeatMode}
             setRepeatMode={setRepeatMode}
-            toggleLike={toggleLike}
+            toggleLike={toggleLikeMobile}
             lyrics={lyrics}
             currentLyricIndex={currentLyricIndex}
             queue={queue}
@@ -2111,6 +1723,36 @@ export function SpotifyClone() {
         )}
       </div>
 
+      {showContextMenu && contextMenuOptions && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20"
+          onClick={() => setShowContextMenu(false)}
+        >
+          <div
+            className="absolute bg-gray-800 text-white rounded-md shadow-2xl z-50 min-w-[180px] border border-gray-700"
+            style={{
+              top: Math.min(contextMenuPosition.y, window.innerHeight - 150) + 'px',
+              left: Math.min(contextMenuPosition.x, window.innerWidth - 200) + 'px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenuOptions.map((option, index) => (
+              <button
+                key={index}
+                className="block w-full px-4 py-2 text-sm text-left transition-colors duration-200 hover:bg-gray-700 focus:outline-none focus:bg-gray-600"
+                onClick={() => {
+                  option.action();
+                  setShowContextMenu(false);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+
       {/* DESKTOP LAYOUT */}
       <div className="hidden md:flex flex-1 gap-2 p-2 overflow-y-auto custom-scrollbar">
         {showContextMenu && (
@@ -2121,106 +1763,107 @@ export function SpotifyClone() {
             options={contextMenuOptions}
           />
         )}
+
         {/* Collapsible sidebar if wanted: an example toggle or just show it */}
         <aside
-  className={cn(
-    'bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar transition-all duration-300',
-    sidebarCollapsed ? 'w-20' : 'w-64'
-  )}
->
-  <button 
-    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-    className="p-2 rounded-full hover:bg-white/10 transition-colors duration-200"
-  >
-    {sidebarCollapsed ? (
-      <ChevronRight className="w-5 h-5 text-white" />
-    ) : (
-      <ChevronLeft className="w-5 h-5 text-white" />
-    )}
-  </button>
-  <nav className="space-y-4">
-    <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3 space-y-2">
-      <button
-        className={cn(
-          "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-          sidebarCollapsed && "justify-center"
-        )}
-        onClick={() => setView('home')}
-      >
-        <Home className="w-6 h-6" />
-        {!sidebarCollapsed && <span className="ml-3">Home</span>}
-      </button>
-      <button
-        className={cn(
-          "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-          sidebarCollapsed && "justify-center"
-        )}
-        onClick={() => setView('search')}
-      >
-        <Search className="w-6 h-6" />
-        {!sidebarCollapsed && <span className="ml-3">Search</span>}
-      </button>
-    </div>
-    <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3">
-      <div className={cn(
-        "flex items-center mb-2 text-white",
-        sidebarCollapsed ? "justify-center" : "justify-between"
-      )}>
-        <Library className="w-6 h-6" />
-        {!sidebarCollapsed && (
-          <>
-            <span className="ml-3">Your Library</span>
-            <button
-              className="p-2 rounded-full hover:bg-white/10"
-              onClick={() => setShowCreatePlaylist(true)}
-            >
-              <Plus className="w-5 h-5 text-white" />
-            </button>
-          </>
-        )}
-      </div>
-      <div className="space-y-2">
-        {playlists.map((pl) => (
-          <div
-            key={pl.name}
-            className={cn(
-              'flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200',
-              pl.pinned && 'border-2 border-blue-900',
-              sidebarCollapsed && "justify-center"
-            )}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', pl.name);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const name = e.dataTransfer.getData('text/plain');
-              const di = playlists.findIndex((p) => p.name === name);
-              const ti = playlists.findIndex((p) => p.name === pl.name);
-              const up = [...playlists];
-              const [dragPL] = up.splice(di, 1);
-              up.splice(ti, 0, dragPL);
-              setPlaylists(up);
-              void Promise.all(up.map((xx) => storePlaylist(xx)));
-            }}
-            onClick={() => openPlaylist(pl)}
-            style={{ userSelect: 'none' }}
+          className={cn(
+            'bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar transition-all duration-300',
+            sidebarCollapsed ? 'w-20' : 'w-64'
+          )}
+        >
+          <button 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors duration-200"
           >
-            <img src={pl.image || "placeholder"} alt={pl.name || 'Playlist'} className="w-10 h-10 rounded-md" />
-            {!sidebarCollapsed && (
-              <>
-                <span className="font-medium text-sm">{pl.name}</span>
-                {pl.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
-              </>
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-5 h-5 text-white" />
+            ) : (
+              <ChevronLeft className="w-5 h-5 text-white" />
             )}
-          </div>
-        ))}
-      </div>
-    </div>
-  </nav>
-</aside>
+          </button>
+          <nav className="space-y-4">
+            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3 space-y-2">
+              <button
+                className={cn(
+                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
+                  sidebarCollapsed && "justify-center"
+                )}
+                onClick={() => setView('home')}
+              >
+                <Home className="w-6 h-6" />
+                {!sidebarCollapsed && <span className="ml-3">Home</span>}
+              </button>
+              <button
+                className={cn(
+                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
+                  sidebarCollapsed && "justify-center"
+                )}
+                onClick={() => setView('search')}
+              >
+                <Search className="w-6 h-6" />
+                {!sidebarCollapsed && <span className="ml-3">Search</span>}
+              </button>
+            </div>
+            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3">
+              <div className={cn(
+                "flex items-center mb-2 text-white",
+                sidebarCollapsed ? "justify-center" : "justify-between"
+              )}>
+                <Library className="w-6 h-6" />
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="ml-3">Your Library</span>
+                    <button
+                      className="p-2 rounded-full hover:bg-white/10"
+                      onClick={() => setShowCreatePlaylist(true)}
+                    >
+                      <Plus className="w-5 h-5 text-white" />
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="space-y-2">
+                {playlists.map((pl) => (
+                  <div
+                    key={pl.name}
+                    className={cn(
+                      'flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200',
+                      pl.pinned && 'border-2 border-blue-900',
+                      sidebarCollapsed && "justify-center"
+                    )}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', pl.name);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const name = e.dataTransfer.getData('text/plain');
+                      const di = playlists.findIndex((p) => p.name === name);
+                      const ti = playlists.findIndex((p) => p.name === pl.name);
+                      const up = [...playlists];
+                      const [dragPL] = up.splice(di, 1);
+                      up.splice(ti, 0, dragPL);
+                      setPlaylists(up);
+                      void Promise.all(up.map((xx) => storePlaylist(xx)));
+                    }}
+                    onClick={() => openPlaylist(pl)}
+                    style={{ userSelect: 'none' }}
+                  >
+                    <img src={pl.image || "placeholder"} alt={pl.name || 'Playlist'} className="w-10 h-10 rounded-md" />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="font-medium text-sm">{pl.name}</span>
+                        {pl.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </nav>
+        </aside>
 
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-gradient-to-b from-gray-900 to-black rounded-lg p-6">
           <header className="flex justify-between items-center mb-8">
@@ -2434,6 +2077,7 @@ export function SpotifyClone() {
                   openAddToPlaylistModal={openAddToPlaylistModal} 
                   toggleLike={toggleLike} 
                   isLiked={isTrackLiked(track)} 
+                  onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
                 />
               ))}
 
@@ -2563,12 +2207,10 @@ export function SpotifyClone() {
                             index={idx}
                             onTrackClick={playTrack}
                             addToQueue={addToQueue}
-                            openAddToPlaylistModal={(t) => {
-                              setContextMenuTrack(t);
-                              setShowAddToPlaylistModal(true);
-                            }}
+                            openAddToPlaylistModal={openAddToPlaylistModal} 
                             toggleLike={toggleLike}
                             isLiked={isTrackLiked(r)}
+                            onContextMenu={(e) => handleContextMenu(e, r)} // Attach handler
                           />
                         ))}
 
@@ -2623,101 +2265,186 @@ export function SpotifyClone() {
                   ))}
                 </div>
               </section>
-              <section className='flex-1 overflow-y-auto custom-scrollbar pb-32'>
-              <h2 className="text-2xl font-bold mb-4">Recommended</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {searchResults.map((r, idx) => (
-                  <TrackItem
-                  key={r.id}
-                  track={r}
-                  index={idx}
-                  onTrackClick={playTrack}
-                  addToQueue={addToQueue}
-                  openAddToPlaylistModal={(t) => {
-                    setContextMenuTrack(t);
-                    setShowAddToPlaylistModal(true);
-                  }}
-                  toggleLike={toggleLike}
-                  isLiked={isTrackLiked(r)}
-                />
-                ))}
-              </div>
+              <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
+                <h2 className="text-2xl font-bold mb-4">Recommended</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {recommendedTracks.length > 0 ? (
+                        recommendedTracks.map((track, idx) => (
+                            <TrackItem
+                                key={track.id}
+                                track={track}
+                                index={idx}
+                                onTrackClick={playTrack}
+                                addToQueue={addToQueue}
+                                openAddToPlaylistModal={openAddToPlaylistModal} 
+                                toggleLike={toggleLike}
+                                isLiked={isTrackLiked(track)}
+                                onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                            />
+                        ))
+                    ) : (
+                        <p className="text-gray-400">No recommendations available.</p>
+                    )}
+                </div>
             </section>
             </>
           )}
         </main>
 
         {/* showQueue aside if wanted */}
-        {showQueue && (
-          <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
-            <h2 className="text-xl font-bold mb-4">Queue</h2>
-            {queue.length === 0 ? (
-              <div>
-                <p className="text-gray-400 mb-4">Your queue is empty.</p>
-                <button
-                  className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
-                  onClick={() => {}}
-                >
-                  Add Suggestions
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {queue.map((t, idx) => (
-                  <TrackItem 
-                    key={idx} 
-                    track={t} 
-                    index={idx}
-                    showArtist={false}
-                    onTrackClick={onQueueItemClick}
-                    addToQueue={addToQueue} 
-                    openAddToPlaylistModal={openAddToPlaylistModal} 
-                    toggleLike={toggleLike} 
-                    isLiked={isTrackLiked(t)} 
-                  />
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
+          {showQueue && (
+            <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
+              <h2 className="text-xl font-bold mb-4">Queue</h2>
+              {queue.length === 0 && previousTracks.length === 0 ? (
+                <div>
+                  <p className="text-gray-400 mb-4">Your queue is empty.</p>
+                  <button
+                    className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
+                    onClick={() => {
+                      // Implement Add Suggestions or relevant functionality
+                    }}
+                  >
+                    Add Suggestions
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {previousTracks.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 text-gray-300">Previous Tracks</h3>
+                      {previousTracks.map((track, idx) => (
+                        <TrackItem
+                          key={`prev-${track.id}`} // Unique key
+                          track={track}
+                          index={idx}
+                          isPrevious={true}
+                          onTrackClick={onQueueItemClick}
+                          addToQueue={addToQueue}
+                          openAddToPlaylistModal={openAddToPlaylistModal}
+                          toggleLike={toggleLike}
+                          isLiked={isTrackLiked(track)}
+                          onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {queue.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 text-gray-300">Up Next</h3>
+                      {queue.map((track, idx) => (
+                        <TrackItem
+                          key={`queue-${track.id}`} // Unique key
+                          track={track}
+                          index={idx}
+                          isPrevious={false}
+                          onTrackClick={onQueueItemClick}
+                          addToQueue={addToQueue}
+                          openAddToPlaylistModal={openAddToPlaylistModal}
+                          toggleLike={toggleLike}
+                          isLiked={isTrackLiked(track)}
+                          onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </aside>
+          )}
+
       </div>
 
-      {mounted && currentTrack && (
-        <footer className="hidden md:block">
-          <DesktopPlayer
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            previousTracks={previousTracks}
-            setQueue={setQueue}
-            togglePlay={togglePlay}
-            skipTrack={skipTrack}
-            previousTrack={previousTrackFunc}
-            seekPosition={seekPosition}
-            duration={duration}
-            handleSeek={handleSeek}
-            isLiked={isLiked}
-            repeatMode={repeatMode}
-            setRepeatMode={setRepeatMode}
-            toggleLike={toggleLike}
-            lyrics={lyrics}
-            currentLyricIndex={currentLyricIndex}
-            showLyrics={showLyrics}
-            toggleLyricsView={toggleLyricsView}
-            shuffleOn={shuffleOn}
-            shuffleQueue={shuffleQueue}
-            queue={queue}
-            currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-            removeFromQueue={removeFromQueue}
-            onQueueItemClick={onQueueItemClick}
-            setIsPlayerOpen={setIsPlayerOpen}
-            volume={volume}
-            onVolumeChange={onVolumeChange}
-            audioQuality={audioQuality}
-            onCycleAudioQuality={onCycleAudioQuality}
-            listenCount={listenCount}
-          />
-        </footer>
+      {mounted && (
+        currentTrack ? (
+          <footer className="fixed bottom-0 left-0 right-0">
+            <DesktopPlayer
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              previousTracks={previousTracks}
+              setQueue={setQueue}
+              togglePlay={togglePlay}
+              skipTrack={skipTrack}
+              previousTrack={previousTrackFunc}
+              seekPosition={seekPosition}
+              duration={duration}
+              handleSeek={handleSeek}
+              isLiked={isTrackLiked(currentTrack)}
+              repeatMode={repeatMode}
+              setRepeatMode={setRepeatMode}
+              toggleLike={toggleLikeDesktop}
+              lyrics={lyrics}
+              currentLyricIndex={currentLyricIndex}
+              showLyrics={showLyrics}
+              toggleLyricsView={toggleLyricsView}
+              shuffleOn={shuffleOn}
+              shuffleQueue={shuffleQueue}
+              queue={queue}
+              currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+              removeFromQueue={removeFromQueue}
+              onQueueItemClick={onQueueItemClick}
+              setIsPlayerOpen={setIsPlayerOpen}
+              volume={volume}
+              onVolumeChange={onVolumeChange}
+              audioQuality={audioQuality}
+              onCycleAudioQuality={onCycleAudioQuality}
+              listenCount={listenCount}
+            />
+          </footer>
+        ) : (
+          <footer className="fixed bottom-0 left-0 right-0">
+            {/* Optional: Placeholder or message when no track is playing */}
+            <div className="bg-gray-800 text-white p-4 text-center">
+              No track is currently playing.
+            </div>
+          </footer>
+        )
       )}
+
+        {showAddToPlaylistModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+            <div className="bg-gray-900 rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-4">Add to Playlist</h2>
+              <select
+                value={selectedPlaylistForAdd || ''}
+                onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
+                className="w-full p-2 mb-4 rounded bg-gray-800 text-white"
+              >
+                <option value="" disabled>Select a playlist</option>
+                {playlists.map((pl) => (
+                  <option key={pl.name} value={pl.name}>{pl.name}</option>
+                ))}
+              </select>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowAddToPlaylistModal(false)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddToPlaylist}
+                  className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-green-300"
+                  disabled={!selectedPlaylistForAdd}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirmation && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/70">
+            <div className="bg-gray-800 rounded-lg p-6">
+              <p className="text-white">Are you sure you want to delete the playlist "{selectedPlaylist?.name}"?</p>
+              <div className="flex justify-end mt-4">
+                <button className="text-gray-400 mr-4" onClick={() => setShowDeleteConfirmation(false)}>Cancel</button>
+                <button className="text-red-500" onClick={deleteConfirmedPlaylist}>Yes, Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
 
       {/* Create Playlist Modal */}
       {showCreatePlaylist && (
@@ -2833,7 +2560,9 @@ export function SpotifyClone() {
                 track={t} 
                 index={idx}
                 inPlaylistCreation={true} 
+                openAddToPlaylistModal={openAddToPlaylistModal} 
                 onTrackClick={toggleTrackSelection} 
+                onContextMenu={(e) => handleContextMenu(e, t)} // Attach handler
               />
             ))}
             </div>
@@ -2867,7 +2596,7 @@ export function SpotifyClone() {
 }
 
 // Context Menu
-async function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
+function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
   return (
     <div
       className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-[999999]"
@@ -2890,6 +2619,7 @@ async function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuPr
   );
 }
 
+
 function TrackItem({
   track,
   showArtist = true,
@@ -2899,31 +2629,40 @@ function TrackItem({
   openAddToPlaylistModal,
   toggleLike,
   isLiked,
-  index = 0  // Add default value
+  index = 0,
+  isPrevious = false,
+  onContextMenu,
 }: TrackItemProps) {
   const [isHovered, setIsHovered] = useState(false);
-  
+
   const handleClick = (evt: React.MouseEvent) => {
     if (!inPlaylistCreation && onTrackClick) {
-      onTrackClick(track, index);  // Pass both track and index
+      onTrackClick(track, index);
     }
   };
 
-  // Extracted action buttons into a separate component for reusability
+  const trackClasses = cn(
+    'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
+    'hover:bg-gray-700/40 transition-colors duration-200',
+    inPlaylistCreation ? 'selectable' : 'cursor-pointer',
+    isPrevious && 'opacity-50'
+  );
+
   const ActionButtons = () => (
     <div className="flex items-center space-x-2 transition-all duration-200">
       {addToQueue && (
         <ActionButton
           onClick={() => addToQueue(track)}
           icon={<Plus className="w-4 h-4" />}
-          tooltip="Add to Queue"
         />
       )}
       {openAddToPlaylistModal && (
         <ActionButton
-          onClick={() => openAddToPlaylistModal(track)}
+          onClick={() => {
+            console.log("Library icon clicked for track:", track);
+            openAddToPlaylistModal(track);
+          }}
           icon={<Library className="w-4 h-4" />}
-          tooltip="Add to Playlist"
         />
       )}
       {toggleLike && (
@@ -2936,7 +2675,6 @@ function TrackItem({
               }`}
             />
           }
-          tooltip={isLiked ? "Unlike" : "Like"}
         />
       )}
     </div>
@@ -2944,12 +2682,9 @@ function TrackItem({
 
   return (
     <div
-      className={cn(
-        'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
-        'hover:bg-gray-700/40 transition-colors duration-200',
-        inPlaylistCreation ? 'selectable' : 'cursor-pointer'
-      )}
+      className={trackClasses}
       onClick={handleClick}
+      onContextMenu={onContextMenu}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -2971,15 +2706,17 @@ function TrackItem({
         )}
       </div>
 
-      <div className={cn(
-        'transition-opacity duration-200',
-        isHovered ? 'opacity-100' : 'opacity-0'
-      )}>
+      <div
+        className={cn(
+          'transition-opacity duration-200',
+          isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
+        )}
+      >
         {inPlaylistCreation ? (
           <input
             type="checkbox"
             className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-green-500 
-                     transition-colors duration-200 cursor-pointer"
+                       transition-colors duration-200 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
@@ -2997,7 +2734,6 @@ function ActionButton({
 }: { 
   onClick: (e: React.MouseEvent) => void,
   icon: React.ReactNode,
-  tooltip: string
 }) {
   return (
     <button

@@ -4,12 +4,18 @@
   "description": "Your ultimate music streaming companion",
   "start_url": "/",
   "scope": "/",
+  "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "orientation": "any",
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": ["music", "entertainment", "streaming"],
   "lang": "en-US",
+  "media_control": "android-media-control",
+  "media_session": {
+      "actions": ["play", "pause", "previoustrack", "nexttrack", "seekto", "seekbackward", "seekforward"],
+      "artwork": true
+    },
   "dir": "ltr",
   "prefer_related_applications": false,
   "icons": [

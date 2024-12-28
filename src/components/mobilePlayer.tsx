@@ -805,44 +805,52 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     >
                       {processedLyrics.map((ly, idx) => {
                         const isActive = idx === currentLyricIndex;
+                        
                         if (!isActive) {
                           return (
                             <motion.p
                               key={idx}
-                              className={`text-lg text-center transition-all duration-300 ${
-                                isActive
-                                  ? 'text-white scale-105 font-bold'
-                                  : 'text-white/40 hover:text-white opacity-50'
-                              }`}
+                              initial={{ opacity: 0.5 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="text-lg text-center text-white/40 hover:text-white"
                               onClick={() => handleSeek(ly.time)}
                             >
                               {ly.text}
                             </motion.p>
                           );
                         }
-                        // If active, highlight letters
+                        
+                        // For active lyrics, animate letters
                         const letters = ly.text.split('');
                         const totalLetters = letters.length;
                         const filled = Math.floor(lyricProgress * totalLetters);
+
                         return (
                           <motion.p
                             key={idx}
                             className="text-lg text-center font-bold text-white"
-                            onClick={() => handleSeek(ly.time)}
+                            initial="hidden"
+                            animate="visible"
                           >
                             {letters.map((letter, i2) => (
-                              <span
+                              <motion.span
                                 key={i2}
-                                className={`transition-colors duration-300 ${
-                                  i2 < filled ? 'text-white' : 'text-white/40'
-                                }`}
+                                initial={{ color: 'rgba(255,255,255,0.4)' }}
+                                animate={{ color: i2 < filled ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.4)' }}
+                                transition={{
+                                  duration: 0.3,
+                                  delay: i2 * 0.05, // Add delay per letter for smoother animation
+                                }}
                               >
                                 {letter}
-                              </span>
+                              </motion.span>
                             ))}
                           </motion.p>
                         );
                       })}
+
                     </div>
                   </div>
                 ) : (
