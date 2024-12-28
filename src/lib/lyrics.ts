@@ -1,3 +1,5 @@
+// lyrics.ts
+
 interface Track {
     id: string ;
     title: string;
