@@ -109,6 +109,7 @@ interface TrackItemProps {
   isLiked?: boolean;
   index?: number;
   isPrevious?: boolean;
+  onContextMenu?: React.MouseEventHandler<HTMLDivElement>; // Added prop with correct type
 }
 
 interface Artist {
@@ -742,7 +743,7 @@ export function SpotifyClone() {
     setCurrentTrack(track);
   }, [currentTrack]);
   
-  
+
 
   // context menu
   const openAddToPlaylistModal = useCallback((tr: Track) => {
@@ -760,7 +761,10 @@ export function SpotifyClone() {
         options = [
           { label: 'Add to Queue', action: () => addToQueue(item) },
           { label: 'Add to Playlist', action: () => openAddToPlaylistModal(item) },
-          { label: 'Add to Liked Songs', action: () => toggleLike(item) }
+          { 
+            label: isTrackLiked(item) ? 'Remove from Liked Songs' : 'Add to Liked Songs', 
+            action: () => toggleLike(item) 
+          }
         ];
       } else {
         // playlist
@@ -788,7 +792,7 @@ export function SpotifyClone() {
       setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
       setShowContextMenu(true);
     },
-    [addToQueue, openAddToPlaylistModal, toggleLike, playlists]
+    [isTrackLiked, addToQueue, openAddToPlaylistModal, toggleLike, playlists]
   );
 
   const addToPlaylist = useCallback(
@@ -805,12 +809,14 @@ export function SpotifyClone() {
     },
     [playlists]
   );
+  
   const handleAddToPlaylist = useCallback(() => {
     if (!selectedPlaylistForAdd || !contextMenuTrack) return;
     void addToPlaylist(contextMenuTrack, selectedPlaylistForAdd);
     setShowAddToPlaylistModal(false);
     setSelectedPlaylistForAdd(null);
   }, [selectedPlaylistForAdd, contextMenuTrack, addToPlaylist]);
+  
 
   const loadImage = useCallback((src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
@@ -820,7 +826,7 @@ export function SpotifyClone() {
       img.onerror = reject;
       img.src = src;
     });
-}, []); // Empty dependencies array since this function doesn't depend on any props or state
+  }, []); // Empty dependencies array since this function doesn't depend on any props or state
 
   const createCompositeImage = useCallback(async (urls: string[]): Promise<string> => {
     const canvas = document.createElement('canvas');
@@ -838,7 +844,7 @@ export function SpotifyClone() {
       ctx.drawImage(img, x, y, size, size);
     }
     return canvas.toDataURL('image/png');
-}, [loadImage]);
+  }, [loadImage]);
   
 
   // new playlist
@@ -1230,6 +1236,7 @@ export function SpotifyClone() {
                       openAddToPlaylistModal={openAddToPlaylistModal} 
                       toggleLike={toggleLike} 
                       isLiked={isTrackLiked(track)} 
+                      onContextMenu={(e) => handleContextMenu(e, track)}
                     />
                   ))
                   
@@ -1254,6 +1261,7 @@ export function SpotifyClone() {
                       openAddToPlaylistModal={openAddToPlaylistModal} 
                       toggleLike={toggleLike} 
                       isLiked={isTrackLiked(t)} 
+                      onContextMenu={(e) => handleContextMenu(e, t)} // Attach handler
                     />
                   ))
                 ) : (
@@ -1270,87 +1278,87 @@ export function SpotifyClone() {
                 </button>
               </div>
               <div className={cn(
-  "grid gap-4",
-  sidebarCollapsed ? "grid-cols-1" : "grid-cols-1"
-)}>
-  {playlists.map((playlist) => (
-    <div
-      key={playlist.name}
-      className={cn(
-        "bg-gray-800 bg-opacity-40 rounded-lg flex items-center cursor-pointer relative",
-        sidebarCollapsed ? "p-2 justify-center" : "p-4",
-        playlist.pinned && "border-2 border-blue-900"
-      )}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/plain', playlist.name);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const name = e.dataTransfer.getData('text/plain');
-        const di = playlists.findIndex((p) => p.name === name);
-        const ti = playlists.findIndex((p) => p.name === playlist.name);
-        const up = [...playlists];
-        const [dragPL] = up.splice(di, 1);
-        up.splice(ti, 0, dragPL);
-        setPlaylists(up);
-        void Promise.all(up.map((pl) => storePlaylist(pl)));
-      }}
-      onClick={() => openPlaylist(playlist)}
-      style={{ userSelect: 'none' }}
-    >
-      <img 
-        src={playlist.image || 'assets/'} 
-        alt={playlist.name || 'Playlist Cover'} 
-        className={cn(
-          "rounded",
-          sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
-        )} 
-      />
-      {!sidebarCollapsed && (
-        <>
-          <span className="font-medium text-sm flex-1">{playlist.name}</span>
-          {playlist.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
-          <button
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const opts: ContextMenuOption[] = [
-                {
-                  label: 'Pin Playlist',
-                  action: () => {
-                    const u2 = playlists.map((pl) =>
-                      pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
-                    );
-                    setPlaylists(u2);
-                    void Promise.all(u2.map((p) => storePlaylist(p)));
-                  }
-                },
-                {
-                  label: 'Delete Playlist',
-                  action: () => {
-                    void deletePlaylistByName(playlist.name).then((nl) => setPlaylists(nl));
-                  }
-                },
-                {
-                  label: 'Download Playlist',
-                  action: () => downloadPlaylist(playlist)
-                }
-              ];
-              setContextMenuPosition({ x: e.clientX, y: e.clientY });
-              setContextMenuOptions(opts);
-              setShowContextMenu(true);
-            }}
-          >
-            <span className="w-4 h-4 text-white">•••</span>
-          </button>
-        </>
-      )}
-    </div>
-  ))}
-</div>
+                "grid gap-4",
+                sidebarCollapsed ? "grid-cols-1" : "grid-cols-1"
+              )}>
+                {playlists.map((playlist) => (
+                  <div
+                    key={playlist.name}
+                    className={cn(
+                      "bg-gray-800 bg-opacity-40 rounded-lg flex items-center cursor-pointer relative",
+                      sidebarCollapsed ? "p-2 justify-center" : "p-4",
+                      playlist.pinned && "border-2 border-blue-900"
+                    )}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', playlist.name);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const name = e.dataTransfer.getData('text/plain');
+                      const di = playlists.findIndex((p) => p.name === name);
+                      const ti = playlists.findIndex((p) => p.name === playlist.name);
+                      const up = [...playlists];
+                      const [dragPL] = up.splice(di, 1);
+                      up.splice(ti, 0, dragPL);
+                      setPlaylists(up);
+                      void Promise.all(up.map((pl) => storePlaylist(pl)));
+                    }}
+                    onClick={() => openPlaylist(playlist)}
+                    style={{ userSelect: 'none' }}
+                  >
+                    <img 
+                      src={playlist.image || 'assets/'} 
+                      alt={playlist.name || 'Playlist Cover'} 
+                      className={cn(
+                        "rounded",
+                        sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
+                      )} 
+                    />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="font-medium text-sm flex-1">{playlist.name}</span>
+                        {playlist.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
+                        <button
+                          className="absolute top-2 right-2 p-1 rounded-full hover:bg-white/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const opts: ContextMenuOption[] = [
+                              {
+                                label: 'Pin Playlist',
+                                action: () => {
+                                  const u2 = playlists.map((pl) =>
+                                    pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
+                                  );
+                                  setPlaylists(u2);
+                                  void Promise.all(u2.map((p) => storePlaylist(p)));
+                                }
+                              },
+                              {
+                                label: 'Delete Playlist',
+                                action: () => {
+                                  void deletePlaylistByName(playlist.name).then((nl) => setPlaylists(nl));
+                                }
+                              },
+                              {
+                                label: 'Download Playlist',
+                                action: () => downloadPlaylist(playlist)
+                              }
+                            ];
+                            setContextMenuPosition({ x: e.clientX, y: e.clientY });
+                            setContextMenuOptions(opts);
+                            setShowContextMenu(true);
+                          }}
+                        >
+                          <span className="w-4 h-4 text-white">•••</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
             </section>
           ) : (
             <>
@@ -1451,6 +1459,7 @@ export function SpotifyClone() {
                         openAddToPlaylistModal={openAddToPlaylistModal}
                         toggleLike={toggleLike}
                         isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
                       />
                     ))
                   ) : (
@@ -1619,6 +1628,7 @@ export function SpotifyClone() {
                               setIsSearchOpen(false);
                               setView('home');
                             }}
+                            onContextMenu={(e) => handleContextMenu(e, res)} // Attach handler
                           />
                         ))}
                         </div>
@@ -1683,104 +1693,104 @@ export function SpotifyClone() {
         )}
         {/* Collapsible sidebar if wanted: an example toggle or just show it */}
         <aside
-  className={cn(
-    'bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar transition-all duration-300',
-    sidebarCollapsed ? 'w-20' : 'w-64'
-  )}
->
-  <button 
-    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-    className="p-2 rounded-full hover:bg-white/10 transition-colors duration-200"
-  >
-    {sidebarCollapsed ? (
-      <ChevronRight className="w-5 h-5 text-white" />
-    ) : (
-      <ChevronLeft className="w-5 h-5 text-white" />
-    )}
-  </button>
-  <nav className="space-y-4">
-    <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3 space-y-2">
-      <button
-        className={cn(
-          "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-          sidebarCollapsed && "justify-center"
-        )}
-        onClick={() => setView('home')}
-      >
-        <Home className="w-6 h-6" />
-        {!sidebarCollapsed && <span className="ml-3">Home</span>}
-      </button>
-      <button
-        className={cn(
-          "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-          sidebarCollapsed && "justify-center"
-        )}
-        onClick={() => setView('search')}
-      >
-        <Search className="w-6 h-6" />
-        {!sidebarCollapsed && <span className="ml-3">Search</span>}
-      </button>
-    </div>
-    <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3">
-      <div className={cn(
-        "flex items-center mb-2 text-white",
-        sidebarCollapsed ? "justify-center" : "justify-between"
-      )}>
-        <Library className="w-6 h-6" />
-        {!sidebarCollapsed && (
-          <>
-            <span className="ml-3">Your Library</span>
-            <button
-              className="p-2 rounded-full hover:bg-white/10"
-              onClick={() => setShowCreatePlaylist(true)}
-            >
-              <Plus className="w-5 h-5 text-white" />
-            </button>
-          </>
-        )}
-      </div>
-      <div className="space-y-2">
-        {playlists.map((pl) => (
-          <div
-            key={pl.name}
-            className={cn(
-              'flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200',
-              pl.pinned && 'border-2 border-blue-900',
-              sidebarCollapsed && "justify-center"
-            )}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', pl.name);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const name = e.dataTransfer.getData('text/plain');
-              const di = playlists.findIndex((p) => p.name === name);
-              const ti = playlists.findIndex((p) => p.name === pl.name);
-              const up = [...playlists];
-              const [dragPL] = up.splice(di, 1);
-              up.splice(ti, 0, dragPL);
-              setPlaylists(up);
-              void Promise.all(up.map((xx) => storePlaylist(xx)));
-            }}
-            onClick={() => openPlaylist(pl)}
-            style={{ userSelect: 'none' }}
+          className={cn(
+            'bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar transition-all duration-300',
+            sidebarCollapsed ? 'w-20' : 'w-64'
+          )}
+        >
+          <button 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors duration-200"
           >
-            <img src={pl.image || "placeholder"} alt={pl.name || 'Playlist'} className="w-10 h-10 rounded-md" />
-            {!sidebarCollapsed && (
-              <>
-                <span className="font-medium text-sm">{pl.name}</span>
-                {pl.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
-              </>
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-5 h-5 text-white" />
+            ) : (
+              <ChevronLeft className="w-5 h-5 text-white" />
             )}
-          </div>
-        ))}
-      </div>
-    </div>
-  </nav>
-</aside>
+          </button>
+          <nav className="space-y-4">
+            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3 space-y-2">
+              <button
+                className={cn(
+                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
+                  sidebarCollapsed && "justify-center"
+                )}
+                onClick={() => setView('home')}
+              >
+                <Home className="w-6 h-6" />
+                {!sidebarCollapsed && <span className="ml-3">Home</span>}
+              </button>
+              <button
+                className={cn(
+                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
+                  sidebarCollapsed && "justify-center"
+                )}
+                onClick={() => setView('search')}
+              >
+                <Search className="w-6 h-6" />
+                {!sidebarCollapsed && <span className="ml-3">Search</span>}
+              </button>
+            </div>
+            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3">
+              <div className={cn(
+                "flex items-center mb-2 text-white",
+                sidebarCollapsed ? "justify-center" : "justify-between"
+              )}>
+                <Library className="w-6 h-6" />
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="ml-3">Your Library</span>
+                    <button
+                      className="p-2 rounded-full hover:bg-white/10"
+                      onClick={() => setShowCreatePlaylist(true)}
+                    >
+                      <Plus className="w-5 h-5 text-white" />
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="space-y-2">
+                {playlists.map((pl) => (
+                  <div
+                    key={pl.name}
+                    className={cn(
+                      'flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200',
+                      pl.pinned && 'border-2 border-blue-900',
+                      sidebarCollapsed && "justify-center"
+                    )}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', pl.name);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const name = e.dataTransfer.getData('text/plain');
+                      const di = playlists.findIndex((p) => p.name === name);
+                      const ti = playlists.findIndex((p) => p.name === pl.name);
+                      const up = [...playlists];
+                      const [dragPL] = up.splice(di, 1);
+                      up.splice(ti, 0, dragPL);
+                      setPlaylists(up);
+                      void Promise.all(up.map((xx) => storePlaylist(xx)));
+                    }}
+                    onClick={() => openPlaylist(pl)}
+                    style={{ userSelect: 'none' }}
+                  >
+                    <img src={pl.image || "placeholder"} alt={pl.name || 'Playlist'} className="w-10 h-10 rounded-md" />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="font-medium text-sm">{pl.name}</span>
+                        {pl.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </nav>
+        </aside>
 
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-gradient-to-b from-gray-900 to-black rounded-lg p-6">
           <header className="flex justify-between items-center mb-8">
@@ -1994,6 +2004,7 @@ export function SpotifyClone() {
                   openAddToPlaylistModal={openAddToPlaylistModal} 
                   toggleLike={toggleLike} 
                   isLiked={isTrackLiked(track)} 
+                  onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
                 />
               ))}
 
@@ -2123,12 +2134,10 @@ export function SpotifyClone() {
                             index={idx}
                             onTrackClick={playTrack}
                             addToQueue={addToQueue}
-                            openAddToPlaylistModal={(t) => {
-                              setContextMenuTrack(t);
-                              setShowAddToPlaylistModal(true);
-                            }}
+                            openAddToPlaylistModal={openAddToPlaylistModal} 
                             toggleLike={toggleLike}
                             isLiked={isTrackLiked(r)}
+                            onContextMenu={(e) => handleContextMenu(e, r)} // Attach handler
                           />
                         ))}
 
@@ -2194,12 +2203,10 @@ export function SpotifyClone() {
                         index={idx}
                         onTrackClick={playTrack}
                         addToQueue={addToQueue}
-                        openAddToPlaylistModal={(t) => {
-                          setContextMenuTrack(t);
-                          setShowAddToPlaylistModal(true);
-                        }}
+                        openAddToPlaylistModal={openAddToPlaylistModal} 
                         toggleLike={toggleLike}
                         isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
                       />
                     ))
                   ) : (
@@ -2213,111 +2220,147 @@ export function SpotifyClone() {
         </main>
 
         {/* showQueue aside if wanted */}
-{showQueue && (
-  <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
-    <h2 className="text-xl font-bold mb-4">Queue</h2>
-    {queue.length === 0 && previousTracks.length === 0 ? (
-      <div>
-        <p className="text-gray-400 mb-4">Your queue is empty.</p>
-        <button
-          className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
-          onClick={() => {
-            // Implement Add Suggestions or relevant functionality
-          }}
-        >
-          Add Suggestions
-        </button>
-      </div>
-    ) : (
-      <div className="space-y-2">
-        {previousTracks.length > 0 && (
-          <div>
-            <h3 className="text-lg font-semibold mb-2 text-gray-300">Previous Tracks</h3>
-            {previousTracks.map((track, idx) => (
-              <TrackItem
-                key={`prev-${track.id}`} // Unique key
-                track={track}
-                index={idx}
-                isPrevious={true}
-                onTrackClick={onQueueItemClick}
-                addToQueue={addToQueue}
-                openAddToPlaylistModal={openAddToPlaylistModal}
-                toggleLike={toggleLike}
-                isLiked={isTrackLiked(track)}
-              />
-            ))}
-          </div>
-        )}
-        {queue.length > 0 && (
-          <div>
-            <h3 className="text-lg font-semibold mb-2 text-gray-300">Up Next</h3>
-            {queue.map((track, idx) => (
-              <TrackItem
-                key={`queue-${track.id}`} // Unique key
-                track={track}
-                index={idx}
-                isPrevious={false}
-                onTrackClick={onQueueItemClick}
-                addToQueue={addToQueue}
-                openAddToPlaylistModal={openAddToPlaylistModal}
-                toggleLike={toggleLike}
-                isLiked={isTrackLiked(track)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    )}
-  </aside>
-)}
+          {showQueue && (
+            <aside className="w-64 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar">
+              <h2 className="text-xl font-bold mb-4">Queue</h2>
+              {queue.length === 0 && previousTracks.length === 0 ? (
+                <div>
+                  <p className="text-gray-400 mb-4">Your queue is empty.</p>
+                  <button
+                    className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-600 transition-all duration-200"
+                    onClick={() => {
+                      // Implement Add Suggestions or relevant functionality
+                    }}
+                  >
+                    Add Suggestions
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {previousTracks.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 text-gray-300">Previous Tracks</h3>
+                      {previousTracks.map((track, idx) => (
+                        <TrackItem
+                          key={`prev-${track.id}`} // Unique key
+                          track={track}
+                          index={idx}
+                          isPrevious={true}
+                          onTrackClick={onQueueItemClick}
+                          addToQueue={addToQueue}
+                          openAddToPlaylistModal={openAddToPlaylistModal}
+                          toggleLike={toggleLike}
+                          isLiked={isTrackLiked(track)}
+                          onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {queue.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 text-gray-300">Up Next</h3>
+                      {queue.map((track, idx) => (
+                        <TrackItem
+                          key={`queue-${track.id}`} // Unique key
+                          track={track}
+                          index={idx}
+                          isPrevious={false}
+                          onTrackClick={onQueueItemClick}
+                          addToQueue={addToQueue}
+                          openAddToPlaylistModal={openAddToPlaylistModal}
+                          toggleLike={toggleLike}
+                          isLiked={isTrackLiked(track)}
+                          onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </aside>
+          )}
 
       </div>
 
       {mounted && (
-  currentTrack ? (
-    <footer className="fixed bottom-0 left-0 right-0">
-      <DesktopPlayer
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        previousTracks={previousTracks}
-        setQueue={setQueue}
-        togglePlay={togglePlay}
-        skipTrack={skipTrack}
-        previousTrack={previousTrackFunc}
-        seekPosition={seekPosition}
-        duration={duration}
-        handleSeek={handleSeek}
-        isLiked={isTrackLiked(currentTrack)}
-        repeatMode={repeatMode}
-        setRepeatMode={setRepeatMode}
-        toggleLike={toggleLikeDesktop}
-        lyrics={lyrics}
-        currentLyricIndex={currentLyricIndex}
-        showLyrics={showLyrics}
-        toggleLyricsView={toggleLyricsView}
-        shuffleOn={shuffleOn}
-        shuffleQueue={shuffleQueue}
-        queue={queue}
-        currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-        removeFromQueue={removeFromQueue}
-        onQueueItemClick={onQueueItemClick}
-        setIsPlayerOpen={setIsPlayerOpen}
-        volume={volume}
-        onVolumeChange={onVolumeChange}
-        audioQuality={audioQuality}
-        onCycleAudioQuality={onCycleAudioQuality}
-        listenCount={listenCount}
-      />
-    </footer>
-  ) : (
-    <footer className="fixed bottom-0 left-0 right-0">
-      {/* Optional: Placeholder or message when no track is playing */}
-      <div className="bg-gray-800 text-white p-4 text-center">
-        No track is currently playing.
-      </div>
-    </footer>
-  )
-)}
+        currentTrack ? (
+          <footer className="fixed bottom-0 left-0 right-0">
+            <DesktopPlayer
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              previousTracks={previousTracks}
+              setQueue={setQueue}
+              togglePlay={togglePlay}
+              skipTrack={skipTrack}
+              previousTrack={previousTrackFunc}
+              seekPosition={seekPosition}
+              duration={duration}
+              handleSeek={handleSeek}
+              isLiked={isTrackLiked(currentTrack)}
+              repeatMode={repeatMode}
+              setRepeatMode={setRepeatMode}
+              toggleLike={toggleLikeDesktop}
+              lyrics={lyrics}
+              currentLyricIndex={currentLyricIndex}
+              showLyrics={showLyrics}
+              toggleLyricsView={toggleLyricsView}
+              shuffleOn={shuffleOn}
+              shuffleQueue={shuffleQueue}
+              queue={queue}
+              currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+              removeFromQueue={removeFromQueue}
+              onQueueItemClick={onQueueItemClick}
+              setIsPlayerOpen={setIsPlayerOpen}
+              volume={volume}
+              onVolumeChange={onVolumeChange}
+              audioQuality={audioQuality}
+              onCycleAudioQuality={onCycleAudioQuality}
+              listenCount={listenCount}
+            />
+          </footer>
+        ) : (
+          <footer className="fixed bottom-0 left-0 right-0">
+            {/* Optional: Placeholder or message when no track is playing */}
+            <div className="bg-gray-800 text-white p-4 text-center">
+              No track is currently playing.
+            </div>
+          </footer>
+        )
+      )}
+
+        {showAddToPlaylistModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+            <div className="bg-gray-900 rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-4">Add to Playlist</h2>
+              <select
+                value={selectedPlaylistForAdd || ''}
+                onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
+                className="w-full p-2 mb-4 rounded bg-gray-800 text-white"
+              >
+                <option value="" disabled>Select a playlist</option>
+                {playlists.map((pl) => (
+                  <option key={pl.name} value={pl.name}>{pl.name}</option>
+                ))}
+              </select>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowAddToPlaylistModal(false)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddToPlaylist}
+                  className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-green-300"
+                  disabled={!selectedPlaylistForAdd}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
 
       {/* Create Playlist Modal */}
       {showCreatePlaylist && (
@@ -2433,7 +2476,9 @@ export function SpotifyClone() {
                 track={t} 
                 index={idx}
                 inPlaylistCreation={true} 
+                openAddToPlaylistModal={openAddToPlaylistModal} 
                 onTrackClick={toggleTrackSelection} 
+                onContextMenu={(e) => handleContextMenu(e, t)} // Attach handler
               />
             ))}
             </div>
@@ -2467,7 +2512,7 @@ export function SpotifyClone() {
 }
 
 // Context Menu
-async function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
+function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
   return (
     <div
       className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-[999999]"
@@ -2500,7 +2545,8 @@ function TrackItem({
   toggleLike,
   isLiked,
   index = 0,
-  isPrevious = false, // Destructure the new prop
+  isPrevious = false,
+  onContextMenu,
 }: TrackItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -2510,12 +2556,11 @@ function TrackItem({
     }
   };
 
-  // Determine classes based on whether it's a previous track
   const trackClasses = cn(
     'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
     'hover:bg-gray-700/40 transition-colors duration-200',
     inPlaylistCreation ? 'selectable' : 'cursor-pointer',
-    isPrevious && 'opacity-50' // Dim previous tracks
+    isPrevious && 'opacity-50'
   );
 
   const ActionButtons = () => (
@@ -2528,7 +2573,10 @@ function TrackItem({
       )}
       {openAddToPlaylistModal && (
         <ActionButton
-          onClick={() => openAddToPlaylistModal(track)}
+          onClick={() => {
+            console.log("Library icon clicked for track:", track);
+            openAddToPlaylistModal(track);
+          }}
           icon={<Library className="w-4 h-4" />}
         />
       )}
@@ -2551,6 +2599,7 @@ function TrackItem({
     <div
       className={trackClasses}
       onClick={handleClick}
+      onContextMenu={onContextMenu}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -2572,15 +2621,17 @@ function TrackItem({
         )}
       </div>
 
-      <div className={cn(
-        'transition-opacity duration-200',
-        isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
-      )}>
+      <div
+        className={cn(
+          'transition-opacity duration-200',
+          isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
+        )}
+      >
         {inPlaylistCreation ? (
           <input
             type="checkbox"
             className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-green-500 
-                     transition-colors duration-200 cursor-pointer"
+                       transition-colors duration-200 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
