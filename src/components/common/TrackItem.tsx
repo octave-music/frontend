@@ -3,9 +3,9 @@
 
 import React, { useState } from 'react';
 import { Plus, Library, Heart } from 'lucide-react';
-import { cn } from '../lib/utils'; // Ensure this utility function exists
+import { cn } from '../../lib/utils/utils'; // Ensure this utility function exists
 
-import { TrackItemProps } from "../lib/types"
+import { TrackItemProps } from "../../lib/types/types"
 
 interface ActionButtonProps {
   onClick: (e: React.MouseEvent) => void;

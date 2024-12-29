@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
-import { useAudio } from "../lib/useAudio";
+import { useAudio } from "../lib/hooks/useAudio";
 import {
   storeQueue,
   clearQueue,
@@ -42,17 +42,17 @@ import {
   storeTrackBlob, 
   getOfflineBlob,
   getRecommendedTracks
-} from '../lib/idbWrapper';
+} from '../lib/managers/idbWrapper';
 
-import MobilePlayer from './mobilePlayer';
-import DesktopPlayer from './DesktopPlayer';
-import { setupMediaSession } from '../lib/useMediaSession';
-import { cn } from '../lib/utils';
-import Onboarding from './Onboarding';
-import { handleFetchLyrics } from '../lib/lyrics';
-import audioElement from '../lib/audioManager';
-import CustomContextMenu from './CustomContextMenu'; // Import CustomContextMenu
-import TrackItem from './TrackItem';
+import MobilePlayer from './players/mobilePlayer';
+import DesktopPlayer from './players/DesktopPlayer';
+import { setupMediaSession } from '../lib/hooks/useMediaSession';
+import { cn } from '../lib/utils/utils';
+import Onboarding from './onboarding/Onboarding';
+import { handleFetchLyrics } from '../lib/api/lyrics';
+import audioElement from '../lib/managers/audioManager';
+import CustomContextMenu from './common/CustomContextMenu'; // Import CustomContextMenu
+import TrackItem from './common/TrackItem';
 
 import { saveAs } from 'file-saver';
 
@@ -64,7 +64,7 @@ import {
   Position,
   Artist,
   BeforeInstallPromptEvent,
-} from '../lib/types';
+} from '../lib/types/types';
 
 
 declare global {

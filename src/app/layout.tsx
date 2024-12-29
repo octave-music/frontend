@@ -2,7 +2,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration"; // Import the registration component
+import ServiceWorkerRegistration from "../components/service/ServiceWorkerRegistration"; // Import the registration component
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",

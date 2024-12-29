@@ -19,7 +19,7 @@ import {
   ListX, Guitar
 } from 'lucide-react';
 
-import { Track, Lyric } from "../lib/types"
+import { Track, Lyric } from "../../lib/types/types";
 
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
