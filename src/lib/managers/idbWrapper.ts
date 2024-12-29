@@ -3,28 +3,8 @@
 // =======================
 // Type Declarations
 // =======================
-export interface Track {
-  id: string;
-  title: string;
-  artist: {
-    name: string;
-  };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
 
-export interface Playlist {
-  name: string;
-  image: string;
-  tracks: Track[];
-  pinned?: boolean;
-  downloaded?: boolean;
-}
+import { Track, Playlist } from "../types/types"
 
 interface RecentlyPlayedEntry {
   timestamp: number;
@@ -332,4 +312,16 @@ export async function clearQueue(): Promise<void> {
     const store = tx.objectStore('queue');
     store.clear();
   });
+}
+
+
+// Recommended Tracks:
+
+export async function storeRecommendedTracks(tracks: Track[]) {
+  await storeSetting('recommendedTracks', JSON.stringify(tracks));
+}
+
+export async function getRecommendedTracks(): Promise<Track[] | null> {
+  const data = await getSetting('recommendedTracks');
+  return data ? JSON.parse(data) as Track[] : null;
 }

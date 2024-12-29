@@ -19,29 +19,8 @@ import {
   ListX, Guitar
 } from 'lucide-react';
 
-// ------------------------------------
-// Types
-// ------------------------------------
-interface Track {
-  id: string;
-  title: string;
-  artist: {
-    name: string;
-  };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
+import { Track, Lyric } from "../../lib/types/types";
 
-interface Lyric {
-  time: number;
-  endTime?: number;
-  text: string;
-}
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = 'off' | 'all' | 'one';
@@ -163,12 +142,12 @@ const Seekbar: React.FC<SeekbarProps> = ({
     <div className="mx-4 relative">
       <div
         ref={progressRef}
-        className={`relative w-full ${isMiniplayer ? 'h-0.5' : 'h-1'} cursor-pointer rounded-full bg-white/20`}
+        className={`seekbar-container relative w-full ${isMiniplayer ? 'h-0.5' : 'h-1'} cursor-pointer`}
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
       >
         <motion.div
-          className="absolute left-0 top-0 h-full bg-white rounded-full"
+          className="seekbar-progress absolute left-0 top-0 h-full"
           style={{ width: `${localProgress * 100}%` }}
           animate={{ width: `${localProgress * 100}%` }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -287,15 +266,18 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   useEffect(() => {
     function handleResize() {
-      const w = window.innerWidth;
-      if (w < 350) {
-        setCanShowActions(false);
-      } else {
-        setCanShowActions(true);
-      }
+      // Update breakpoint to handle iPhone SE and similar small devices
+      const smallScreenBreakpoint = 375; // iPhone SE width
+      setCanShowActions(window.innerWidth > smallScreenBreakpoint);
     }
+    
+    // Initial check
     handleResize();
+    
+    // Add event listener
     window.addEventListener('resize', handleResize);
+    
+    // Cleanup
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -320,8 +302,11 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   // We can limit certain visible action buttons for smaller screens
   const getVisibleActionButtons = () => {
-    // If we decide not to show them on very small screens:
-    if (!canShowActions) return [];
+    // Only show action buttons if screen is large enough and we explicitly want to show them
+    if (!canShowActions) {
+      return [];
+    }
+    // For larger screens, return all action buttons
     return [
       { icon: Heart, label: 'Like', active: isLiked, onClick: toggleLike },
       { icon: Plus, label: 'Add to', onClick: () => setShowAddToPlaylistModal(true) },
@@ -515,6 +500,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }
   };
 
+
   // Main player control cluster
   const mainControlButtons = (
     <div className="w-full flex items-center justify-between mb-8">
@@ -653,19 +639,20 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
         {/* --- Expanded Player --- */}
         <AnimatePresence>
-          {isExpanded && (
-            <motion.div
-              className="fixed inset-0 z-50 flex flex-col pb-[env(safe-area-inset-bottom)]"
-              style={{
-                background: 'rgba(0,0,0,0.92)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)'
-              }}
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-            >
+        {isExpanded && (
+          <motion.div
+            className="fixed inset-0 z-50 flex flex-col"
+            style={{
+              background: 'rgba(0,0,0,0.92)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              paddingBottom: 'env(safe-area-inset-bottom)'
+            }}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+          >
               {/* Header */}
               <div className="flex items-center justify-between p-4">
                 <button
@@ -687,12 +674,15 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   >
                     <ListMusic className="w-5 h-5 text-white/60" />
                   </button>
-                  <button
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                    onClick={() => setShowMoreOptions(true)}
-                  >
-                    <MoreHorizontal className="w-5 h-5 text-white/60" />
-                  </button>
+                  {/* Only show More options in header when action buttons are hidden */}
+                  {!canShowActions && (
+                    <button
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      onClick={() => setShowMoreOptions(true)}
+                    >
+                      <MoreHorizontal className="w-5 h-5 text-white/60" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -901,22 +891,23 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                       </div>
                     </div>
                     {mainControlButtons}
-                    {getVisibleActionButtons().length > 0 && (
-                      <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
-                        {getVisibleActionButtons().map((btn, i) => (
-                          <ActionButton
-                            key={i}
-                            icon={btn.icon}
-                            label={btn.label}
-                            active={btn.active}
-                            onClick={btn.onClick}
-                          />
-                        ))}
-                        <div className="md:flex">
-                          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setShowMoreOptions(true)} />
+                    {/* Only render if we have buttons to show */}
+                      {getVisibleActionButtons().length > 0 && (
+                        <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
+                          {getVisibleActionButtons().map((btn, i) => (
+                            <ActionButton
+                              key={i}
+                              icon={btn.icon}
+                              label={btn.label}
+                              active={btn.active}
+                              onClick={btn.onClick}
+                            />
+                          ))}
+                          <div className="md:hidden">
+                            <ActionButton icon={MoreHorizontal} label="More" onClick={() => setShowMoreOptions(true)} />
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                   </>
                 )}
               </div>

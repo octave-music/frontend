@@ -21,114 +21,58 @@ import {
   ChevronLeft,
   X,
   ChevronRight,
-  Heart,
-  MoreVertical
+  MoreVertical,
+  UploadCloud,
+  Music, 
+  Volume2,
+  Check,
+  Wifi,
+  Shield,
+  Beaker
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
-import { useAudio } from "../lib/useAudio";
+import { useAudio } from "../lib/hooks/useAudio";
 import {
-  openIDB,
   storeQueue,
   clearQueue,
-  storeTrackBlob,
-  getOfflineBlob,
   storePlaylist,
   getAllPlaylists,
   deletePlaylistByName,
   storeRecentlyPlayed,
   getRecentlyPlayed,
-  storeListenCount,
   getListenCounts,
   storeSetting,
   getSetting,
-  getQueue
-} from '../lib/idbWrapper';
+  getQueue,
+  storeRecommendedTracks,
+  storeTrackBlob, 
+  getRecommendedTracks
+} from '../lib/managers/idbWrapper';
 
-import MobilePlayer from './mobilePlayer';
-import DesktopPlayer from './DesktopPlayer';
-import { setupMediaSession } from '../lib/useMediaSession';
-import { cn } from '../lib/utils';
-import Onboarding from './Onboarding';
-import { handleFetchLyrics } from '../lib/lyrics';
-import audioElement from '../lib/audioManager';
+import MobilePlayer from './players/mobilePlayer';
+import DesktopPlayer from './players/DesktopPlayer';
+import { setupMediaSession } from '../lib/hooks/useMediaSession';
+import { cn } from '../lib/utils/utils';
+import Onboarding from './onboarding/Onboarding';
+import { handleFetchLyrics } from '../lib/api/lyrics';
+import audioElement from '../lib/managers/audioManager';
+import CustomContextMenu from './common/CustomContextMenu'; // Import CustomContextMenu
+import TrackItem from './common/TrackItem';
 
-interface Track {
-  id: string;
-  title: string;
-  artist: { name: string };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
+import { saveAs } from 'file-saver';
 
-interface Playlist {
-  name: string;
-  image: string;
-  tracks: Track[];
-  pinned?: boolean;
-  downloaded?: boolean;
-}
+import {
+  Track,
+  Playlist,
+  Lyric,
+  ContextMenuOption,
+  Position,
+  Artist,
+  BeforeInstallPromptEvent,
+} from '../lib/types/types';
 
-interface Lyric {
-  time: number;
-  endTime?: number;
-  text: string;
-}
-
-interface ContextMenuOption {
-  label: string;
-  action: () => void;
-}
-
-interface Position {
-  x: number;
-  y: number;
-}
-
-interface CustomContextMenuProps {
-  x: number;
-  y: number;
-  onClose: () => void;
-  options: ContextMenuOption[];
-}
-
-interface TrackItemProps {
-  track: Track;
-  showArtist?: boolean;
-  inPlaylistCreation?: boolean;
-  onTrackClick?: (track: Track, index: number) => void;
-  addToQueue?: (track: Track) => void;
-  openAddToPlaylistModal?: (track: Track) => void;
-  toggleLike?: (track: Track) => void;
-  isLiked?: boolean;
-  index?: number;
-  isPrevious?: boolean;
-  onContextMenu?: React.MouseEventHandler<HTMLDivElement>; // Added prop with correct type
-}
-
-interface Artist {
-  id: number;
-  name: string;
-  picture_medium: string;
-}
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
-interface AudioState {
-  audioElement: HTMLAudioElement | null;
-  isPlaying: boolean;
-  currentTime: number;
-  duration: number;
-  volume: number;
-}
+import { SpotifyToDeezer } from './onboarding/SpotifyToDeezer';
 
 
 declare global {
@@ -210,9 +154,9 @@ export function SpotifyClone() {
   const [currentTime, setCurrentTime] = useState(0);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-
-
-
+  const [showSpotifyToDeezerModal, setShowSpotifyToDeezerModal] = useState(false);
+  const [playlistSearchQuery, setPlaylistSearchQuery] = useState('');
+  const [playlistSearchResults, setPlaylistSearchResults] = useState<Track[]>([]);
 
 
   const {
@@ -245,8 +189,49 @@ export function SpotifyClone() {
     }
   };
   
+  const handlePlaylistSearch = useCallback(async (query: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      if (data && data.results) {
+        setPlaylistSearchResults(data.results as Track[]);
+      }
+    } catch (error) {
+      console.error('Playlist search error:', error);
+    }
+  }, []);
   
-
+  const addTrackToPlaylist = useCallback(async (track: Track) => {
+    if (!currentPlaylist) return;
+  
+    // Check if the track is already in the playlist
+    const isAlreadyIn = currentPlaylist.tracks.some((t) => t.id === track.id);
+    if (isAlreadyIn) {
+      alert('This track is already in the playlist.');
+      return;
+    }
+  
+    // Add the track to the playlist
+    const updatedPlaylist: Playlist = {
+      ...currentPlaylist,
+      tracks: [...currentPlaylist.tracks, track],
+    };
+  
+    // Update state
+    setCurrentPlaylist(updatedPlaylist);
+    setPlaylists((prevPlaylists) =>
+      prevPlaylists.map((pl) => (pl.name === updatedPlaylist.name ? updatedPlaylist : pl))
+    );
+  
+    // Store the updated playlist in IndexedDB
+    await storePlaylist(updatedPlaylist);
+  
+    // Optionally, reset the search
+    setPlaylistSearchQuery('');
+    setPlaylistSearchResults([]);
+  }, [currentPlaylist, setPlaylists]);
+  
+  
   // Update greeting hourly
   useEffect(() => {
     const timer = setInterval(() => {
@@ -384,31 +369,21 @@ export function SpotifyClone() {
   }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
   
   
-
-  
-  
-  
-  const resetToStart = useCallback(() => {
-    if (queue.length === 0) return;
-    
-    // Keep the original queue intact
-    setCurrentTrack(queue[0]);
-    setQueue(queue);
-  }, [queue]);
-  
   const handleTrackEnd = useCallback(() => {
     if (!currentTrack || !audioElement) return;
   
     switch (repeatMode) {
       case 'one':
-        audioElement.currentTime = 0;
-        void audioElement.play();
+        // Instead of trying to play directly, reset the time and let playTrackFromSource handle it
+        void playTrackFromSource(currentTrack, 0);
         break;
   
       case 'all': {
         const isLastTrack = queue.findIndex((t) => t.id === currentTrack.id) === queue.length - 1;
         if (isLastTrack) {
+          if (queue.length === 0) return;
           setCurrentTrack(queue[0]);
+          setQueue(queue);
           void playTrackFromSource(queue[0], 0);
         } else {
           skipTrack();
@@ -457,14 +432,6 @@ export function SpotifyClone() {
     };
   }, [handleTrackEnd, volume]);
 
-  
-  // Add this effect to handle playback when currentTrack changes
-  useEffect(() => {
-    if (currentTrack && audioElement) {
-      void playTrackFromSource(currentTrack, 0);
-      setIsPlaying(true); // Ensure playing state is true
-    }
-  }, [currentTrack, playTrackFromSource, setIsPlaying]);
 
   useEffect(() => {
     if (!audioElement) return;
@@ -549,26 +516,24 @@ export function SpotifyClone() {
     }
   }, [currentTrack]);
 
-  
-  // Onboarding
-  const startOnboarding = useCallback(() => {
-    setShowOnboarding(true);
-  }, []);
-
   // init
   useEffect(() => {
     async function init() {
       try {
-
-        const savedRecommendedTracks = await getQueue();
+        // Load recommended tracks separately
+        const savedRecommendedTracks = await getRecommendedTracks();
         if (savedRecommendedTracks && savedRecommendedTracks.length > 0) {
-            setRecommendedTracks(savedRecommendedTracks);
-            setQueue(savedRecommendedTracks);
+          setRecommendedTracks(savedRecommendedTracks);
         }
-
-
-        // Load settings
-        const [vol, sOn, qual, pls, rec, onboard, savedTrack, savedQueue] = await Promise.all([
+  
+        // Load the playback queue
+        const savedQueue = await getQueue();
+        if (savedQueue && savedQueue.length > 0) {
+          setQueue(savedQueue);
+        }
+  
+        // Load other settings
+        const [vol, sOn, qual, pls, rec, onboard, savedTrack] = await Promise.all([
           getSetting('volume'),
           getSetting('shuffleOn'),
           getSetting('audioQuality'),
@@ -576,7 +541,6 @@ export function SpotifyClone() {
           getRecentlyPlayed(),
           getSetting('onboardingDone'),
           getSetting('currentTrack'),
-          getQueue(),
         ]);
   
         if (vol) setVolume(parseFloat(vol));
@@ -591,13 +555,6 @@ export function SpotifyClone() {
           setCurrentTrack(track);
           setIsPlaying(true);
         }
-  
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue);
-        } else if (savedTrack) {
-          // Initialize queue with currentTrack if queue is empty
-          setQueue([JSON.parse(savedTrack)]);
-        }
       } catch (error) {
         console.error('Initialization error:', error);
       }
@@ -605,7 +562,6 @@ export function SpotifyClone() {
   
     void init();
   }, [setIsPlaying, setVolume]);
-  
   
 
   useEffect(() => {
@@ -621,31 +577,47 @@ export function SpotifyClone() {
   }, [queue]);
   
 
-  // if current track, load & play
   useEffect(() => {
-    if (!currentTrack) return;
-    void playTrackFromSource(currentTrack).then(() => {
-      setIsPlaying(true);
-      // lyrics
-      void fetchLyrics(currentTrack);
-      // liked?
-      const ls = playlists.find((p) => p.name === 'Liked Songs');
-      if (ls && ls.tracks.some((t) => t.id === currentTrack.id)) {
-        // setIsLiked(true);
-      } else {
-        // setIsLiked(false);
+    if (currentTrack) {
+      // Play the track and handle side-effects
+      void playTrackFromSource(currentTrack, 0)
+        .then(() => {
+          setIsPlaying(true);
+          void fetchLyrics(currentTrack);
+          return storeRecentlyPlayed(currentTrack);
+        })
+        .then((recent) => setJumpBackIn(recent))
+        .then(() => getListenCounts())
+        .then((counts) => setListenCount(counts[currentTrack.id] || 0))
+        .then(() => setupDiscordRPC(currentTrack.title, currentTrack.artist.name))
+        .catch((err) => {
+          console.error('Error during playback setup:', err);
+          alert('An error occurred while setting up the track.');
+        });
+    }
+  }, [currentTrack, playlists, playTrackFromSource, fetchLyrics, setIsPlaying]);
+  
+
+  useEffect(() => {
+    const handleLoadedData = () => {
+      // Revoke the object URL to free memory
+      if (audioElement){
+        URL.revokeObjectURL(audioElement.src);
       }
-      // recently
-      void storeRecentlyPlayed(currentTrack).then((recent) => setJumpBackIn(recent));
-      // count
-      void getListenCounts().then((c) => {
-        setListenCount(c[currentTrack.id] || 0);
-      });
-      // Discord RPC
-      void setupDiscordRPC(currentTrack.title, currentTrack.artist.name);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrack]);
+    };
+  
+    if (audioElement) {
+      audioElement.addEventListener('loadeddata', handleLoadedData);
+    }
+  
+    return () => {
+      if (audioElement) {
+        audioElement.removeEventListener('loadeddata', handleLoadedData);
+      }
+    };
+  }, []);
+  
+  
 
   // update seek pos
   useEffect(() => {
@@ -770,6 +742,8 @@ export function SpotifyClone() {
     }
     setCurrentTrack(track);
   }, [currentTrack]);
+
+  
   
 
 
@@ -903,6 +877,15 @@ export function SpotifyClone() {
 
   }, [newPlaylistName, newPlaylistImage, playlists, selectedTracksForNewPlaylist, createCompositeImage]);
 
+  useEffect(() => {
+    if (playlistSearchQuery.trim().length > 2) {
+      handlePlaylistSearch(playlistSearchQuery);
+    } else {
+      setPlaylistSearchResults([]);
+    }
+  }, [playlistSearchQuery, handlePlaylistSearch]);
+
+  
   const toggleTrackSelection = useCallback((tr: Track) => {
     setSelectedTracksForNewPlaylist((prev) =>
       prev.find((x) => x.id === tr.id) ? prev.filter((x) => x.id !== tr.id) : [...prev, tr]
@@ -916,14 +899,30 @@ export function SpotifyClone() {
 
   // downloads
   const downloadTrack = useCallback(
-    async (tr: Track) => {
-      const buf = await loadAudioBuffer(tr.id);
-      if (buf) {
-        // success, stored in IDB
+    async (track: Track) => {
+      try {
+        // Fetch the Blob (either from cache or network)
+        const blob = await loadAudioBuffer(track.id);
+        if (!blob) {
+          alert('Failed to download track.');
+          return;
+        }
+  
+        // Store the Blob for offline playback within the app
+        await storeTrackBlob(track.id, blob);
+  
+        // Trigger the file download to the user's device
+        saveAs(blob, `${track.title} - ${track.artist.name}.mp3`);
+        
+        alert('Track downloaded and available for offline playback within the app.');
+      } catch (error) {
+        console.error('Error downloading track:', error);
+        alert('Failed to download track.');
       }
     },
     [loadAudioBuffer]
   );
+  
 
   const downloadPlaylist = useCallback(
     async (p: Playlist) => {
@@ -974,43 +973,49 @@ export function SpotifyClone() {
       try {
         await storeSetting('favoriteArtists', JSON.stringify(artists));
         setShowArtistSelection(false);
-
+  
         const fetchPromises = artists.map(async (artist) => {
-          const r = await fetch(
+          const response = await fetch(
             `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
           );
-          const d = await r.json();
-          return (d.results || []).slice(0, 5);
+          const data = await response.json();
+          return (data.results || []).slice(0, 5);
         });
+  
         const artistTracks = await Promise.all(fetchPromises);
-        const all = artistTracks.flat();
-        const shuffled = all.sort(() => Math.random() - 0.5);
-
-        setQueue(shuffled);
-        setSearchResults(shuffled);
+        const allTracks = artistTracks.flat();
+        const shuffled = allTracks.sort(() => Math.random() - 0.5);
+  
         setRecommendedTracks(shuffled);
+        await storeRecommendedTracks(shuffled); 
+  
+        setQueue(shuffled);
         await storeQueue(shuffled);
-
-
+  
+        setSearchResults(shuffled);
+  
+        // Initialize queue with recommendations if you want to auto-play
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
-          setIsPlaying(false);
+          setIsPlaying(true);
         }
+  
+        // Update "Jump Back In" or other sections as needed
         const r4 = shuffled.slice(0, 4);
         setJumpBackIn(r4);
-
+  
+        // Ensure "Liked Songs" playlist exists
         if (!playlists.some((p) => p.name === 'Liked Songs')) {
-          const newPL = {
+          const newPL: Playlist = {
             name: 'Liked Songs',
             image: '/images/liked-songs.webp',
             tracks: []
           };
           const updated = [...playlists, newPL];
           setPlaylists(updated);
-          for (const pl of updated) {
-            await storePlaylist(pl);
-          }
+          await Promise.all(updated.map((pl) => storePlaylist(pl)));
         }
+  
         handleOnboardingComplete();
       } catch (err) {
         console.log('Artist selection error:', err);
@@ -1018,7 +1023,7 @@ export function SpotifyClone() {
     },
     [playlists, handleOnboardingComplete, setIsPlaying]
   );
-
+  
 
   useEffect(() => {
     if (previousTracks.length > 0) {
@@ -1041,23 +1046,26 @@ export function SpotifyClone() {
     }
     void loadPreviousTracks();
   }, []);
-  
-  
-  
+
   useEffect(() => {
-    async function loadQueue() {
-        try {
-            const savedQueue = await getQueue();
-            if (savedQueue && savedQueue.length > 0) {
-                setQueue(savedQueue);
-                setRecommendedTracks(savedQueue); // Set recommended tracks from saved queue
-            }
-        } catch (error) {
-            console.error('Failed to load queue from IndexedDB:', error);
+    async function loadRecommendedTracks() {
+      try {
+        const savedTracks = await getRecommendedTracks();
+        if (savedTracks && savedTracks.length > 0) {
+          setRecommendedTracks(savedTracks);
+        } else {
+          console.log("No saved recommended tracks.");
+          setRecommendedTracks([]);
         }
+      } catch (err) {
+        console.error("Error loading recommended tracks:", err);
+      }
     }
-    void loadQueue();
-}, []);
+  
+    loadRecommendedTracks();
+  }, []);
+  
+  
 
 
   // RENDER
@@ -1196,83 +1204,178 @@ export function SpotifyClone() {
 
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
           {view === 'playlist' && currentPlaylist ? (
-            <section>
-              <div className="relative h-64 mb-4">
-                <img
-                  src={currentPlaylist.image || "assets/"}
-                  alt={currentPlaylist.name || "Playlist's Cover"}
-                  className="w-full h-full object-cover rounded-lg"
-                  style={{ filter: 'blur(5px) brightness(0.5)' }}
-                />
-                <div className="absolute inset-0 flex flex-col justify-end p-4">
-                  <h2 className="text-4xl font-bold mb-2">{currentPlaylist.name}</h2>
-                  <div className="flex space-x-2">
-                    <button
-                      className="bg-white text-black rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => {
-                        setQueue(currentPlaylist.tracks);
-                        setCurrentTrack(currentPlaylist.tracks[0]);
-                        setIsPlaying(true);
-                      }}
-                    >
-                      Play
-                    </button>
-                    <button
-                      className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={shuffleQueue}
-                    >
-                      <Shuffle className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => downloadPlaylist(currentPlaylist)}
-                    >
-                      {isDownloading ? (
-                        <div className="relative flex items-center">
-                          <Download
-                            className={`w-4 h-4 mr-2 ${downloadProgress === 100 ? 'text-blue-500' : ''}`}
-                          />
-                          <span>{downloadProgress}%</span>
-                        </div>
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
+          <section className="relative min-h-screen bg-gradient-to-b from-gray-900 to-black">
+          {/* Hero Section */}
+          <div className="relative h-[40vh] overflow-hidden">
+            <div className="absolute inset-0">
+              <img
+                src={currentPlaylist.image || "assets/images/defaultPlaylistImage.png"}
+                alt={currentPlaylist.name || "default playlist error alt"}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-gray-900 backdrop-blur-sm"></div>
+            </div>
+            
+            <div className="absolute bottom-0 left-0 right-0 p-8 z-10">
+              <div className="max-w-7xl mx-auto">
+                <h2 className="text-5xl font-bold mb-4 text-white tracking-tight">
+                  {currentPlaylist.name}
+                </h2>
+                
+                <div className="flex items-center space-x-4">
+                <button
+                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 
+                          text-white rounded-full px-8 py-3 text-base font-medium
+                          transition-all duration-200 hover:bg-opacity-90 shadow-lg"
+                onClick={() => {
+                  setQueue(currentPlaylist.tracks);
+                  setCurrentTrack(currentPlaylist.tracks[0]);
+                  setIsPlaying(true);
+                }}
+              >
+                <Play className="w-5 h-5" />
+                <span>Play All</span>
+              </button>
+        
+                  <button
+                    className="flex items-center space-x-2 bg-gray-800/50 hover:bg-gray-700/50 
+                               text-white rounded-full px-6 py-3 backdrop-blur-lg 
+                               transition-all duration-300"
+                    onClick={shuffleQueue}
+                  >
+                    <Shuffle className="w-5 h-5" />
+                  </button>
+        
+                  <button
+                    className="flex items-center space-x-2 bg-gray-800/50 hover:bg-gray-700/50 
+                               text-white rounded-full px-6 py-3 backdrop-blur-lg 
+                               transition-all duration-300"
+                    onClick={() => downloadPlaylist(currentPlaylist)}
+                  >
+                    {isDownloading ? (
+                      <div className="flex items-center space-x-2">
+                        <Download className={`w-5 h-5 ${downloadProgress === 100 ? 'text-green-500' : ''}`} />
+                        <span>{downloadProgress}%</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Download className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
-              <div className="space-y-2">
-                {currentPlaylist.tracks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-64">
-                    <p className="text-gray-400 mb-4">This playlist is empty.</p>
-                    <button
-                      className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-600"
-                      onClick={() => {
-                        setShowSearchInPlaylistCreation(true);
-                        setCurrentPlaylist(currentPlaylist);
-                      }}
-                    >
-                      Add Songs
-                    </button>
-                  </div>
-                ) : (
-                  currentPlaylist.tracks.map((track, idx) => (
-                    <TrackItem 
-                      key={idx} 
-                      track={track}
-                      index={idx}
-                      onTrackClick={playTrack} 
-                      addToQueue={addToQueue} 
-                      openAddToPlaylistModal={openAddToPlaylistModal} 
-                      toggleLike={toggleLike} 
-                      isLiked={isTrackLiked(track)} 
-                      onContextMenu={(e) => handleContextMenu(e, track)}
-                    />
-                  ))
-                  
+            </div>
+          </div>
+        
+          {/* Content Section */}
+          <div className="max-w-7xl mx-auto px-8 py-6">
+            {/* Search Bar */}
+            <div className="mb-8">
+              <div className="relative max-w-2xl">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Search className="w-5 h-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search for songs to add..."
+                  value={playlistSearchQuery}
+                  onChange={(e) => setPlaylistSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && playlistSearchQuery.trim()) {
+                      handlePlaylistSearch(playlistSearchQuery);
+                    }
+                  }}
+                  className="w-full pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
+                             rounded-xl border border-gray-700 focus:border-purple-500
+                             focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
+                />
+                {playlistSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setPlaylistSearchQuery('');
+                      setPlaylistSearchResults([]);
+                    }}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                  >
+                    <X className="w-5 h-5 text-gray-400 hover:text-white transition-colors" />
+                  </button>
                 )}
               </div>
-            </section>
+        
+              {/* Search Results */}
+              {playlistSearchResults.length > 0 && (
+                <div className="mt-4 max-w-2xl bg-gray-800/50 backdrop-blur-lg rounded-xl 
+                              border border-gray-700 overflow-hidden">
+                  {playlistSearchResults.map((track) => (
+                    <div 
+                      key={track.id} 
+                      className="flex items-center justify-between p-4 hover:bg-gray-700/50 
+                                 transition-colors duration-200"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <img
+                          src={track.album.cover_small || 'assets/default-album.jpg'}
+                          alt={track.title}
+                          className="w-12 h-12 rounded-lg object-cover"
+                        />
+                        <div>
+                          <p className="font-medium text-white">{track.title}</p>
+                          <p className="text-sm text-gray-400">{track.artist.name}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => addTrackToPlaylist(track)}
+                        className="flex items-center space-x-2 bg-green-500/20 text-green-400
+                                   hover:bg-green-500 hover:text-white px-4 py-2 rounded-lg
+                                   transition-all duration-300"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+        
+            {/* Tracks List */}
+            <div className="space-y-2">
+              {currentPlaylist.tracks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <Music className="w-16 h-16 text-gray-600 mb-4" />
+                  <p className="text-gray-400 mb-4">This playlist is empty</p>
+                  <button
+                    className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700
+                               text-white rounded-full px-6 py-3 font-medium
+                               transition-all duration-300"
+                    onClick={() => {
+                      setShowSearchInPlaylistCreation(true);
+                      setCurrentPlaylist(currentPlaylist);
+                    }}
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Songs</span>
+                  </button>
+                </div>
+              ) : (
+                currentPlaylist.tracks.map((track, idx) => (
+                  <TrackItem 
+                    key={idx} 
+                    track={track}
+                    index={idx}
+                    onTrackClick={playTrack} 
+                    addToQueue={addToQueue} 
+                    openAddToPlaylistModal={openAddToPlaylistModal} 
+                    toggleLike={toggleLike} 
+                    isLiked={isTrackLiked(track)} 
+                    onContextMenu={(e) => handleContextMenu(e, track)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </section>
           ) : searchQuery ? (
             <section>
               <h2 className="text-2xl font-bold mb-4">Search Results</h2>
@@ -1358,7 +1461,7 @@ export function SpotifyClone() {
                             e.stopPropagation();
                             const opts: ContextMenuOption[] = [
                               {
-                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist', // Dynamic label
+                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist',
                                 action: () => {
                                   const updatedPlaylists = playlists.map((pl) =>
                                     pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
@@ -1427,88 +1530,139 @@ export function SpotifyClone() {
                 </div>
               </section>
 
-              <section className="mb-6">
-                {jumpBackIn.length > 0 && <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>}
-                {jumpBackIn.length > 0 ? (
-                  <div className="flex space-x-4 overflow-x-auto custom-scrollbar no-scrollbar">
-                    {jumpBackIn.map((track, idx) => (
-                      <motion.div
+              <section className="px-6 mb-8">
+                {/* Dynamic section header based on content */}
+                <h2 className="text-2xl font-bold mb-4">
+                  {jumpBackIn.length > 0 ? 'Jump Back In' : 'Suggested for you'}
+                </h2>
+
+                {/* Track grid container */}
+                <div className="relative">
+                  <div className={cn(
+                    "flex gap-4",
+                    "overflow-x-auto",
+                    "snap-x snap-mandatory",
+                    "pb-4",
+                    "no-scrollbar",
+                    // Remove webkit tap highlight on mobile
+                    "-webkit-tap-highlight-color-transparent"
+                  )}>
+                    {/* Render either Jump Back In or Suggested tracks */}
+                    {(jumpBackIn.length > 0 ? jumpBackIn : searchResults.slice(0, 5)).map((track, idx) => (
+                      <div
                         key={idx}
-                        className="flex-shrink-0 w-40"
-                        drag="x"
-                        dragConstraints={{ left: -100, right: 100 }}
-                        onDragEnd={(e, info) => {
-                          if (info.offset.x < -80) {
-                            playTrack(track);
-                          }
-                        }}
-                        whileTap={{ scale: 0.95 }}
+                        className={cn(
+                          "flex-shrink-0",
+                          "w-[180px]",
+                          "snap-start",
+                          "group relative",
+                          "transition-transform duration-200 ease-out",
+                          "hover:scale-[1.02]",
+                          // Prevent text selection
+                          "select-none"
+                        )}
                       >
-                        <div className="relative">
+                        {/* Album Art Container */}
+                        <div className="relative aspect-square mb-3">
                           <img
-                            src={track.album.cover_medium || 'assets/'}
-                            alt={track.title || "bruh"}
-                            className="w-40 h-40 object-cover rounded-lg mb-2"
+                            src={track.album.cover_medium || 'assets/default-album.jpg'}
+                            alt={track.title || "Album Cover"}
+                            className={cn(
+                              "w-full h-full",
+                              "object-cover rounded-xl",
+                              "shadow-lg",
+                              // Smooth image loading
+                              "transition-opacity duration-200",
+                              "bg-gray-900"
+                            )}
+                            draggable={false}
+                            loading="lazy"
                           />
-                          <button
-                            className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-                            onClick={() => playTrack(track)}
-                          >
-                            <Play className="w-12 h-12 text-white" />
-                          </button>
-                        </div>
-                        <p className="font-medium text-sm text-center">{track.title}</p>
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <div>
-                    <h2 className="text-2xl font-bold mb-4">Suggested for you</h2>
-                    <div className="flex space-x-4 overflow-x-auto custom-scrollbar">
-                      {searchResults.slice(0, 5).map((track, idx) => (
-                        <div key={idx} className="flex-shrink-0 w-40">
-                          <div className="relative">
-                            <img
-                              src={track.album.cover_medium || 'assets/'}
-                              alt={track.title || "nruh"}
-                              className="w-40 h-40 object-cover rounded-lg mb-2"
-                            />
+
+                          {/* Play Button Overlay */}
+                          <div className={cn(
+                            "absolute inset-0",
+                            "rounded-xl",
+                            "flex items-center justify-center",
+                            "bg-black/40",
+                            "opacity-0 group-hover:opacity-100",
+                            "transition-all duration-200"
+                          )}>
                             <button
-                              className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
                               onClick={() => playTrack(track)}
+                              className={cn(
+                                "p-3 rounded-full",
+                                "bg-green-500",
+                                "hover:bg-green-400",
+                                "hover:scale-105",
+                                "transform",
+                                "transition-all duration-200",
+                                "shadow-xl"
+                              )}
                             >
-                              <Play className="w-12 h-12 text-white" />
+                              <Play className="w-6 h-6 text-white" />
                             </button>
                           </div>
-                          <p className="font-medium text-sm">{track.title}</p>
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Track Info */}
+                        <div className="space-y-1 px-1">
+                          <p className={cn(
+                            "font-medium text-sm",
+                            "line-clamp-1",
+                            "text-gray-100"
+                          )}>
+                            {track.title}
+                          </p>
+                          <p className={cn(
+                            "text-sm",
+                            "text-gray-400",
+                            "line-clamp-1"
+                          )}>
+                            {track.artist?.name}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </section>
-              <section className="flex-1 overflow-y-auto custom-scrollbar pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
-                <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {recommendedTracks.length > 0 ? (
-                    recommendedTracks.map((track, idx) => (
-                      <TrackItem
-                        key={track.id}
-                        track={track}
-                        index={idx}
-                        onTrackClick={playTrack}
-                        addToQueue={addToQueue}
-                        openAddToPlaylistModal={openAddToPlaylistModal}
-                        toggleLike={toggleLike}
-                        isLiked={isTrackLiked(track)}
-                        onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
-                      />
-                    ))
-                  ) : (
-                    <p className="text-gray-400">No recommendations available.</p>
-                  )}
+
+                  {/* Scroll Fade Gradients */}
+                  <div className={cn(
+                    "absolute left-0 top-0 bottom-4",
+                    "w-12",
+                    "bg-gradient-to-r from-black to-transparent",
+                    "pointer-events-none"
+                  )} />
+                  <div className={cn(
+                    "absolute right-0 top-0 bottom-4",
+                    "w-12",
+                    "bg-gradient-to-l from-black to-transparent",
+                    "pointer-events-none"
+                  )} />
                 </div>
               </section>
+              <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
+              <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {recommendedTracks.length > 0 ? (
+                  recommendedTracks.map((track, idx) => (
+                    <TrackItem
+                      key={track.id}
+                      track={track}
+                      index={idx}
+                      onTrackClick={playTrack}
+                      addToQueue={addToQueue}
+                      openAddToPlaylistModal={openAddToPlaylistModal}
+                      toggleLike={toggleLike}
+                      isLiked={isTrackLiked(track)}
+                      onContextMenu={(e) => handleContextMenu(e, track)}
+                    />
+                  ))
+                ) : (
+                  <p className="text-gray-400">No recommendations available.</p>
+                )}
+              </div>
+            </section>
 
 
             </>
@@ -1766,104 +1920,211 @@ export function SpotifyClone() {
 
         {/* Collapsible sidebar if wanted: an example toggle or just show it */}
         <aside
+        className={cn(
+          // Base styles
+          "relative h-full",
+          "bg-gradient-to-b from-gray-900 to-black",
+          "transition-all duration-300 ease-in-out",
+          // Width states
+          sidebarCollapsed ? "w-20" : "w-72",
+          // Scrolling behavior
+          "overflow-y-auto overflow-x-hidden",
+          // Scrollbar styling
+          "scrollbar-thin scrollbar-track-transparent",
+          "scrollbar-thumb-gray-500 hover:scrollbar-thumb-gray-400",
+          // Rounded corners
+          "rounded-r-xl"
+        )}
+      >
+        {/* Collapse Toggle Button */}
+        <button 
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className={cn(
-            'bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 overflow-y-auto custom-scrollbar transition-all duration-300',
-            sidebarCollapsed ? 'w-20' : 'w-64'
+            "absolute -right-1 top-6",
+            "w-6 h-12",
+            "flex items-center justify-center",
+            "bg-gray-800 rounded-full",
+            "border border-gray-700",
+            "hover:bg-gray-700",
+            "transition-all duration-200",
+            "shadow-lg hover:shadow-xl",
+            "z-50"
           )}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <button 
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="p-2 rounded-full hover:bg-white/10 transition-colors duration-200"
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="w-5 h-5 text-white" />
-            ) : (
-              <ChevronLeft className="w-5 h-5 text-white" />
-            )}
-          </button>
-          <nav className="space-y-4">
-            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3 space-y-2">
+          {sidebarCollapsed ? (
+            <ChevronRight className="w-4 h-4 text-gray-300" />
+          ) : (
+            <ChevronLeft className="w-4 h-4 text-gray-300" />
+          )}
+        </button>
+
+        <nav className="p-4 space-y-6">
+          {/* Main Navigation */}
+          <div className="space-y-2">
+            {[
+              { icon: Home, label: 'Home', action: () => setView('home') },
+              { icon: Search, label: 'Search', action: () => setView('search') },
+            ].map((item) => (
               <button
+                key={item.label}
+                onClick={item.action}
                 className={cn(
-                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-                  sidebarCollapsed && "justify-center"
+                  "w-full group relative",
+                  "flex items-center",
+                  "px-3 py-2.5 rounded-lg",
+                  "hover:bg-white/10",
+                  "transition-all duration-200",
+                  sidebarCollapsed ? "justify-center" : "justify-start"
                 )}
-                onClick={() => setView('home')}
               >
-                <Home className="w-6 h-6" />
-                {!sidebarCollapsed && <span className="ml-3">Home</span>}
-              </button>
-              <button
-                className={cn(
-                  "flex items-center text-white w-full py-2 px-3 rounded-lg transition-colors duration-200",
-                  sidebarCollapsed && "justify-center"
+                <item.icon className="w-5 h-5 text-gray-300 group-hover:text-white" />
+                
+                {sidebarCollapsed ? (
+                  <div className={cn(
+                    "absolute left-full ml-2",
+                    "px-2 py-1",
+                    "bg-gray-800 rounded-md",
+                    "opacity-0 group-hover:opacity-100",
+                    "pointer-events-none",
+                    "transition-opacity duration-200",
+                    "z-[9999]" // Set maximum z-index value here
+                  )}>
+                    <span className="text-sm text-white whitespace-nowrap">
+                      {item.label}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="ml-3 text-sm font-medium text-gray-300 group-hover:text-white">
+                    {item.label}
+                  </span>
                 )}
-                onClick={() => setView('search')}
-              >
-                <Search className="w-6 h-6" />
-                {!sidebarCollapsed && <span className="ml-3">Search</span>}
               </button>
-            </div>
-            <div className="bg-gray-800 bg-opacity-40 rounded-lg p-3">
-              <div className={cn(
-                "flex items-center mb-2 text-white",
-                sidebarCollapsed ? "justify-center" : "justify-between"
-              )}>
-                <Library className="w-6 h-6" />
+            ))}
+          </div>
+
+
+          <div className="h-px bg-white/10" />
+
+          {/* Library Section */}
+          <div className="space-y-4">
+            <div className={cn(
+              "flex items-center",
+              "px-3 py-2",
+              sidebarCollapsed ? "justify-center" : "justify-between"
+            )}>
+              <div className="flex items-center">
+                <Library className="w-5 h-5 text-gray-300" />
                 {!sidebarCollapsed && (
-                  <>
-                    <span className="ml-3">Your Library</span>
-                    <button
-                      className="p-2 rounded-full hover:bg-white/10"
-                      onClick={() => setShowCreatePlaylist(true)}
-                    >
-                      <Plus className="w-5 h-5 text-white" />
-                    </button>
-                  </>
+                  <span className="ml-3 text-sm font-medium text-gray-300">
+                    Your Library
+                  </span>
                 )}
               </div>
-              <div className="space-y-2">
-                {playlists.map((pl) => (
-                  <div
-                    key={pl.name}
-                    className={cn(
-                      'flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200',
-                      pl.pinned && 'border-2 border-blue-900',
-                      sidebarCollapsed && "justify-center"
-                    )}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', pl.name);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const name = e.dataTransfer.getData('text/plain');
-                      const di = playlists.findIndex((p) => p.name === name);
-                      const ti = playlists.findIndex((p) => p.name === pl.name);
-                      const up = [...playlists];
-                      const [dragPL] = up.splice(di, 1);
-                      up.splice(ti, 0, dragPL);
-                      setPlaylists(up);
-                      void Promise.all(up.map((xx) => storePlaylist(xx)));
-                    }}
-                    onClick={() => openPlaylist(pl)}
-                    style={{ userSelect: 'none' }}
-                  >
-                    <img src={pl.image || "placeholder"} alt={pl.name || 'Playlist'} className="w-10 h-10 rounded-md" />
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="font-medium text-sm">{pl.name}</span>
-                        {pl.downloaded && <Download className="w-4 h-4 text-green-500 ml-2" />}
-                      </>
+              {!sidebarCollapsed && (
+                <button
+                  onClick={() => setShowCreatePlaylist(true)}
+                  className={cn(
+                    "p-1.5 rounded-full",
+                    "hover:bg-white/10",
+                    "transition-colors duration-200"
+                  )}
+                >
+                  <Plus className="w-4 h-4 text-gray-300 hover:text-white" />
+                </button>
+              )}
+            </div>
+
+
+            {/* Playlists */}
+            <div className="space-y-1">
+              {playlists.map((pl) => (
+                <div
+                  key={pl.name}
+                  className={cn(
+                    "group relative",
+                    "flex items-center gap-3",
+                    "px-3 py-2 rounded-lg",
+                    "cursor-pointer",
+                    "transition-all duration-200",
+                    pl.pinned && "bg-white/5",
+                    sidebarCollapsed && "mr-5" // Adjust alignment for collapsed sidebar
+                  )}
+                  onClick={() => openPlaylist(pl)}
+                >
+                  {/* Playlist Image */}
+                  <div className="relative flex-shrink-0">
+                    <img 
+                      src={pl.image || "placeholder"} 
+                      alt={pl.name} 
+                      className={cn(
+                        "rounded-md object-cover",
+                        "shadow-md",
+                        sidebarCollapsed ? "w-10 h-10" : "w-12 h-12"
+                      )}
+                    />
+                    {pl.downloaded && (
+                      <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-0.5">
+                        <Download className="w-2.5 h-2.5 text-white" />
+                      </div>
                     )}
                   </div>
-                ))}
-              </div>
+
+                  {!sidebarCollapsed && (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-gray-200 truncate">
+                          {pl.name}
+                        </h3>
+                        <p className="text-xs text-gray-400 truncate">
+                          Playlist
+                        </p>
+                      </div>
+
+                      <button
+                        className={cn(
+                          "opacity-0 group-hover:opacity-100",
+                          "p-1.5 rounded-full",
+                          "transition-all duration-200"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const options = [
+                            {
+                              label: pl.pinned ? "Unpin Playlist" : "Pin Playlist",
+                              action: () => {
+                                const updated = playlists.map((p) =>
+                                  p.name === pl.name ? { ...p, pinned: !p.pinned } : p
+                                );
+                                setPlaylists(updated);
+                                void Promise.all(updated.map(storePlaylist));
+                              },
+                            },
+                            {
+                              label: "Delete Playlist",
+                              action: () => {
+                                void deletePlaylistByName(pl.name)
+                                  .then(setPlaylists);
+                              },
+                            },
+                          ];
+                          setContextMenuPosition({ x: e.clientX, y: e.clientY });
+                          setContextMenuOptions(options);
+                          setShowContextMenu(true);
+                        }}
+                      >
+                        <MoreVertical className="w-4 h-4 text-gray-400 hover:text-white" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
-          </nav>
-        </aside>
+
+          </div>
+        </nav>
+      </aside>
+  
 
         <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-gradient-to-b from-gray-900 to-black rounded-lg p-6">
           <header className="flex justify-between items-center mb-8">
@@ -1946,6 +2207,14 @@ export function SpotifyClone() {
                       Profile
                     </button>
                     <button
+                      className="flex items-center px-6 py-3 text-lg text-gray-300 hover:bg-gray-700 w-full text-left"
+                      onClick={() => setShowSpotifyToDeezerModal(true)}
+                    >
+                      <UploadCloud className="w-5 h-5 mr-3" />
+                      Migrate Playlists
+                    </button>
+
+                    <button
                       className="flex items-center px-6 py-3 text-lg text-gray-300 hover:bg-gray-700 w-full text-left rounded-b-lg"
                       onClick={() => setShowUserMenu(false)}
                     >
@@ -1958,19 +2227,95 @@ export function SpotifyClone() {
             </div>
           </header>
 
-          {view === 'settings' ? (
-            <section>
-              <h2 className="text-2xl font-bold mb-4">Settings</h2>
-              <div className="space-y-4">
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Account</h3>
-                  <p className="text-gray-400">Manage your account settings and e-mail preferences.</p>
+          {showSpotifyToDeezerModal && (
+            <div 
+              className="fixed inset-0 z-[99999] overflow-y-auto"
+              onClick={() => setShowSpotifyToDeezerModal(false)}
+            >
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
+              
+              <div className="flex min-h-screen items-center justify-center p-4">
+                <div 
+                  className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Decorative elements */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl" />
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
+                  
+                  {/* Header */}
+                  <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+                      Migrate Playlists to Deezer
+                    </h2>
+                    <button
+                      className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
+                      onClick={() => setShowSpotifyToDeezerModal(false)}
+                    >
+                      <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar">
+                    <SpotifyToDeezer />
+                  </div>
                 </div>
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Playback</h3>
-                  <p className="text-gray-400">Customize your playback settings.</p>
-                  <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Default Volume</label>
+              </div>
+            </div>
+          )}
+
+
+          {view === 'settings' ? (
+            <section className="max-w-4xl mx-auto px-6 py-8">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-3xl font-bold text-white">Settings</h2>
+              <div className="flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-4 py-2 rounded-full">
+                <User className="w-4 h-4" />
+                <span className="text-sm font-medium">Pro Account</span>
+              </div>
+            </div>
+      
+            <div className="space-y-6">
+              {/* Account Settings */}
+              <div className="group bg-gray-800/40 hover:bg-gray-800/60 rounded-xl p-6 transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-blue-500/10 text-blue-400 rounded-lg">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-white mb-1">Account</h3>
+                      <p className="text-gray-400">Manage your account settings and preferences</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                </div>
+              </div>
+      
+              {/* Playback Settings */}
+              <div className="bg-gray-800/40 rounded-xl p-6">
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="p-3 bg-green-500/10 text-green-400 rounded-lg">
+                    <Music className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white mb-1">Playback</h3>
+                    <p className="text-gray-400">Customize your listening experience</p>
+                  </div>
+                </div>
+      
+                <div className="space-y-6">
+                  {/* Volume Control */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-300">Default Volume</label>
+                      <div className="flex items-center space-x-2">
+                        <Volume2 className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-400">{Math.round(volume * 100)}%</span>
+                      </div>
+                    </div>
                     <input
                       type="range"
                       min="0"
@@ -1978,111 +2323,283 @@ export function SpotifyClone() {
                       step="0.01"
                       value={volume}
                       onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-gray-700 rounded-full appearance-none cursor-pointer"
+                      className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer
+                               focus:outline-none focus:ring-2 focus:ring-purple-500/50
+                               [&::-webkit-slider-thumb]:appearance-none
+                               [&::-webkit-slider-thumb]:w-4
+                               [&::-webkit-slider-thumb]:h-4
+                               [&::-webkit-slider-thumb]:rounded-full
+                               [&::-webkit-slider-thumb]:bg-purple-500
+                               [&::-webkit-slider-thumb]:cursor-pointer
+                               [&::-webkit-slider-thumb]:hover:bg-purple-400
+                               [&::-webkit-slider-thumb]:transition-colors"
                     />
                   </div>
-                  <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Default Music Quality</label>
-                    <select
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      onChange={(e) => {
-                        void storeSetting('musicQuality', e.target.value);
-                        setAudioQuality(e.target.value as any);
-                      }}
-                      value={audioQuality}
-                    >
-                      <option value="MAX">MAX</option>
-                      <option value="HIGH">HIGH</option>
-                      <option value="NORMAL">NORMAL</option>
-                      <option value="DATA_SAVER">DATA_SAVER</option>
-                    </select>
+      
+                  {/* Audio Quality */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium text-gray-300">Audio Quality</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {['MAX', 'HIGH', 'NORMAL', 'DATA_SAVER'].map((quality) => (
+                        <button
+                        key={quality}
+                        onClick={() => {
+                          void storeSetting('musicQuality', quality as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
+                          setAudioQuality(quality as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
+                        }}
+                        className={`relative p-3 rounded-lg border-2 transition-all duration-200
+                                  ${audioQuality === quality 
+                                    ? 'border-purple-500 bg-purple-500/10 text-white' 
+                                    : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'}`}
+                      >     
+                          <span className="text-sm font-medium">{quality.replace('_', ' ')}</span>
+                          {audioQuality === quality && (
+                            <div className="absolute top-1 right-1">
+                              <Check className="w-3 h-3 text-purple-400" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Data Saver</h3>
-                  <p className="text-gray-400">
-                    Automatically reduce streaming quality when on cellular or if user preference is
-                    set. Currently: {audioQuality}
-                  </p>
-                </div>
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Privacy</h3>
-                  <p className="text-gray-400">Control your privacy settings and data usage.</p>
-                </div>
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Notifications</h3>
-                  <p className="text-gray-400">Set your notification preferences.</p>
-                </div>
-                <div className="bg-gray-800 bg-opacity-40 rounded-lg p-4">
-                  <h3 className="text-xl font-semibold mb-2">Beta Features</h3>
-                  <p className="text-gray-400">Toggle beta features on or off.</p>
+              </div>
+      
+              {/* Data Saver */}
+              <div className="bg-gray-800/40 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-yellow-500/10 text-yellow-400 rounded-lg">
+                      <Wifi className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-white mb-1">Data Saver</h3>
+                      <p className="text-gray-400">Currently set to: {audioQuality}</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" />
+                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 
+                                  peer-focus:ring-purple-500/25 rounded-full peer 
+                                  peer-checked:after:translate-x-full peer-checked:after:border-white 
+                                  after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
+                                  after:bg-white after:rounded-full after:h-5 after:w-5 
+                                  after:transition-all peer-checked:bg-purple-500"></div>
+                  </label>
                 </div>
               </div>
-            </section>
+      
+              {/* Quick Access Settings */}
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { icon: Shield, title: 'Privacy', desc: 'Control your privacy settings', color: 'rose' },
+                  { icon: Bell, title: 'Notifications', desc: 'Set notification preferences', color: 'orange' },
+                  { icon: Beaker, title: 'Beta Features', desc: 'Try experimental features', color: 'emerald' }
+                ].map(({ icon: Icon, title, desc, color }) => (
+                  <div 
+                    key={title}
+                    className="group bg-gray-800/40 hover:bg-gray-800/60 rounded-xl p-6 
+                             transition-all duration-200 cursor-pointer"
+                  >
+                    <div className={`p-3 bg-${color}-500/10 text-${color}-400 rounded-lg 
+                                  w-fit mb-4 group-hover:scale-110 transition-transform`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
+                    <p className="text-sm text-gray-400">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
           ) : view === 'playlist' && currentPlaylist ? (
-            <section>
-              <div className="relative h-64 mb-4">
+            <section className="relative min-h-screen bg-gradient-to-b from-gray-900 to-black">
+            {/* Enhanced Hero Section */}
+            <div className="relative h-[50vh] overflow-hidden">
+              <div className="absolute inset-0">
                 <img
-                  src={currentPlaylist.image || 'https://via.placeholder.com/150'}
-                  alt={currentPlaylist.name || 'Playlist'}
-                  className="w-full h-full object-cover rounded-lg"
-                  style={{ filter: 'blur(5px) brightness(0.5)' }}
+                  src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                  alt={currentPlaylist.name || "Playlist cover"}
+                  className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 flex items-end p-4">
-                  <div className="flex-grow">
-                    <h2 className="text-4xl font-bold mb-2">{currentPlaylist.name}</h2>
-                    <p className="text-sm text-gray-300">{currentPlaylist.tracks.length} tracks</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      className="bg-white text-black rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => {
-                        setQueue(currentPlaylist.tracks);
-                        setCurrentTrack(currentPlaylist.tracks[0]);
-                        setIsPlaying(true);
-                      }}
-                    >
-                      Play
-                    </button>
-                    <button className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold" onClick={shuffleQueue}>
-                      <Shuffle className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => downloadPlaylist(currentPlaylist)}
-                    >
-                      {isDownloading ? (
-                        <div className="relative">
-                          <Download className="w-4 h-4" />
-                          <div
-                            className="absolute inset-0 rounded-full border-2 border-green-500"
-                            style={{ clipPath: `circle(${downloadProgress}% at 50% 50%)` }}
-                          />
-                        </div>
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
-                    </button>
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gray-900/80 to-gray-900"></div>
+              </div>
+              
+              <div className="absolute bottom-0 left-0 right-0 p-12 z-10">
+                <div className="max-w-7xl mx-auto">
+                  <div className="flex items-end space-x-6">
+                    <img
+                      src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                      alt={currentPlaylist.name || "Playlist cover"}
+                      className="w-48 h-48 object-cover rounded-xl shadow-2xl"
+                    />
+                    <div className="flex-1">
+                      <span className="text-white/80 text-lg font-medium mb-2">PLAYLIST</span>
+                      <h2 className="text-6xl font-bold mb-4 text-white tracking-tight">
+                        {currentPlaylist.name}
+                      </h2>
+                      <p className="text-white/80 mb-6">
+                        {currentPlaylist.tracks.length} tracks
+                      </p>
+                      
+                      <div className="flex items-center space-x-4">
+                        <button
+                          className="flex items-center space-x-3 bg-purple-600 hover:bg-purple-700 
+                                    text-white rounded-full px-8 py-4 text-base font-medium
+                                    transition-all duration-200 hover:scale-105 shadow-lg"
+                          onClick={() => {
+                            setQueue(currentPlaylist.tracks);
+                            setCurrentTrack(currentPlaylist.tracks[0]);
+                            setIsPlaying(true);
+                          }}
+                        >
+                          <Play className="w-6 h-6" />
+                          <span>Play All</span>
+                        </button>
+                  
+                        <button
+                          className="flex items-center space-x-3 bg-gray-800/50 hover:bg-gray-700/50 
+                                    text-white rounded-full px-6 py-4 backdrop-blur-lg 
+                                    transition-all duration-300 hover:scale-105"
+                          onClick={shuffleQueue}
+                        >
+                          <Shuffle className="w-5 h-5" />
+                          <span>Shuffle</span>
+                        </button>
+                  
+                        <button
+                          className="flex items-center space-x-3 bg-gray-800/50 hover:bg-gray-700/50 
+                                    text-white rounded-full px-6 py-4 backdrop-blur-lg 
+                                    transition-all duration-300 hover:scale-105"
+                          onClick={() => downloadPlaylist(currentPlaylist)}
+                        >
+                          {isDownloading ? (
+                            <div className="flex items-center space-x-2">
+                              <Download className={`w-5 h-5 ${downloadProgress === 100 ? 'text-green-500' : ''}`} />
+                              <span>{downloadProgress}%</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Download className="w-5 h-5" />
+                              <span>Download</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="space-y-2">
-              {currentPlaylist.tracks.map((track, idx) => (
-                <TrackItem 
-                  key={track.id} 
-                  track={track}
-                  index={idx}
-                  onTrackClick={playTrack} 
-                  addToQueue={addToQueue} 
-                  openAddToPlaylistModal={openAddToPlaylistModal} 
-                  toggleLike={toggleLike} 
-                  isLiked={isTrackLiked(track)} 
-                  onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
-                />
-              ))}
-
+            </div>
+          
+            {/* Enhanced Content Section */}
+            <div className="max-w-7xl mx-auto px-12 py-8">
+              {/* Search Bar */}
+              <div className="mb-8">
+                <div className="relative max-w-2xl">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Search className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search for songs to add..."
+                    value={playlistSearchQuery}
+                    onChange={(e) => setPlaylistSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && playlistSearchQuery.trim()) {
+                        handlePlaylistSearch(playlistSearchQuery);
+                      }
+                    }}
+                    className="w-full pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
+                               rounded-xl border border-gray-700 focus:border-purple-500
+                               focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
+                  />
+                  {playlistSearchQuery && (
+                    <button
+                      onClick={() => {
+                        setPlaylistSearchQuery('');
+                        setPlaylistSearchResults([]);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                    >
+                      <X className="w-5 h-5 text-gray-400 hover:text-white transition-colors" />
+                    </button>
+                  )}
+                </div>
+          
+                {/* Search Results */}
+                {playlistSearchResults.length > 0 && (
+                  <div className="mt-4 max-w-2xl bg-gray-800/50 backdrop-blur-lg rounded-xl 
+                                border border-gray-700 overflow-hidden shadow-xl">
+                    {playlistSearchResults.map((track) => (
+                      <div 
+                        key={track.id} 
+                        className="flex items-center justify-between p-4 hover:bg-gray-700/50 
+                                   transition-colors duration-200"
+                      >
+                        <div className="flex items-center space-x-4">
+                          <img
+                            src={track.album.cover_small || 'assets/default-album.jpg'}
+                            alt={track.title}
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                          <div>
+                            <p className="font-medium text-white">{track.title}</p>
+                            <p className="text-sm text-gray-400">{track.artist.name}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => addTrackToPlaylist(track)}
+                          className="flex items-center space-x-2 bg-green-500/20 text-green-400
+                                     hover:bg-green-500 hover:text-white px-4 py-2 rounded-lg
+                                     transition-all duration-300"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
+          
+              {/* Tracks List */}
+              <div className="space-y-2">
+                {currentPlaylist.tracks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <Music className="w-16 h-16 text-gray-600 mb-4" />
+                    <p className="text-gray-400 mb-4">This playlist is empty</p>
+                    <button
+                      className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700
+                                 text-white rounded-full px-6 py-3 font-medium
+                                 transition-all duration-300 hover:scale-105"
+                      onClick={() => {
+                        setShowSearchInPlaylistCreation(true);
+                        setCurrentPlaylist(currentPlaylist);
+                      }}
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span>Add Songs</span>
+                    </button>
+                  </div>
+                ) : (
+                  currentPlaylist.tracks.map((track, idx) => (
+                    <TrackItem 
+                      key={idx} 
+                      track={track}
+                      index={idx}
+                      onTrackClick={playTrack} 
+                      addToQueue={addToQueue} 
+                      openAddToPlaylistModal={openAddToPlaylistModal} 
+                      toggleLike={toggleLike} 
+                      isLiked={isTrackLiked(track)} 
+                      onContextMenu={(e) => handleContextMenu(e, track)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
           ) : view === 'search' ? (
             <section className="min-h-screen bg-transparent backdrop-blur-sm px-4 py-6">
               <div className="max-w-7xl mx-auto flex flex-col gap-8">
@@ -2243,50 +2760,80 @@ export function SpotifyClone() {
               )}
               <section className="mb-8">
                 <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>
-                <div className="grid grid-cols-4 gap-4">
+                <div className={cn(
+                  "grid gap-4",
+                  "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                )}>
                   {jumpBackIn.map((track, i) => (
-                    <div key={i}>
-                      <div className="relative">
+                    <div 
+                      key={i}
+                      className="group relative flex flex-col"
+                    >
+                      <div className="relative aspect-square w-full overflow-hidden rounded-xl">
                         <img
                           src={track.album.cover_medium || ''}
                           alt={track.title || ''}
-                          className="w-30 aspect-square object-cover rounded-lg mb-2"
+                          className={cn(
+                            "w-full h-full object-cover",
+                            "transform transition-transform duration-300",
+                            "group-hover:scale-105"
+                          )}
                         />
+                        <div className={cn(
+                          "absolute inset-0",
+                          "bg-black/40 opacity-0 group-hover:opacity-100",
+                          "transition-opacity duration-200"
+                        )} />
                         <button
-                          className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          className={cn(
+                            "absolute bottom-2 right-2",
+                            "w-10 h-10 rounded-full",
+                            "bg-green-500 text-white",
+                            "flex items-center justify-center",
+                            "transform translate-y-4 opacity-0",
+                            "group-hover:translate-y-0 group-hover:opacity-100",
+                            "transition-all duration-200",
+                            "hover:scale-105 hover:bg-green-400"
+                          )}
                           onClick={() => playTrack(track)}
                         >
-                          <Play className="w-12 h-12 text-white" />
+                          <Play className="w-5 h-5" />
                         </button>
                       </div>
-                      <p className="font-medium">{track.title}</p>
-                      <p className="text-sm text-gray-400">{track.artist.name}</p>
+                      <div className="mt-3 space-y-1">
+                        <p className="font-medium text-sm line-clamp-1">{track.title}</p>
+                        <p className="text-sm text-gray-400 line-clamp-1">
+                          {track.artist.name}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
               </section>
+              {/* Recommended for you */}
               <section className="flex-1 overflow-y-auto custom-scrollbar pb-32">
-                <h2 className="text-2xl font-bold mb-4">Recommended</h2>
+                <h2 className="text-2xl font-bold mb-4">Recommended for you</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {recommendedTracks.length > 0 ? (
-                        recommendedTracks.map((track, idx) => (
-                            <TrackItem
-                                key={track.id}
-                                track={track}
-                                index={idx}
-                                onTrackClick={playTrack}
-                                addToQueue={addToQueue}
-                                openAddToPlaylistModal={openAddToPlaylistModal} 
-                                toggleLike={toggleLike}
-                                isLiked={isTrackLiked(track)}
-                                onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
-                            />
-                        ))
-                    ) : (
-                        <p className="text-gray-400">No recommendations available.</p>
-                    )}
+                  {recommendedTracks.length > 0 ? (
+                    recommendedTracks.map((track, idx) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        index={idx}
+                        onTrackClick={playTrack}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={openAddToPlaylistModal}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No recommendations available.</p>
+                  )}
                 </div>
-            </section>
+              </section>
+
             </>
           )}
         </main>
@@ -2388,6 +2935,7 @@ export function SpotifyClone() {
               audioQuality={audioQuality}
               onCycleAudioQuality={onCycleAudioQuality}
               listenCount={listenCount}
+              downloadTrack={downloadTrack}
             />
           </footer>
         ) : (
@@ -2534,6 +3082,7 @@ export function SpotifyClone() {
         </div>
       )}
 
+
       {/* Add songs after creation */}
       {showSearchInPlaylistCreation && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
@@ -2592,159 +3141,5 @@ export function SpotifyClone() {
         </div>
       )}
     </div>
-  );
-}
-
-// Context Menu
-function CustomContextMenu({ x, y, onClose, options }: CustomContextMenuProps) {
-  return (
-    <div
-      className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-[999999]"
-      style={{ top: y, left: x }}
-      onMouseLeave={onClose}
-    >
-      {options.map((opt, i) => (
-        <button
-          key={i}
-          className="block w-full text-left px-4 py-2 hover:bg-gray-700 text-white"
-          onClick={() => {
-            opt.action();
-            onClose();
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-
-function TrackItem({
-  track,
-  showArtist = true,
-  inPlaylistCreation = false,
-  onTrackClick,
-  addToQueue,
-  openAddToPlaylistModal,
-  toggleLike,
-  isLiked,
-  index = 0,
-  isPrevious = false,
-  onContextMenu,
-}: TrackItemProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleClick = (evt: React.MouseEvent) => {
-    if (!inPlaylistCreation && onTrackClick) {
-      onTrackClick(track, index);
-    }
-  };
-
-  const trackClasses = cn(
-    'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
-    'hover:bg-gray-700/40 transition-colors duration-200',
-    inPlaylistCreation ? 'selectable' : 'cursor-pointer',
-    isPrevious && 'opacity-50'
-  );
-
-  const ActionButtons = () => (
-    <div className="flex items-center space-x-2 transition-all duration-200">
-      {addToQueue && (
-        <ActionButton
-          onClick={() => addToQueue(track)}
-          icon={<Plus className="w-4 h-4" />}
-        />
-      )}
-      {openAddToPlaylistModal && (
-        <ActionButton
-          onClick={() => {
-            console.log("Library icon clicked for track:", track);
-            openAddToPlaylistModal(track);
-          }}
-          icon={<Library className="w-4 h-4" />}
-        />
-      )}
-      {toggleLike && (
-        <ActionButton
-          onClick={() => toggleLike(track)}
-          icon={
-            <Heart
-              className={`w-4 h-4 transition-colors ${
-                isLiked ? 'fill-green-500 text-green-500' : 'text-white'
-              }`}
-            />
-          }
-        />
-      )}
-    </div>
-  );
-
-  return (
-    <div
-      className={trackClasses}
-      onClick={handleClick}
-      onContextMenu={onContextMenu}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="relative min-w-[48px]">
-        <img
-          src={track.album?.cover_medium || '/images/placeholder-image.png'}
-          alt={`${track.title || 'Track'} album cover`}
-          className="w-12 h-12 rounded-md object-cover"
-          loading="lazy"
-        />
-      </div>
-
-      <div className="flex-grow min-w-0">
-        <p className="font-medium truncate">{track.title}</p>
-        {showArtist && (
-          <p className="text-sm text-gray-400 truncate">
-            {track.artist?.name || 'Unknown Artist'}
-          </p>
-        )}
-      </div>
-
-      <div
-        className={cn(
-          'transition-opacity duration-200',
-          isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
-        )}
-      >
-        {inPlaylistCreation ? (
-          <input
-            type="checkbox"
-            className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-green-500 
-                       transition-colors duration-200 cursor-pointer"
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <ActionButtons />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Reusable button component with tooltip
-function ActionButton({ 
-  onClick, 
-  icon, 
-}: { 
-  onClick: (e: React.MouseEvent) => void,
-  icon: React.ReactNode,
-}) {
-  return (
-    <button
-      className="bg-gray-700 hover:bg-gray-600 rounded-full p-2 transition-colors 
-                duration-200 group relative"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(e);
-      }}
-    >
-      <span className="text-white">{icon}</span>
-    </button>
   );
 }

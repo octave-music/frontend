@@ -4,27 +4,8 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Music, Search } from 'lucide-react';
 import debounce from 'lodash/debounce';
-import { getSetting } from '../lib/idbWrapper';
-
-// Types
-interface Artist {
-  id: number;
-  name: string;
-  picture_medium: string;
-}
-
-interface Track {
-  id: string;
-  title: string;
-  artist: { name: string };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
+import { getSetting } from '../../lib/managers/idbWrapper';
+import { Artist, Track } from "../../lib/types/types"
 
 interface OnboardingProps {
   onComplete: () => void;

@@ -1,38 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import {
   Heart, Play, Pause, Volume2, Volume1, VolumeX, Music2, Info, Maximize2, X,
   SkipBack, SkipForward, Shuffle, Repeat, Repeat1, ListMusic, Cast, Airplay, Download,
   Library, Radio, UserPlus, Ban, Share, Star, Flag, AlertCircle, Lock, Mic2,
   Crown, Fan, CircleDollarSign, ListX, Plus, Disc, User, Guitar
 } from 'lucide-react';
+
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
+import { Track, Lyric } from "../../lib/types/types";
 
-// ----------------------
-//  T Y P E S
-// ----------------------
-interface Track {
-  id: string;
-  title: string;
-  artist: {
-    name: string;
-  };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
-
-interface Lyric {
-  time: number;
-  endTime?: number;
-  text: string;
-}
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = 'off' | 'all' | 'one';
@@ -71,6 +51,8 @@ interface DesktopPlayerProps {
   onCycleAudioQuality: () => void;
 
   listenCount: number;
+
+  downloadTrack: (track: Track) => void;
 }
 
 // ----------------------
@@ -204,7 +186,8 @@ export default function DesktopPlayer({
   toggleLyricsView,
   currentTrackIndex,
   removeFromQueue,
-  showLyrics
+  showLyrics,
+  downloadTrack,
 }: DesktopPlayerProps) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [tab, setTab] = useState<'queue' | 'lyrics' | 'details'>('queue');
@@ -660,7 +643,9 @@ export default function DesktopPlayer({
                           <div className="pt-4 border-t border-white/10">
                             <h3 className="text-white font-medium mb-2">Actions</h3>
                             <div className="flex flex-wrap gap-2">
-                              <button className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
+                              <button  
+                              onClick={() => downloadTrack(currentTrack)}
+                              className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
                                 <Download className="w-5 h-5" />
                               </button>
                               <button className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
