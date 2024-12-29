@@ -982,6 +982,25 @@ export function SpotifyClone() {
     }
     void loadPreviousTracks();
   }, []);
+
+  useEffect(() => {
+    async function loadRecommendedTracks() {
+      try {
+        const savedTracks = await getRecommendedTracks();
+        if (savedTracks && savedTracks.length > 0) {
+          setRecommendedTracks(savedTracks);
+        } else {
+          console.log("No saved recommended tracks.");
+          setRecommendedTracks([]);
+        }
+      } catch (err) {
+        console.error("Error loading recommended tracks:", err);
+      }
+    }
+  
+    loadRecommendedTracks();
+  }, []);
+  
   
 
 
