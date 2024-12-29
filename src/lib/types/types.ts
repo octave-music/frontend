@@ -21,6 +21,7 @@ export interface Playlist {
   tracks: Track[];
   pinned?: boolean;
   downloaded?: boolean;
+  bannerImage?: string | null; // Optional banner image
 }
 
 export interface Lyric {
