@@ -1,23 +1,6 @@
 // lyrics.ts
 
-interface Track {
-    id: string ;
-    title: string;
-    artist: { name: string };
-    album: {
-      title: string;
-      cover_medium: string;
-      cover_small: string;
-      cover_big: string;
-      cover_xl: string;
-    };
-}
-
-interface Lyric {
-    time: number;
-    endTime?: number;
-    text: string;
-}
+import { Track, Lyric } from "../types/types"
 
 
 const API_BASE_URL = 'https://mbck.cloudgen.xyz';

@@ -3,28 +3,8 @@
 // =======================
 // Type Declarations
 // =======================
-export interface Track {
-  id: string;
-  title: string;
-  artist: {
-    name: string;
-  };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
 
-export interface Playlist {
-  name: string;
-  image: string;
-  tracks: Track[];
-  pinned?: boolean;
-  downloaded?: boolean;
-}
+import { Track, Playlist } from "../types/types"
 
 interface RecentlyPlayedEntry {
   timestamp: number;

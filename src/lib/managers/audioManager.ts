@@ -4,6 +4,7 @@ declare global {
       globalAudioElement?: HTMLAudioElement;
     }
   }
+
     const initializeAudioElement = (): HTMLAudioElement | null => {
     if (typeof window === 'undefined') {
       return null;

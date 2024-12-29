@@ -1,15 +1,4 @@
-interface Track {
-  id: string;
-  title: string;
-  artist: { name: string };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
+import { Track } from "../types/types"
 
 interface MediaSessionHandlers {
   getCurrentPlaybackTime: () => number;

@@ -3,20 +3,8 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { storeTrackBlob, getOfflineBlob, storeSetting } from '../managers/idbWrapper';
 import audioElement from '../managers/audioManager';
+import { Track } from "../types/types"
 
-
-interface Track {
-  id: string;
-  title: string;
-  artist: { name: string };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
 
 const API_BASE_URL = 'https://mbck.cloudgen.xyz';
 
