@@ -18,6 +18,7 @@
     "discord-rich-presence": "^0.0.8",
     "discord-rpc": "^4.0.1",
     "fast-average-color": "^9.4.0",
+    "file-saver": "^2.0.5",
     "framer-motion": "^11.15.0",
     "idb": "^8.0.1",
     "lodash": "^4.17.21",
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@types/discord-rpc": "^4.0.8",
+    "@types/file-saver": "^2.0.7",
     "@types/lodash": "^4.17.13",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.18",

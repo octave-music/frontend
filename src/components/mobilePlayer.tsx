@@ -19,29 +19,8 @@ import {
   ListX, Guitar
 } from 'lucide-react';
 
-// ------------------------------------
-// Types
-// ------------------------------------
-interface Track {
-  id: string;
-  title: string;
-  artist: {
-    name: string;
-  };
-  album: {
-    title: string;
-    cover_medium: string;
-    cover_small: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-}
+import { Track, Lyric } from "../lib/types"
 
-interface Lyric {
-  time: number;
-  endTime?: number;
-  text: string;
-}
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = 'off' | 'all' | 'one';

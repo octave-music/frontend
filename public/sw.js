@@ -1,97 +1,135 @@
 /* eslint-disable no-restricted-globals */
 /* 
-   Example advanced service worker supporting:
-   - Offline caching
+   Enhanced Service Worker supporting:
+   - Offline caching with refined strategies
+   - Exclusion of audio track requests to prevent conflicts with IndexedDB
    - Basic push notifications
-   - 'Cache-first' or 'network-first' strategies
-   - Enhanced for offline playback
+   - 'Cache-first' for static assets and 'network-first' for API requests
    - PWA install prompt bridging
    - Additional logging
 */
 
-/* Cache version naming */
-const CACHE_VERSION = 1;
+// Cache version naming
+const CACHE_VERSION = 2; // Increment to update the cache
 const CACHE_NAME = `octave-cache-v${CACHE_VERSION}`;
 
-/*
-   List core assets you want cached at install time.
-   e.g. '/', '/index.html', '/favicon.ico', etc.
-*/
+// List core assets to cache at install time
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/favicon.ico',
-  // Additional static files (CSS, JS bundles, icons, etc.)
+  '/styles.css', // Add your actual CSS files
+  '/bundle.js',  // Add your actual JS bundles
+  // Add other static assets like images, fonts, etc.
 ];
+
+// Helper function to determine if a request is for an audio track
+const isAudioRequest = (url) => {
+  return url.pathname.startsWith('/api/track/') && url.pathname.endsWith('.mp3');
+};
 
 // INSTALL
 self.addEventListener('install', (event) => {
+  console.log('[Service Worker] Install Event');
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      console.log('[Service Worker] Caching Core Assets');
       return cache.addAll(CORE_ASSETS);
     })
   );
-  // Force the waiting service worker to become active immediately
   self.skipWaiting();
 });
 
 // ACTIVATE
 self.addEventListener('activate', (event) => {
+  console.log('[Service Worker] Activate Event');
   event.waitUntil(
     (async () => {
-      // cleanup old caches
       const keys = await caches.keys();
-      for (const key of keys) {
-        if (key !== CACHE_NAME) {
-          await caches.delete(key);
-        }
-      }
-      // claim all current clients
-      clients.claim();
+      await Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => {
+            console.log(`[Service Worker] Deleting old cache: ${key}`);
+            return caches.delete(key);
+          })
+      );
+      await clients.claim();
+      console.log('[Service Worker] Claiming Clients for Current Service Worker');
     })()
   );
 });
 
 // FETCH
 self.addEventListener('fetch', (event) => {
-  // example only handling GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
-  // Implement custom logic or detect data-saver
-  // Basic "cache-first" approach:
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return from cache
-        return cachedResponse;
-      }
-      // Otherwise fetch from network
-      return fetch(event.request)
-        .then((networkResponse) => {
-          // optionally cache the new resource
-          if (!networkResponse || !networkResponse.ok) {
+  const url = new URL(event.request.url);
+
+  // Exclude audio track requests from service worker handling
+  if (isAudioRequest(url)) {
+    console.log('[Service Worker] Bypassing cache for audio track:', url.href);
+    return;
+  }
+
+  // Define different strategies based on request URL
+  if (url.origin === self.location.origin) {
+    // Static assets: Use Cache-First strategy
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request)
+          .then((networkResponse) => {
+            // Only cache valid responses
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+              return networkResponse;
+            }
+            // Clone and store in cache
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
             return networkResponse;
-          }
-          // clone response
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+          })
+          .catch((err) => {
+            console.warn('[Service Worker] Fetch failed:', err);
+            // Optionally return a fallback resource
+            if (event.request.destination === 'document') {
+              return caches.match('/offline.html'); // Ensure you have an offline.html
+            }
+            return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
           });
+      })
+    );
+  } else if (url.origin.startsWith('https://api.yourdomain.com')) {
+    // API requests: Use Network-First strategy
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          // Optionally cache API responses
           return networkResponse;
         })
-        .catch((err) => {
-          // fallback if offline for non-cached request
-          console.warn('SW Fetch failed; returning offline fallback.', err);
-          // fallback can be a custom offline page if wanted
-          return new Response('Offline or fetch error.', {
-            status: 503,
-            statusText: 'Service Unavailable',
-          });
-        });
-    })
-  );
+        .catch(() => {
+          // Optionally serve from cache if available
+          return caches.match(event.request);
+        })
+    );
+  } else {
+    // Other requests: Default to Network-First
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+  }
 });
 
 // PUSH NOTIFICATIONS
@@ -118,18 +156,23 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // try focusing an existing window
-      const client = clientList.find((c) => c.url === urlToOpen && 'focus' in c);
-      if (client) return client.focus();
-      // otherwise open a new tab
-      if (clients.openWindow) return clients.openWindow(urlToOpen);
+      // Try to focus an existing window
+      for (const client of clientList) {
+        if (client.url === urlToOpen && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise, open a new window
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
     })
   );
 });
 
 // MESSAGE
 self.addEventListener('message', (event) => {
-  // e.g. if we want to skip waiting from client
+  // Example: Skip waiting when receiving a specific message
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }

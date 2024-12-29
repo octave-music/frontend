@@ -333,3 +333,15 @@ export async function clearQueue(): Promise<void> {
     store.clear();
   });
 }
+
+
+// Recommended Tracks:
+
+export async function storeRecommendedTracks(tracks: Track[]) {
+  await storeSetting('recommendedTracks', JSON.stringify(tracks));
+}
+
+export async function getRecommendedTracks(): Promise<Track[] | null> {
+  const data = await getSetting('recommendedTracks');
+  return data ? JSON.parse(data) as Track[] : null;
+}

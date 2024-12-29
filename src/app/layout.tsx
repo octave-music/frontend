@@ -1,6 +1,8 @@
-import type { Metadata, Viewport } from "next"
-import localFont from "next/font/local"
-import "./globals.css"
+// app/layout.tsx
+import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration"; // Import the registration component
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -8,7 +10,7 @@ const geistSans = localFont({
   weight: "100 900",
   display: "swap",
   preload: true,
-})
+});
 
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
@@ -16,7 +18,7 @@ const geistMono = localFont({
   weight: "100 900",
   display: "swap",
   preload: true,
-})
+});
 
 export const viewport: Viewport = {
   themeColor: "#000000",
@@ -26,8 +28,8 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   minimumScale: 1,
-  interactiveWidget: "resizes-visual"
-}
+  interactiveWidget: "resizes-visual",
+};
 
 export const metadata: Metadata = {
   title: {
@@ -71,21 +73,24 @@ export const metadata: Metadata = {
     apple: "/images/black_logo.png",
   },
   manifest: "/manifest.json",
-}
+};
 
 interface RootLayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export default function RootLayout({ children }: Readonly<RootLayoutProps>) {
   return (
-    <html 
-      lang="en" 
+    <html
+      lang="en"
       className="dark h-full"
       suppressHydrationWarning
     >
       <head />
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background min-h-[100dvh] overscroll-none`}>
+        {/* Register the Service Worker */}
+        <ServiceWorkerRegistration />
+
         <main className="relative flex min-h-[100dvh] flex-col">
           {children}
         </main>
@@ -98,8 +103,8 @@ export default function RootLayout({ children }: Readonly<RootLayoutProps>) {
         </a>
       </body>
     </html>
-  )
+  );
 }
 
-export const runtime = "edge"
-export const preferredRegion = "auto"
+export const runtime = "edge";
+export const preferredRegion = "auto";

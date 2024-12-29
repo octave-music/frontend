@@ -1,6 +1,9 @@
+// useAudio.ts
+
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { storeTrackBlob, getOfflineBlob, storeSetting } from '../lib/idbWrapper';
 import audioElement from '../lib/audioManager';
+
 
 interface Track {
   id: string;
@@ -84,30 +87,76 @@ export function useAudio() {
 
   const playTrackFromSource = useCallback(async (track: Track, timeOffset = 0) => {
     try {
-      if (!audioElement) return;
-
-      // Check offline storage first
-      const offlineData = await getOfflineBlob(track.id);
-      
-      if (offlineData) {
-        const objectUrl = URL.createObjectURL(offlineData);
-        audioElement.src = objectUrl;
-        // Clean up the object URL after it's loaded
-        audioElement.onloadeddata = () => {
-          URL.revokeObjectURL(objectUrl);
-        };
-      } else {
-        audioElement.src = `${API_BASE_URL}/api/track/${track.id}.mp3`;
+      if (!audioElement) {
+        console.error('Audio element not available');
+        return;
       }
-
-      audioElement.currentTime = timeOffset;
-      await audioElement.play();
-      setCurrentTrack(track);
-      setIsPlaying(true);
+  
+      // First pause any current playback
+      try {
+        await audioElement?.pause();
+      } catch (pauseError) {
+        console.error('Error pausing current playback:', pauseError);
+      }
+      
+      // Attempt to retrieve the track's Blob from IndexedDB
+      let offlineData = await getOfflineBlob(track.id);
+      
+      if (!offlineData) {
+        const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch the track from the server.');
+        }
+        offlineData = await response.blob();
+        await storeTrackBlob(track.id, offlineData);
+      }
+  
+      const objectUrl = URL.createObjectURL(offlineData);
+      
+      // Wait for the audio to be loaded before playing
+      return new Promise<void>((resolve) => {
+        if (!audioElement) {
+          URL.revokeObjectURL(objectUrl);
+          resolve();
+          return;
+        }
+  
+        audioElement.src = objectUrl;
+        
+        const handleLoadedData = async () => {
+          if (!audioElement) return;
+          
+          URL.revokeObjectURL(objectUrl);
+          audioElement.currentTime = timeOffset;
+          
+          try {
+            await audioElement.play();
+            setCurrentTrack(track);
+            setIsPlaying(true);
+          } catch (playError) {
+            console.error('Play error:', playError);
+          }
+          resolve();
+        };
+  
+        const handleError = (e: Event) => {
+          console.error('Audio loading error:', e);
+          URL.revokeObjectURL(objectUrl);
+          resolve();
+        };
+  
+        audioElement.addEventListener('loadeddata', handleLoadedData, { once: true });
+        audioElement.addEventListener('error', handleError, { once: true });
+      });
+  
     } catch (err) {
       console.error('Error playing track:', err);
+      setIsPlaying(false);
     }
-  }, []);
+  }, [setCurrentTrack, setIsPlaying]);
+  
+  
+  
 
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;
