@@ -1,8 +1,8 @@
 // useAudio.ts
 
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { storeTrackBlob, getOfflineBlob, storeSetting } from '../lib/idbWrapper';
-import audioElement from '../lib/audioManager';
+import { storeTrackBlob, getOfflineBlob, storeSetting } from '../managers/idbWrapper';
+import audioElement from '../managers/audioManager';
 
 
 interface Track {
