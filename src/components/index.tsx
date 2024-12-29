@@ -1204,8 +1204,8 @@ export function SpotifyClone() {
           <div className="relative h-[40vh] overflow-hidden">
             <div className="absolute inset-0">
               <img
-                src={currentPlaylist.image || "assets/default-playlist.jpg"}
-                alt={currentPlaylist.name}
+                src={currentPlaylist.image || "assets/images/defaultPlaylistImage.png"}
+                alt={currentPlaylist.name || "default playlist error alt"}
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-gray-900 backdrop-blur-sm"></div>
@@ -2324,69 +2324,193 @@ export function SpotifyClone() {
               </div>
             </section>
           ) : view === 'playlist' && currentPlaylist ? (
-            <section>
-              <div className="relative h-64 mb-4">
+            <section className="relative min-h-screen bg-gradient-to-b from-gray-900 to-black">
+            {/* Enhanced Hero Section */}
+            <div className="relative h-[50vh] overflow-hidden">
+              <div className="absolute inset-0">
                 <img
-                  src={currentPlaylist.image || 'https://via.placeholder.com/150'}
-                  alt={currentPlaylist.name || 'Playlist'}
-                  className="w-full h-full object-cover rounded-lg"
-                  style={{ filter: 'blur(5px) brightness(0.5)' }}
+                  src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                  alt={currentPlaylist.name || "Playlist cover"}
+                  className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 flex items-end p-4">
-                  <div className="flex-grow">
-                    <h2 className="text-4xl font-bold mb-2">{currentPlaylist.name}</h2>
-                    <p className="text-sm text-gray-300">{currentPlaylist.tracks.length} tracks</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      className="bg-white text-black rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => {
-                        setQueue(currentPlaylist.tracks);
-                        setCurrentTrack(currentPlaylist.tracks[0]);
-                        setIsPlaying(true);
-                      }}
-                    >
-                      Play
-                    </button>
-                    <button className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold" onClick={shuffleQueue}>
-                      <Shuffle className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="bg-gray-800 text-white rounded-full px-4 py-2 text-sm font-semibold"
-                      onClick={() => downloadPlaylist(currentPlaylist)}
-                    >
-                      {isDownloading ? (
-                        <div className="relative">
-                          <Download className="w-4 h-4" />
-                          <div
-                            className="absolute inset-0 rounded-full border-2 border-green-500"
-                            style={{ clipPath: `circle(${downloadProgress}% at 50% 50%)` }}
-                          />
-                        </div>
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
-                    </button>
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gray-900/80 to-gray-900"></div>
+              </div>
+              
+              <div className="absolute bottom-0 left-0 right-0 p-12 z-10">
+                <div className="max-w-7xl mx-auto">
+                  <div className="flex items-end space-x-6">
+                    <img
+                      src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                      alt={currentPlaylist.name || "Playlist cover"}
+                      className="w-48 h-48 object-cover rounded-xl shadow-2xl"
+                    />
+                    <div className="flex-1">
+                      <span className="text-white/80 text-lg font-medium mb-2">PLAYLIST</span>
+                      <h2 className="text-6xl font-bold mb-4 text-white tracking-tight">
+                        {currentPlaylist.name}
+                      </h2>
+                      <p className="text-white/80 mb-6">
+                        {currentPlaylist.tracks.length} tracks
+                      </p>
+                      
+                      <div className="flex items-center space-x-4">
+                        <button
+                          className="flex items-center space-x-3 bg-purple-600 hover:bg-purple-700 
+                                    text-white rounded-full px-8 py-4 text-base font-medium
+                                    transition-all duration-200 hover:scale-105 shadow-lg"
+                          onClick={() => {
+                            setQueue(currentPlaylist.tracks);
+                            setCurrentTrack(currentPlaylist.tracks[0]);
+                            setIsPlaying(true);
+                          }}
+                        >
+                          <Play className="w-6 h-6" />
+                          <span>Play All</span>
+                        </button>
+                  
+                        <button
+                          className="flex items-center space-x-3 bg-gray-800/50 hover:bg-gray-700/50 
+                                    text-white rounded-full px-6 py-4 backdrop-blur-lg 
+                                    transition-all duration-300 hover:scale-105"
+                          onClick={shuffleQueue}
+                        >
+                          <Shuffle className="w-5 h-5" />
+                          <span>Shuffle</span>
+                        </button>
+                  
+                        <button
+                          className="flex items-center space-x-3 bg-gray-800/50 hover:bg-gray-700/50 
+                                    text-white rounded-full px-6 py-4 backdrop-blur-lg 
+                                    transition-all duration-300 hover:scale-105"
+                          onClick={() => downloadPlaylist(currentPlaylist)}
+                        >
+                          {isDownloading ? (
+                            <div className="flex items-center space-x-2">
+                              <Download className={`w-5 h-5 ${downloadProgress === 100 ? 'text-green-500' : ''}`} />
+                              <span>{downloadProgress}%</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Download className="w-5 h-5" />
+                              <span>Download</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="space-y-2">
-              {currentPlaylist.tracks.map((track, idx) => (
-                <TrackItem 
-                  key={track.id} 
-                  track={track}
-                  index={idx}
-                  onTrackClick={playTrack} 
-                  addToQueue={addToQueue} 
-                  openAddToPlaylistModal={openAddToPlaylistModal} 
-                  toggleLike={toggleLike} 
-                  isLiked={isTrackLiked(track)} 
-                  onContextMenu={(e) => handleContextMenu(e, track)} // Attach handler
-                />
-              ))}
-
+            </div>
+          
+            {/* Enhanced Content Section */}
+            <div className="max-w-7xl mx-auto px-12 py-8">
+              {/* Search Bar */}
+              <div className="mb-8">
+                <div className="relative max-w-2xl">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Search className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search for songs to add..."
+                    value={playlistSearchQuery}
+                    onChange={(e) => setPlaylistSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && playlistSearchQuery.trim()) {
+                        handlePlaylistSearch(playlistSearchQuery);
+                      }
+                    }}
+                    className="w-full pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
+                               rounded-xl border border-gray-700 focus:border-purple-500
+                               focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
+                  />
+                  {playlistSearchQuery && (
+                    <button
+                      onClick={() => {
+                        setPlaylistSearchQuery('');
+                        setPlaylistSearchResults([]);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                    >
+                      <X className="w-5 h-5 text-gray-400 hover:text-white transition-colors" />
+                    </button>
+                  )}
+                </div>
+          
+                {/* Search Results */}
+                {playlistSearchResults.length > 0 && (
+                  <div className="mt-4 max-w-2xl bg-gray-800/50 backdrop-blur-lg rounded-xl 
+                                border border-gray-700 overflow-hidden shadow-xl">
+                    {playlistSearchResults.map((track) => (
+                      <div 
+                        key={track.id} 
+                        className="flex items-center justify-between p-4 hover:bg-gray-700/50 
+                                   transition-colors duration-200"
+                      >
+                        <div className="flex items-center space-x-4">
+                          <img
+                            src={track.album.cover_small || 'assets/default-album.jpg'}
+                            alt={track.title}
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                          <div>
+                            <p className="font-medium text-white">{track.title}</p>
+                            <p className="text-sm text-gray-400">{track.artist.name}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => addTrackToPlaylist(track)}
+                          className="flex items-center space-x-2 bg-green-500/20 text-green-400
+                                     hover:bg-green-500 hover:text-white px-4 py-2 rounded-lg
+                                     transition-all duration-300"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
+          
+              {/* Tracks List */}
+              <div className="space-y-2">
+                {currentPlaylist.tracks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <Music className="w-16 h-16 text-gray-600 mb-4" />
+                    <p className="text-gray-400 mb-4">This playlist is empty</p>
+                    <button
+                      className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700
+                                 text-white rounded-full px-6 py-3 font-medium
+                                 transition-all duration-300 hover:scale-105"
+                      onClick={() => {
+                        setShowSearchInPlaylistCreation(true);
+                        setCurrentPlaylist(currentPlaylist);
+                      }}
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span>Add Songs</span>
+                    </button>
+                  </div>
+                ) : (
+                  currentPlaylist.tracks.map((track, idx) => (
+                    <TrackItem 
+                      key={idx} 
+                      track={track}
+                      index={idx}
+                      onTrackClick={playTrack} 
+                      addToQueue={addToQueue} 
+                      openAddToPlaylistModal={openAddToPlaylistModal} 
+                      toggleLike={toggleLike} 
+                      isLiked={isTrackLiked(track)} 
+                      onContextMenu={(e) => handleContextMenu(e, track)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
           ) : view === 'search' ? (
             <section className="min-h-screen bg-transparent backdrop-blur-sm px-4 py-6">
               <div className="max-w-7xl mx-auto flex flex-col gap-8">
