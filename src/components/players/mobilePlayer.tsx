@@ -266,15 +266,18 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   useEffect(() => {
     function handleResize() {
-      const w = window.innerWidth;
-      if (w < 350) {
-        setCanShowActions(false);
-      } else {
-        setCanShowActions(true);
-      }
+      // Update breakpoint to handle iPhone SE and similar small devices
+      const smallScreenBreakpoint = 375; // iPhone SE width
+      setCanShowActions(window.innerWidth > smallScreenBreakpoint);
     }
+    
+    // Initial check
     handleResize();
+    
+    // Add event listener
     window.addEventListener('resize', handleResize);
+    
+    // Cleanup
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -299,8 +302,11 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   // We can limit certain visible action buttons for smaller screens
   const getVisibleActionButtons = () => {
-    // If we decide not to show them on very small screens:
-    if (!canShowActions) return [];
+    // Only show action buttons if screen is large enough and we explicitly want to show them
+    if (!canShowActions) {
+      return [];
+    }
+    // For larger screens, return all action buttons
     return [
       { icon: Heart, label: 'Like', active: isLiked, onClick: toggleLike },
       { icon: Plus, label: 'Add to', onClick: () => setShowAddToPlaylistModal(true) },
@@ -666,12 +672,15 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   >
                     <ListMusic className="w-5 h-5 text-white/60" />
                   </button>
-                  <button
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                    onClick={() => setShowMoreOptions(true)}
-                  >
-                    <MoreHorizontal className="w-5 h-5 text-white/60" />
-                  </button>
+                  {/* Only show More options in header when action buttons are hidden */}
+                  {!canShowActions && (
+                    <button
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      onClick={() => setShowMoreOptions(true)}
+                    >
+                      <MoreHorizontal className="w-5 h-5 text-white/60" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -880,22 +889,23 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                       </div>
                     </div>
                     {mainControlButtons}
-                    {getVisibleActionButtons().length > 0 && (
-                      <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
-                        {getVisibleActionButtons().map((btn, i) => (
-                          <ActionButton
-                            key={i}
-                            icon={btn.icon}
-                            label={btn.label}
-                            active={btn.active}
-                            onClick={btn.onClick}
-                          />
-                        ))}
-                        <div className="md:flex">
-                          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setShowMoreOptions(true)} />
+                    {/* Only render if we have buttons to show */}
+                      {getVisibleActionButtons().length > 0 && (
+                        <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
+                          {getVisibleActionButtons().map((btn, i) => (
+                            <ActionButton
+                              key={i}
+                              icon={btn.icon}
+                              label={btn.label}
+                              active={btn.active}
+                              onClick={btn.onClick}
+                            />
+                          ))}
+                          <div className="md:hidden">
+                            <ActionButton icon={MoreHorizontal} label="More" onClick={() => setShowMoreOptions(true)} />
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                   </>
                 )}
               </div>

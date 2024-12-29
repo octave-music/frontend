@@ -1302,7 +1302,7 @@ export function SpotifyClone() {
                             e.stopPropagation();
                             const opts: ContextMenuOption[] = [
                               {
-                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist', // Dynamic label
+                                label: playlist.pinned ? 'Unpin Playlist' : 'Pin Playlist',
                                 action: () => {
                                   const updatedPlaylists = playlists.map((pl) =>
                                     pl.name === playlist.name ? { ...pl, pinned: !pl.pinned } : pl
