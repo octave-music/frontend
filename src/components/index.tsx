@@ -40,7 +40,6 @@ import {
   getQueue,
   storeRecommendedTracks,
   storeTrackBlob, 
-  getOfflineBlob,
   getRecommendedTracks
 } from '../lib/managers/idbWrapper';
 
