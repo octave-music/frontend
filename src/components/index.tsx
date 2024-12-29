@@ -21,7 +21,8 @@ import {
   ChevronLeft,
   X,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  UploadCloud 
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
@@ -64,6 +65,8 @@ import {
   Artist,
   BeforeInstallPromptEvent,
 } from '../lib/types/types';
+
+import { SpotifyToDeezer } from './onboarding/SpotifyToDeezer';
 
 
 declare global {
@@ -145,6 +148,7 @@ export function SpotifyClone() {
   const [currentTime, setCurrentTime] = useState(0);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [showSpotifyToDeezerModal, setShowSpotifyToDeezerModal] = useState(false);
 
   const {
     isPlaying,
@@ -2047,6 +2051,14 @@ export function SpotifyClone() {
                       Profile
                     </button>
                     <button
+                      className="flex items-center px-6 py-3 text-lg text-gray-300 hover:bg-gray-700 w-full text-left"
+                      onClick={() => setShowSpotifyToDeezerModal(true)}
+                    >
+                      <UploadCloud className="w-5 h-5 mr-3" />
+                      Migrate Playlists
+                    </button>
+
+                    <button
                       className="flex items-center px-6 py-3 text-lg text-gray-300 hover:bg-gray-700 w-full text-left rounded-b-lg"
                       onClick={() => setShowUserMenu(false)}
                     >
@@ -2058,6 +2070,46 @@ export function SpotifyClone() {
               </div>
             </div>
           </header>
+
+          {showSpotifyToDeezerModal && (
+            <div 
+              className="fixed inset-0 z-[99999] overflow-y-auto"
+              onClick={() => setShowSpotifyToDeezerModal(false)}
+            >
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
+              
+              <div className="flex min-h-screen items-center justify-center p-4">
+                <div 
+                  className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Decorative elements */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl" />
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
+                  
+                  {/* Header */}
+                  <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+                      Migrate Playlists to Deezer
+                    </h2>
+                    <button
+                      className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
+                      onClick={() => setShowSpotifyToDeezerModal(false)}
+                    >
+                      <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar">
+                    <SpotifyToDeezer />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
 
           {view === 'settings' ? (
             <section>
@@ -2665,6 +2717,7 @@ export function SpotifyClone() {
           </div>
         </div>
       )}
+
 
       {/* Add songs after creation */}
       {showSearchInPlaylistCreation && (

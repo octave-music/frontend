@@ -142,12 +142,12 @@ const Seekbar: React.FC<SeekbarProps> = ({
     <div className="mx-4 relative">
       <div
         ref={progressRef}
-        className={`relative w-full ${isMiniplayer ? 'h-0.5' : 'h-1'} cursor-pointer rounded-full bg-white/20`}
+        className={`seekbar-container relative w-full ${isMiniplayer ? 'h-0.5' : 'h-1'} cursor-pointer`}
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
       >
         <motion.div
-          className="absolute left-0 top-0 h-full bg-white rounded-full"
+          className="seekbar-progress absolute left-0 top-0 h-full"
           style={{ width: `${localProgress * 100}%` }}
           animate={{ width: `${localProgress * 100}%` }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -500,6 +500,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }
   };
 
+
   // Main player control cluster
   const mainControlButtons = (
     <div className="w-full flex items-center justify-between mb-8">
@@ -638,19 +639,20 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
         {/* --- Expanded Player --- */}
         <AnimatePresence>
-          {isExpanded && (
-            <motion.div
-              className="fixed inset-0 z-50 flex flex-col pb-[env(safe-area-inset-bottom)]"
-              style={{
-                background: 'rgba(0,0,0,0.92)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)'
-              }}
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-            >
+        {isExpanded && (
+          <motion.div
+            className="fixed inset-0 z-50 flex flex-col"
+            style={{
+              background: 'rgba(0,0,0,0.92)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              paddingBottom: 'env(safe-area-inset-bottom)'
+            }}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+          >
               {/* Header */}
               <div className="flex items-center justify-between p-4">
                 <button
