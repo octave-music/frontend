@@ -942,6 +942,22 @@ export function SpotifyClone() {
     [downloadTrack]
   );
 
+
+  useEffect(() => {
+    if (typeof screen !== 'undefined' && 'orientation' in screen && screen.orientation) {
+      // Type assertion since some TypeScript definitions might be outdated
+      (screen.orientation as any).lock('portrait').catch((err: Error) => {
+        console.warn('Screen orientation lock failed:', err);
+      });
+    }
+    
+    return () => {
+      if (typeof screen !== 'undefined' && 'orientation' in screen && screen.orientation) {
+        (screen.orientation as any).unlock();
+      }
+    };
+  }, []);
+
   // shuffle
   const shuffleQueue = useCallback(() => {
     const cpy = [...queue];

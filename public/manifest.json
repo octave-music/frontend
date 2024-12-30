@@ -6,7 +6,7 @@
   "scope": "/",
   "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": ["music", "entertainment", "streaming"],
@@ -15,7 +15,7 @@
   "media_session": {
       "actions": ["play", "pause", "previoustrack", "nexttrack", "seekto", "seekbackward", "seekforward"],
       "artwork": true
-    },
+  },
   "dir": "ltr",
   "prefer_related_applications": false,
   "icons": [
