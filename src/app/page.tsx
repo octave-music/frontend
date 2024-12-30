@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { SpotifyClone } from "../components/index"
+import { SpotifyClone } from "../components/oldindex"
+import { StrictMode } from 'react';
+// import { SpotifyClone } from "../components/SpotifyClone"
 
 export const metadata: Metadata = {
   title: 'Octave Streaming',
@@ -34,10 +36,13 @@ export const viewport: Viewport = {
   viewportFit: 'cover'
 }
 
+
 export default function SpotifyPage() {
   return (
-    <main className="min-h-[100dvh] bg-black overscroll-none">
+    <StrictMode>
+      <main className="min-h-[100dvh] bg-black overscroll-none">
       <SpotifyClone />
     </main>
+    </StrictMode>
   )
 }

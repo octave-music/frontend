@@ -518,6 +518,7 @@ div[role="menu"] {
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scroll-margin-bottom: 8rem; /* Match DesktopPlayer's height */
 }
 
 .custom-scrollbar::-webkit-scrollbar {

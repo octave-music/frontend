@@ -21,7 +21,7 @@ function safeTracksArray(tracks: Track[]): Track[] {
   return tracks.map((t) => JSON.parse(JSON.stringify(t)));
 }
 
-const DB_VERSION = 3; // Bump the version if needed to trigger onupgradeneeded
+const DB_VERSION = 4; // Bump the version if needed to trigger onupgradeneeded
 const DB_NAME = 'OctaveDB';
 
 export async function openIDB(): Promise<IDBDatabase> {

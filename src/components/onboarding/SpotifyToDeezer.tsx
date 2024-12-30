@@ -25,15 +25,6 @@ interface SpotifyUser {
 
 const API_BASE_URL = 'https://sp-migrate.octave.gold';
 
-async function startSpotifyLogin() {
-  try {
-    const response = await fetch(`${API_BASE_URL}/login`, { method: 'GET' });
-    window.location.href = response.url;
-  } catch (err) {
-    console.error('Error initiating Spotify login:', err);
-  }
-}
-
 function handleSpotifyCallback() {
   const urlParams = new URLSearchParams(window.location.search);
   const authToken = urlParams.get('auth_token');
@@ -145,13 +136,13 @@ export const SpotifyToDeezer = () => {
             <p className="text-gray-400 mb-8">
               Connect your Spotify account to get started with the migration process
             </p>
-            <button
-              onClick={startSpotifyLogin}
+            <a
+              href={`${API_BASE_URL}/login`}
               className="inline-flex items-center bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-4 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/25"
             >
               <LogIn className="w-6 h-6 mr-3" />
               Connect Spotify
-            </button>
+            </a>
           </div>
         ) : (
           <>
