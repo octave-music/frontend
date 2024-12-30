@@ -25,6 +25,7 @@
 import React, {
   useState,
   useEffect,
+  useRef,
   useCallback,
   MouseEvent,
   useMemo,
@@ -60,7 +61,8 @@ import {
   Trash2,
 } from "lucide-react";
 import debounce from "lodash/debounce";
-
+import { throttle } from 'lodash'; // Make sure to import throttle
+import ReactDOM from 'react-dom';
 // ----- HOOKS & LIBRARIES -----
 import { useAudio } from "../lib/hooks/useAudio";
 import { setupMediaSession } from "../lib/hooks/useMediaSession";
@@ -116,19 +118,10 @@ declare global {
   }
 }
 
+type ThrottleFunction = (...args: any[]) => void;
+
 // ----- CONSTANTS -----
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
-
-/**
- * Setup Discord RPC presence with the currently playing track info.
- * (Stub for any RPC or external integrations.)
- */
-async function setupDiscordRPC(
-  trackTitle: string,
-  artistName: string
-): Promise<void> {
-  console.log("[Discord RPC] Setting presence:", { trackTitle, artistName });
-}
 
 /**
  * Checks if the user is on a data-saver connection (slow or metered).
@@ -152,6 +145,9 @@ function getDynamicGreeting(): string {
   if (currentHour >= 17 && currentHour < 21) return "Good Evening!";
   return "Good Night!";
 }
+
+const TIME_THRESHOLD = 0.05;
+const THROTTLE_DELAY = 200;
 
 /**
  * The main entry component for our entire app, handling both
@@ -268,6 +264,17 @@ export function SpotifyClone(): JSX.Element {
   }, []);
 
   /**
+ * Setup Discord RPC presence with the currently playing track info.
+ * (Stub for any RPC or external integrations.)
+ */
+    const setupDiscordRPC = useCallback(async (
+      trackTitle: string,
+      artistName: string
+    ): Promise<void> => {
+      console.log("[Discord RPC] Setting presence:", { trackTitle, artistName });
+    }, []);
+
+  /**
    * Completes the delete action for a selected playlist after user confirmation.
    */
   const deleteConfirmedPlaylist = useCallback(() => {
@@ -380,36 +387,69 @@ export function SpotifyClone(): JSX.Element {
    * Sets up the main playback functionality by placing the new track
    * at the top of the queue and starting playback.
    */
-  const playTrack = useCallback(
-    (track: Track) => {
-      setPreviousTracks((prev) =>
+  const playTrack = useCallback((track: Track) => {
+    // Prevent rapid changes
+    setQueue((prev) => {
+      // If we're already processing this track, do nothing
+      if (prev[0]?.id === track.id) return prev;
+      
+      const filtered = prev.filter((t) => t.id !== track.id);
+      return [track, ...filtered];
+    });
+  
+    ReactDOM.unstable_batchedUpdates(() => {
+      setPreviousTracks((prev) => 
         currentTrack ? [currentTrack, ...prev] : prev
       );
-      setQueue((prev) => {
-        const filtered = prev.filter((t) => t.id !== track.id);
-        return [track, ...filtered];
-      });
-
       setCurrentTrack(track);
       setIsPlaying(true);
-
-      void playTrackFromSource(track, 0);
-    },
-    [currentTrack, playTrackFromSource, setIsPlaying]
-  );
+    });
+  
+    void playTrackFromSource(track, 0);
+  }, [currentTrack, playTrackFromSource, setIsPlaying]);
 
   /**
    * Toggles the current track's play state. If no track is loaded, does nothing.
    */
-  const togglePlay = useCallback(() => {
+  const togglePlay = useCallback(async () => {
     if (!currentTrack || !audioElement) return;
-    if (isPlaying) {
-      audioElement.pause();
-    } else {
-      void audioElement.play();
+    
+    try {
+      if (isPlaying) {
+        audioElement.pause();
+        setIsPlaying(false);
+      } else {
+        await audioElement.play();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Playback error:', error);
+      // Reset state if playback fails
+      setIsPlaying(false);
+      audioElement.currentTime = 0;
     }
-    setIsPlaying(!isPlaying);
   }, [currentTrack, isPlaying, setIsPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        setIsPlaying(false);
+      }
+    };
+  }, [setIsPlaying]);
+
+  const debouncedSetIsPlaying = useMemo(
+    () => debounce((value: boolean) => setIsPlaying(value), 100),
+    [setIsPlaying]
+  );
+  
+  useEffect(() => {
+    return () => {
+      debouncedSetIsPlaying.cancel();
+    };
+  }, [debouncedSetIsPlaying]);
 
   /**
    * Moves playback to the previous track if one exists in 'previousTracks'.
@@ -542,10 +582,10 @@ export function SpotifyClone(): JSX.Element {
       },
       album: {
         title: track.album?.title || "Unknown Album",
-        cover_medium: track.album?.cover_medium || "",
-        cover_small: track.album?.cover_small || "",
-        cover_big: track.album?.cover_big || "",
-        cover_xl: track.album?.cover_xl || "",
+        cover_medium: track.album?.cover_medium || "images/defaultPlaylistImage.png",
+        cover_small: track.album?.cover_small || "images/defaultPlaylistImage.png",
+        cover_big: track.album?.cover_big || "images/defaultPlaylistImage.png",
+        cover_xl: track.album?.cover_xl || "images/defaultPlaylistImage.png",
       },
     };
   };
@@ -788,7 +828,7 @@ export function SpotifyClone(): JSX.Element {
     if (!newPlaylistName) return;
     const pl: Playlist = {
       name: newPlaylistName,
-      image: newPlaylistImage || "/placeholder.svg",
+      image: newPlaylistImage || "/images/defaultPlaylistImage.png",
       tracks: selectedTracksForNewPlaylist,
     };
     const updated = [...playlists, pl];
@@ -997,33 +1037,86 @@ export function SpotifyClone(): JSX.Element {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (currentTrack) {
+      const setupTrack = async () => {
+        try {
+          await playTrackFromSource(currentTrack, 0);
+          setIsPlaying(true);
+          await fetchLyrics(currentTrack);
+          await storeRecentlyPlayed(currentTrack);
+          const recent = await storeRecentlyPlayed(currentTrack);
+          setJumpBackIn(recent);
+          const counts = await getListenCounts();
+          setListenCount(counts[currentTrack.id] || 0);
+          await setupDiscordRPC(currentTrack.title, currentTrack.artist.name);
+        } catch (err) {
+          console.error("Error during playback setup:", err);
+          setIsPlaying(false);
+          alert("An error occurred while setting up the track.");
+        }
+      };
+  
+      void setupTrack();
+    }
+  }, [currentTrack, playlists, playTrackFromSource, fetchLyrics, setIsPlaying, setupDiscordRPC]);
+
+  useEffect(() => {
+    console.log('Playback state changed:', isPlaying);
+  }, [isPlaying]);
+  
+  useEffect(() => {
+    console.log('Current track changed:', currentTrack?.title);
+  }, [currentTrack]);
+
   /**
    * Keeps the current lyric line in sync with the audio's currentTime.
    * Uses requestAnimationFrame for smooth updates.
    */
-  useEffect(() => {
-    let animFrame: number | null = null;
-    function updateLyric() {
-      if (!audioElement) {
-        animFrame = requestAnimationFrame(updateLyric);
-        return;
-      }
-      const currentT = audioElement.currentTime;
-      const activeIndex = lyrics.findIndex((ly, i) => {
-        const isLast = i === lyrics.length - 1;
-        const nextTime = isLast ? Infinity : lyrics[i + 1].time;
-        return currentT >= ly.time && currentT < nextTime;
-      });
-      if (activeIndex !== -1 && activeIndex !== currentLyricIndex) {
-        setCurrentLyricIndex(activeIndex);
-      }
-      animFrame = requestAnimationFrame(updateLyric);
+
+  const throttledHandlerRef = useRef<ReturnType<typeof throttle> | null>(null);
+
+  const onTimeOrFrameUpdate = useCallback(() => {
+    if (!audioElement) return;
+    
+    const currTime = audioElement.currentTime;
+    
+    if (Math.abs(currTime - currentTime) > TIME_THRESHOLD) {
+      setCurrentTime(currTime);
+      setSeekPosition(currTime);
     }
-    animFrame = requestAnimationFrame(updateLyric);
+
+    const activeIndex = lyrics.findIndex((ly, i) => {
+      const nextTime = i === lyrics.length - 1 ? Infinity : lyrics[i + 1].time;
+      return currTime >= ly.time && currTime < nextTime;
+    });
+
+    if (activeIndex !== -1 && activeIndex !== currentLyricIndex) {
+      setCurrentLyricIndex(activeIndex);
+    }
+  }, [currentTime, currentLyricIndex, lyrics]);
+
+  useEffect(() => {
+    if (!audioElement) return;
+
+    // Create throttled handler if it doesn't exist
+    if (!throttledHandlerRef.current) {
+      throttledHandlerRef.current = throttle(onTimeOrFrameUpdate, THROTTLE_DELAY, { 
+        leading: true, 
+        trailing: true 
+      });
+    }
+
+    const handler = throttledHandlerRef.current;
+    audioElement.addEventListener("timeupdate", handler);
+    
     return () => {
-      if (animFrame) cancelAnimationFrame(animFrame);
+      if (handler) {
+        handler.cancel();
+        audioElement?.removeEventListener("timeupdate", handler);
+      }
     };
-  }, [lyrics, currentLyricIndex]);
+  }, [onTimeOrFrameUpdate]);
 
   /**
    * Closes the context menu when 'Escape' is pressed.
@@ -1054,24 +1147,37 @@ export function SpotifyClone(): JSX.Element {
    * Sets up audio event listeners (timeupdate, ended) to track currentTime
    * and handle the track end logic.
    */
-  useEffect(() => {
-    if (audioElement) {
-      audioElement.addEventListener("timeupdate", () => {
-        if (audioElement) {
-          setCurrentTime(audioElement.currentTime);
-          setSeekPosition(audioElement.currentTime);
-        }
-      });
-      audioElement.addEventListener("ended", handleTrackEnd);
-    }
 
+  const handleTimeUpdate = useCallback(() => {
+    if (!audioElement) return;
+    requestAnimationFrame(() => {
+      setCurrentTime((prev) => {
+        const newTime = audioElement?.currentTime || 0;
+        if (Math.abs(newTime - prev) > TIME_THRESHOLD) {
+          setSeekPosition(newTime);
+          return newTime;
+        }
+        return prev;
+      });
+    });
+  }, []);
+  
+  // 2. Memoize the throttled version to avoid re-creation on each render
+  const throttledTimeUpdate = useMemo(
+    () => throttle(handleTimeUpdate, 200),
+    [handleTimeUpdate]
+  );
+
+  useEffect(() => {
+    if (!audioElement) return;
+  
+    audioElement.addEventListener("timeupdate", throttledTimeUpdate);
     return () => {
-      if (audioElement) {
-        audioElement.removeEventListener("timeupdate", () => {});
-        audioElement.removeEventListener("ended", handleTrackEnd);
+      if (audioElement){
+        audioElement.removeEventListener("timeupdate", throttledTimeUpdate);
       }
     };
-  }, [handleTrackEnd]);
+  }, [throttledTimeUpdate]);
 
   /**
    * Sets the callback for when a track finishes to 'handleTrackEnd'.
@@ -1210,25 +1316,50 @@ export function SpotifyClone(): JSX.Element {
    *  - set Discord RPC
    */
   useEffect(() => {
-    if (currentTrack) {
-      void playTrackFromSource(currentTrack, 0)
-        .then(() => {
+    let mounted = true;
+    
+    async function setupTrack() {
+      if (!currentTrack || !mounted) return;
+      
+      try {
+        await playTrackFromSource(currentTrack, 0);
+        
+        // Only continue if component is still mounted
+        if (!mounted) return;
+        
+        // Batch our state updates
+        const [lyrics, recent, counts] = await Promise.all([
+          fetchLyrics(currentTrack),
+          storeRecentlyPlayed(currentTrack),
+          getListenCounts()
+        ]);
+        
+        if (!mounted) return;
+        
+        // Use a single state update batch
+        ReactDOM.unstable_batchedUpdates(() => {
           setIsPlaying(true);
-          return fetchLyrics(currentTrack);
-        })
-        .then(() => storeRecentlyPlayed(currentTrack))
-        .then((recent) => setJumpBackIn(recent))
-        .then(() => getListenCounts())
-        .then((counts) => setListenCount(counts[currentTrack.id] || 0))
-        .then(() =>
-          setupDiscordRPC(currentTrack.title, currentTrack.artist.name)
-        )
-        .catch((err) => {
-          console.error("Error during playback setup:", err);
-          alert("An error occurred while setting up the track.");
+          setJumpBackIn(recent);
+          setListenCount(counts[currentTrack.id] || 0);
         });
+        
+        // Setup Discord RPC only once
+        await setupDiscordRPC(currentTrack.title, currentTrack.artist.name);
+        
+      } catch (err) {
+        console.error("Error during playback setup:", err);
+        if (mounted) {
+          setIsPlaying(false);
+        }
+      }
     }
-  }, [currentTrack, playlists, playTrackFromSource, fetchLyrics, setIsPlaying]);
+  
+    void setupTrack();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [currentTrack, fetchLyrics, playTrackFromSource, setIsPlaying, setupDiscordRPC]); // Remove unnecessary dependencies
 
   /**
    * Cleanup loaded data URL from memory once audio finishes loading.
@@ -1468,7 +1599,7 @@ export function SpotifyClone(): JSX.Element {
                   <img
                     src={
                       currentPlaylist.image ||
-                      "assets/images/defaultPlaylistImage.png"
+                      "images/defaultPlaylistImage.png"
                     }
                     alt={currentPlaylist.name || "default playlist error alt"}
                     className="w-full h-full object-cover"
@@ -1699,7 +1830,7 @@ export function SpotifyClone(): JSX.Element {
                     style={{ userSelect: "none" }}
                   >
                     <img
-                      src={playlist.image || "assets/"}
+                      src={playlist.image || "images/defaultPlaylistImage.png"}
                       alt={playlist.name || "Playlist Cover"}
                       className={cn(
                         "rounded",
@@ -1781,7 +1912,7 @@ export function SpotifyClone(): JSX.Element {
                         className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
                       >
                         <img
-                          src={pl.image || "assets/"}
+                          src={pl.image || "images/defaultPlaylistImage.png"}
                           alt={pl.name || "Playlist Cover"}
                           className="w-10 h-10 rounded-md"
                         />
@@ -1844,7 +1975,7 @@ export function SpotifyClone(): JSX.Element {
                           <img
                             src={
                               track.album.cover_medium ||
-                              "assets/default-album.jpg"
+                              "images/defaultPlaylistImage.png"
                             }
                             alt={track.title || "Album Cover"}
                             className={cn(
@@ -2309,7 +2440,7 @@ export function SpotifyClone(): JSX.Element {
                   >
                     <div className="relative flex-shrink-0">
                       <img
-                        src={pl.image || "placeholder"}
+                        src={pl.image || "images/defaultPlaylistImage.png"}
                         alt={pl.name}
                         className={cn(
                           "rounded-md object-cover shadow-md",
@@ -3082,8 +3213,8 @@ export function SpotifyClone(): JSX.Element {
                         onClick={() => openPlaylist(pl)}
                       >
                         <img
-                          src={pl.image || ""}
-                          alt={pl.name || ""}
+                          src={pl.image || "images/defaultPlaylistImage.png"}
+                          alt={pl.name || "images/defaultPlaylistImage.png"}
                           className="w-16 h-16 rounded mr-4"
                         />
                         <span className="font-medium">{pl.name}</span>
@@ -3104,8 +3235,8 @@ export function SpotifyClone(): JSX.Element {
                     <div key={i} className="group relative flex flex-col">
                       <div className="relative aspect-square w-full overflow-hidden rounded-xl">
                         <img
-                          src={track.album.cover_medium || ""}
-                          alt={track.title || ""}
+                          src={track.album.cover_medium || "images/defaultSongImage.png"}
+                          alt={track.title || "No Track Found"}
                           className={cn(
                             "w-full h-full object-cover",
                             "transform transition-transform duration-300",
@@ -3236,32 +3367,7 @@ export function SpotifyClone(): JSX.Element {
             )}
           </aside>
         )}
-      </div>
-    );
-  };
 
-  // ---------------------------------------------------------------------------
-  //                          FINAL RENDER & MODALS
-  // ---------------------------------------------------------------------------
-  return (
-    <>
-      {/* Onboarding flow */}
-      {showOnboarding && (
-        <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
-          <Onboarding
-            onComplete={handleOnboardingComplete}
-            onArtistSelectionComplete={handleArtistSelectionComplete}
-            API_BASE_URL={API_BASE_URL}
-            setRecommendedTracks={setRecommendedTracks}
-          />
-        </div>
-      )}
-
-      {/* Render MobileLayout or DesktopLayout */}
-      <MobileLayout />
-      <DesktopLayout />
-
-      {/* Desktop Player */}
       {mounted &&
         (currentTrack ? (
           <footer className="fixed bottom-0 left-0 right-0">
@@ -3308,6 +3414,32 @@ export function SpotifyClone(): JSX.Element {
             </div>
           </footer>
         ))}
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  //                          FINAL RENDER & MODALS
+  // ---------------------------------------------------------------------------
+  return (
+    <>
+      {/* Onboarding flow */}
+      {showOnboarding && (
+        <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            onArtistSelectionComplete={handleArtistSelectionComplete}
+            API_BASE_URL={API_BASE_URL}
+            setRecommendedTracks={setRecommendedTracks}
+          />
+        </div>
+      )}
+
+      {/* Render MobileLayout or DesktopLayout */}
+      <MobileLayout />
+      <DesktopLayout />
+
+      
 
       {/* Add to Playlist Modal */}
       {showAddToPlaylistModal && (
@@ -3328,7 +3460,7 @@ export function SpotifyClone(): JSX.Element {
             </div>
             <div className="relative mb-6">
               <select
-                value={selectedPlaylistForAdd || ""}
+                value={selectedPlaylistForAdd || "Unkown Value"}
                 onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
                 className="w-full pl-10 pr-10 py-3 rounded-xl bg-gray-800 text-white border border-gray-700
                             focusborder-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none

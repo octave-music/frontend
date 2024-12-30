@@ -35,6 +35,7 @@ export const viewport: Viewport = {
   viewportFit: 'cover'
 }
 
+
 export default function SpotifyPage() {
   return (
     <main className="min-h-[100dvh] bg-black overscroll-none">

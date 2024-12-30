@@ -2,7 +2,7 @@ import withPWA from 'next-pwa';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   swcMinify: true,
   webpack(config) {
     config.resolve.alias['@'] = new URL('./src', import.meta.url).pathname;
