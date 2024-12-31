@@ -7,6 +7,11 @@
   height: 100%;
 }
 
+html, body {
+  overflow: auto;
+}
+
+
 body {
   min-height: 100dvh;
   height: -webkit-fill-available;
@@ -519,6 +524,7 @@ div[role="menu"] {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   scroll-margin-bottom: 8rem; /* Match DesktopPlayer's height */
+  overflow-y: auto;
 }
 
 .custom-scrollbar::-webkit-scrollbar {

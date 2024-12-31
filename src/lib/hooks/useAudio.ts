@@ -27,10 +27,19 @@ export function useAudio() {
     setDuration(audioElement.duration);
 
     const handleTimeUpdate = () => {
-      if (audioElement){
-        setCurrentTime(audioElement.currentTime);
-      }
+      if (!audioElement) return;
+    
+      const newTime = audioElement.currentTime;
+    
+      // Batch state updates (throttle updates to prevent re-renders every frame)
+      setCurrentTime((prevTime) => {
+        if (Math.abs(newTime - prevTime) > 0.2) { // Only update if difference > threshold
+          return newTime;
+        }
+        return prevTime;
+      });
     };
+    
 
     const handleLoadedMetadata = () => {
       if (audioElement){
@@ -135,6 +144,14 @@ export function useAudio() {
   
         audioElement.addEventListener('loadeddata', handleLoadedData, { once: true });
         audioElement.addEventListener('error', handleError, { once: true });
+
+        audioElement.addEventListener('play', (e) => {
+          e.stopPropagation();  // Add this
+        }, true);  // Use capture phase
+        
+        audioElement.addEventListener('playing', (e) => {
+          e.stopPropagation();  // Add this
+        }, true);  // Use capture phase
       });
   
     } catch (err) {

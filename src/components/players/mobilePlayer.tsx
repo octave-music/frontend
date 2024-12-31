@@ -265,22 +265,28 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
 
   useEffect(() => {
-    function handleResize() {
-      // Update breakpoint to handle iPhone SE and similar small devices
-      const smallScreenBreakpoint = 375; // iPhone SE width
-      setCanShowActions(window.innerWidth > smallScreenBreakpoint);
-    }
-    
-    // Initial check
+    let resizeTimeout: NodeJS.Timeout | null = null;
+  
+    const handleResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+  
+      resizeTimeout = setTimeout(() => {
+        setCanShowActions(window.innerWidth > 375);
+      }, 100); // Throttle updates
+    };
+  
+    // Initial call
     handleResize();
-    
-    // Add event listener
+  
     window.addEventListener('resize', handleResize);
-    
-    // Cleanup
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
+  
+    return () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);  
+  
+  
   const controls = useAnimation();
 
   // Additional “More Options” items
@@ -332,33 +338,43 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   // Extract approximate color from track cover
   useEffect(() => {
-    const extractColor = () => {
-      try {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.src = currentTrack.album.cover_medium;
-
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          canvas.width = 1;
-          canvas.height = 1;
-          ctx.drawImage(img, 0, 0, 1, 1);
-          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-          const color = `rgb(${r}, ${g}, ${b})`;
-          setDominantColor(color);
-        };
-
-        img.onerror = () => {
-          setDominantColor('#000000');
-        };
-      } catch {
-        setDominantColor('#000000');
-      }
+    if (!currentTrack.album.cover_medium) {
+      setDominantColor('#000000');
+      return;
+    }
+  
+    let isCancelled = false;
+  
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = currentTrack.album.cover_medium;
+  
+    img.onload = () => {
+      if (isCancelled) return;
+  
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+  
+      canvas.width = 1;
+      canvas.height = 1;
+      ctx.drawImage(img, 0, 0, 1, 1);
+  
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      const color = `rgb(${r}, ${g}, ${b})`;
+      setDominantColor(color);
     };
-    if (currentTrack.album.cover_medium) extractColor();
-  }, [currentTrack]);
+  
+    img.onerror = () => {
+      if (!isCancelled) setDominantColor('#000000');
+    };
+  
+    return () => {
+      // Prevent state updates on unmounted component
+      isCancelled = true;
+    };
+  }, [currentTrack.album.cover_medium]);
+  
 
   // Lyrics auto-scroll
   const processedLyrics = useMemo(() => {
