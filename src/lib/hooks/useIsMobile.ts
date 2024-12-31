@@ -1,6 +1,6 @@
 // useIsMobile.ts
-import { useMediaQuery } from 'react-responsive';
-import { useEffect, useState } from 'react';
+import { useMediaQuery } from "react-responsive";
+import { useEffect, useState } from "react";
 
 /**
  * Because we can't run `window.matchMedia` on the server,

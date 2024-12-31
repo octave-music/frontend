@@ -1,9 +1,8 @@
 // lyrics.ts
 
-import { Track, Lyric } from "../types/types"
+import { Track, Lyric } from "../types/types";
 
-
-const API_BASE_URL = 'https://mbck.cloudgen.xyz';
+const API_BASE_URL = "https://mbck.cloudgen.xyz";
 
 /**
  * Parses a raw lyrics string into a structured array of lyrics with time stamps.
@@ -11,9 +10,9 @@ const API_BASE_URL = 'https://mbck.cloudgen.xyz';
  * @returns {Lyric[]} Parsed lyrics array.
  */
 const parseLyrics = (ly: string): Lyric[] => {
-  return ly.split('\n').map((l) => {
-    const [time, text] = l.split(']');
-    const [m, s] = time.replace('[', '').split(':');
+  return ly.split("\n").map((l) => {
+    const [time, text] = l.split("]");
+    const [m, s] = time.replace("[", "").split(":");
     const secs = parseFloat(m) * 60 + parseFloat(s);
     return { time: parseFloat(secs.toFixed(1)), text: text.trim() };
   });
@@ -27,8 +26,8 @@ const parseLyrics = (ly: string): Lyric[] => {
 export const handleFetchLyrics = async (track: Track): Promise<Lyric[]> => {
   try {
     const resp = await fetch(`${API_BASE_URL}/api/lyrics`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: track.title, artist: track.artist.name }),
     });
 
@@ -39,7 +38,7 @@ export const handleFetchLyrics = async (track: Track): Promise<Lyric[]> => {
       return [];
     }
   } catch (err) {
-    console.error('Lyrics error:', err);
+    console.error("Lyrics error:", err);
     return [];
   }
 };

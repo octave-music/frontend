@@ -1,6 +1,6 @@
 // types/types.ts
 
-import React from 'react';
+import React from "react";
 
 export interface Track {
   id: string;
@@ -69,7 +69,7 @@ export interface Artist {
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
 export interface AudioState {

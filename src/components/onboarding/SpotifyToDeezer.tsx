@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
-import { ArrowRight, LogIn, Loader2, Music2 } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import { ArrowRight, LogIn, Loader2, Music2 } from "lucide-react";
 
 // Types
 interface SpotifyTrack {
@@ -23,35 +23,43 @@ interface SpotifyUser {
   image?: string;
 }
 
-const API_BASE_URL = 'https://sp-migrate.octave.gold';
+const API_BASE_URL = "https://sp-migrate.octave.gold";
 
 function handleSpotifyCallback() {
   const urlParams = new URLSearchParams(window.location.search);
-  const authToken = urlParams.get('auth_token');
+  const authToken = urlParams.get("auth_token");
   if (authToken) {
-    localStorage.setItem('spotifyAuthToken', authToken);
-    window.history.replaceState({}, document.title, '/');
+    localStorage.setItem("spotifyAuthToken", authToken);
+    window.history.replaceState({}, document.title, "/");
   }
 }
 
-async function fetchSpotifyUserData(authToken: string): Promise<{ user: SpotifyUser }> {
+async function fetchSpotifyUserData(
+  authToken: string
+): Promise<{ user: SpotifyUser }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/userData?auth_token=${authToken}`);
-    if (!response.ok) throw new Error('Failed to fetch user data');
+    const response = await fetch(
+      `${API_BASE_URL}/api/userData?auth_token=${authToken}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch user data");
     return await response.json();
   } catch (err) {
-    console.error('Error fetching user data:', err);
+    console.error("Error fetching user data:", err);
     throw err;
   }
 }
 
-async function fetchSpotifyPlaylists(authToken: string): Promise<{ playlists: SpotifyPlaylist[] }> {
+async function fetchSpotifyPlaylists(
+  authToken: string
+): Promise<{ playlists: SpotifyPlaylist[] }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/userData/playlists?auth_token=${authToken}`);
-    if (!response.ok) throw new Error('Failed to fetch playlists');
+    const response = await fetch(
+      `${API_BASE_URL}/api/userData/playlists?auth_token=${authToken}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch playlists");
     return await response.json();
   } catch (err) {
-    console.error('Error fetching playlists:', err);
+    console.error("Error fetching playlists:", err);
     throw err;
   }
 }
@@ -66,16 +74,18 @@ async function migratePlaylistToDeezer(playlist: SpotifyPlaylist) {
         album: track.album.name,
       })),
     };
-    console.log('Ready to send to Deezer:', deezerCompatibleData);
-    alert('Playlist migrated successfully!');
+    console.log("Ready to send to Deezer:", deezerCompatibleData);
+    alert("Playlist migrated successfully!");
   } catch (err) {
-    console.error('Error migrating playlist:', err);
+    console.error("Error migrating playlist:", err);
   }
 }
 
 export const SpotifyToDeezer = () => {
   const [spotifyUser, setSpotifyUser] = useState<SpotifyUser | null>(null);
-  const [spotifyPlaylists, setSpotifyPlaylists] = useState<SpotifyPlaylist[]>([]);
+  const [spotifyPlaylists, setSpotifyPlaylists] = useState<SpotifyPlaylist[]>(
+    []
+  );
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [migrating, setMigrating] = useState<string | null>(null);
@@ -85,18 +95,17 @@ export const SpotifyToDeezer = () => {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('spotifyAuthToken');
+    const token = localStorage.getItem("spotifyAuthToken");
     setAuthToken(token);
 
     if (token) {
       setLoading(true);
-      Promise.all([
-        fetchSpotifyUserData(token),
-        fetchSpotifyPlaylists(token)
-      ]).then(([userData, playlistData]) => {
-        setSpotifyUser(userData.user);
-        setSpotifyPlaylists(playlistData.playlists);
-      }).catch(console.error)
+      Promise.all([fetchSpotifyUserData(token), fetchSpotifyPlaylists(token)])
+        .then(([userData, playlistData]) => {
+          setSpotifyUser(userData.user);
+          setSpotifyPlaylists(playlistData.playlists);
+        })
+        .catch(console.error)
         .finally(() => setLoading(false));
     }
   }, []);
@@ -123,7 +132,7 @@ export const SpotifyToDeezer = () => {
         <div className="text-3xl font-bold text-center mb-8 text-white bg-clip-text">
           Spotify to Deezer Migration
         </div>
-        
+
         {!authToken ? (
           <div className="text-center py-12">
             <div className="relative w-24 h-24 mx-auto mb-6">
@@ -134,7 +143,8 @@ export const SpotifyToDeezer = () => {
               Transfer Your Spotify Playlists to Deezer
             </h2>
             <p className="text-gray-400 mb-8">
-              Connect your Spotify account to get started with the migration process
+              Connect your Spotify account to get started with the migration
+              process
             </p>
             <a
               href={`${API_BASE_URL}/login`}
@@ -161,7 +171,9 @@ export const SpotifyToDeezer = () => {
                   </div>
                 )}
                 <div>
-                  <h2 className="font-semibold text-xl text-white">{spotifyUser.name}</h2>
+                  <h2 className="font-semibold text-xl text-white">
+                    {spotifyUser.name}
+                  </h2>
                   <p className="text-gray-400">{spotifyUser.email}</p>
                 </div>
               </div>
@@ -176,7 +188,10 @@ export const SpotifyToDeezer = () => {
                   >
                     <div className="relative aspect-video">
                       <Image
-                        src={playlist.tracks[0]?.album.cover || '/api/placeholder/400/225'}
+                        src={
+                          playlist.tracks[0]?.album.cover ||
+                          "/api/placeholder/400/225"
+                        }
                         alt={playlist.playlist_name}
                         fill
                         className="object-cover brightness-90 group-hover:brightness-110 transition-all duration-300"
@@ -199,8 +214,12 @@ export const SpotifyToDeezer = () => {
                       </div>
                     </div>
                     <div className="p-5">
-                      <h3 className="font-semibold text-lg text-white truncate">{playlist.playlist_name}</h3>
-                      <p className="text-gray-400">{playlist.tracks.length} tracks</p>
+                      <h3 className="font-semibold text-lg text-white truncate">
+                        {playlist.playlist_name}
+                      </h3>
+                      <p className="text-gray-400">
+                        {playlist.tracks.length} tracks
+                      </p>
                     </div>
                   </div>
                 ))}
