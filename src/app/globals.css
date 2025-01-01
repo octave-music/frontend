@@ -3,557 +3,289 @@
 @tailwind utilities;
 
 :root {
-	--safe-area-inset-bottom: env(safe-area-inset-bottom);
-	height: 100%;
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
 }
 
-html,
-body {
-	overflow: auto;
-}
-
-
-body {
-	min-height: 100dvh;
-	height: -webkit-fill-available;
-	overscroll-behavior: none;
-}
-
+/* Base Layout Styles */
 html {
-	height: -webkit-fill-available;
-	overflow: hidden;
+  height: -webkit-fill-available;
+  @apply antialiased scroll-smooth overflow-hidden;
 }
 
-/* Mobile viewport adjustments */
+body {
+  min-height: 100dvh;
+  height: -webkit-fill-available;
+  overscroll-behavior: none;
+  @apply bg-background text-foreground;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+@layer base {
+  :root {
+    /* Core Colors */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+
+    /* UI Elements */
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+
+    /* Brand Colors */
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+
+    /* State Colors */
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+
+    /* Form Elements */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+
+    /* System */
+    --radius: 0.5rem;
+
+    /* Charts & Visualizations */
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    /* Animation Durations */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 350ms;
+  }
+
+  .dark {
+    /* Core Colors */
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+
+    /* UI Elements */
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Brand Colors */
+    --primary: 210 20% 98%;
+    --primary-foreground: 220.9 39.3% 11%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+
+    /* State Colors */
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+
+    /* Form Elements */
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+
+    /* Charts & Visualizations */
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
+  }
+
+  ::selection {
+    @apply bg-primary text-primary-foreground;
+  }
+}
+
 /* iOS Safari specific */
 @supports (-webkit-touch-callout: none) {
-	.ios-h-screen {
-		height: -webkit-fill-available;
-	}
-
-	.ios-min-h-screen {
-		min-height: -webkit-fill-available;
-	}
-
-	.ios-h-full {
-		height: 100dvh;
-	}
+  .ios-h-screen {
+    height: -webkit-fill-available;
+  }
+  .ios-min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+  .ios-h-full {
+    height: 100dvh;
+  }
 }
 
+/* Safe Area Utilities */
 .pb-safe {
-	padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .mb-safe {
-	margin-bottom: env(safe-area-inset-bottom);
-}
-
-@layer base {
-	:root {
-		/* Core Colors */
-		--background: 0 0% 100%;
-		--foreground: 224 71.4% 4.1%;
-
-		/* UI Elements */
-		--card: 0 0% 100%;
-		--card-foreground: 224 71.4% 4.1%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 224 71.4% 4.1%;
-
-		/* Brand Colors */
-		--primary: 220.9 39.3% 11%;
-		--primary-foreground: 210 20% 98%;
-		--secondary: 220 14.3% 95.9%;
-		--secondary-foreground: 220.9 39.3% 11%;
-
-		/* State Colors */
-		--muted: 220 14.3% 95.9%;
-		--muted-foreground: 220 8.9% 46.1%;
-		--accent: 220 14.3% 95.9%;
-		--accent-foreground: 220.9 39.3% 11%;
-		--destructive: 0 84.2% 60.2%;
-		--destructive-foreground: 210 20% 98%;
-
-		/* Form Elements */
-		--border: 220 13% 91%;
-		--input: 220 13% 91%;
-		--ring: 224 71.4% 4.1%;
-
-		/* System */
-		--radius: 0.5rem;
-
-		/* Charts & Visualizations */
-		--chart-1: 12 76% 61%;
-		--chart-2: 173 58% 39%;
-		--chart-3: 197 37% 24%;
-		--chart-4: 43 74% 66%;
-		--chart-5: 27 87% 67%;
-
-		/* Animation Durations */
-		--duration-fast: 150ms;
-		--duration-normal: 250ms;
-		--duration-slow: 350ms;
-	}
-
-	.dark {
-		/* Core Colors */
-		--background: 224 71.4% 4.1%;
-		--foreground: 210 20% 98%;
-
-		/* UI Elements */
-		--card: 224 71.4% 4.1%;
-		--card-foreground: 210 20% 98%;
-		--popover: 224 71.4% 4.1%;
-		--popover-foreground: 210 20% 98%;
-
-		/* Brand Colors */
-		--primary: 210 20% 98%;
-		--primary-foreground: 220.9 39.3% 11%;
-		--secondary: 215 27.9% 16.9%;
-		--secondary-foreground: 210 20% 98%;
-
-		/* State Colors */
-		--muted: 215 27.9% 16.9%;
-		--muted-foreground: 217.9 10.6% 64.9%;
-		--accent: 215 27.9% 16.9%;
-		--accent-foreground: 210 20% 98%;
-		--destructive: 0 62.8% 30.6%;
-		--destructive-foreground: 210 20% 98%;
-
-		/* Form Elements */
-		--border: 215 27.9% 16.9%;
-		--input: 215 27.9% 16.9%;
-		--ring: 216 12.2% 83.9%;
-
-		/* Charts & Visualizations */
-		--chart-1: 220 70% 50%;
-		--chart-2: 160 60% 45%;
-		--chart-3: 30 80% 55%;
-		--chart-4: 280 65% 60%;
-		--chart-5: 340 75% 55%;
-	}
-}
-
-@layer base {
-	* {
-		@apply border-border;
-	}
-
-	html {
-		@apply antialiased scroll-smooth;
-	}
-
-	body {
-		@apply bg-background text-foreground min-h-screen;
-		font-feature-settings: "rlig" 1, "calt" 1;
-	}
-
-	/* Focus styles */
-	:focus-visible {
-		@apply outline-none ring-2 ring-ring ring-offset-2;
-	}
-
-	/* Selection styles */
-	::selection {
-		@apply bg-primary text-primary-foreground;
-	}
+  margin-bottom: env(safe-area-inset-bottom);
 }
 
 @layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium
+           transition-colors focus-visible:outline-none focus-visible:ring-2 
+           focus-visible:ring-ring focus-visible:ring-offset-2 
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
 
-	/* Common component styles */
-	.btn {
-		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
-	}
-
-	.input {
-		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
-	}
+  .input {
+    @apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 
+           text-sm placeholder:text-muted-foreground focus-visible:outline-none 
+           focus-visible:ring-2 focus-visible:ring-ring 
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
 }
 
 @layer utilities {
+  .transition-all {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: var(--duration-normal);
+  }
 
-	/* Enhanced transitions */
-	.transition-all {
-		transition-property: all;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-normal);
-	}
+  .transition-colors {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: var(--duration-fast);
+  }
 
-	.transition-colors {
-		transition-property: background-color, border-color, color, fill, stroke;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-fast);
-	}
+  .transition-transform {
+    transition-property: transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: var(--duration-fast);
+  }
 
-	.transition-transform {
-		transition-property: transform;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-fast);
-	}
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
-	/* Hide scrollbar for Chrome, Safari and Opera */
-	.no-scrollbar::-webkit-scrollbar {
-		display: none;
-	}
-
-	/* Hide scrollbar for IE, Edge and Firefox */
-	.no-scrollbar {
-		-ms-overflow-style: none;
-		/* IE and Edge */
-		scrollbar-width: none;
-		/* Firefox */
-	}
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-/* Custom Scrollbar Styles */
-.custom-scrollbar::-webkit-scrollbar {
-	@apply w-2;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-	@apply bg-secondary rounded-full;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-	@apply rounded-full transition-colors hover:bg-accent-foreground;
-}
-
-/* Media Query Optimizations */
-@media (max-width: 640px) {
-	.custom-scrollbar::-webkit-scrollbar {
-		@apply w-1;
-	}
-}
-
-/* Reduce motion if user prefers */
-@media (prefers-reduced-motion: reduce) {
-	* {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
-	}
-}
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-	:root {
-		/* Core Colors */
-		--background: 0 0% 100%;
-		--foreground: 224 71.4% 4.1%;
-
-		/* UI Elements */
-		--card: 0 0% 100%;
-		--card-foreground: 224 71.4% 4.1%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 224 71.4% 4.1%;
-
-		/* Brand Colors */
-		--primary: 220.9 39.3% 11%;
-		--primary-foreground: 210 20% 98%;
-		--secondary: 220 14.3% 95.9%;
-		--secondary-foreground: 220.9 39.3% 11%;
-
-		/* State Colors */
-		--muted: 220 14.3% 95.9%;
-		--muted-foreground: 220 8.9% 46.1%;
-		--accent: 220 14.3% 95.9%;
-		--accent-foreground: 220.9 39.3% 11%;
-		--destructive: 0 84.2% 60.2%;
-		--destructive-foreground: 210 20% 98%;
-
-		/* Form Elements */
-		--border: 220 13% 91%;
-		--input: 220 13% 91%;
-		--ring: 224 71.4% 4.1%;
-
-		/* System */
-		--radius: 0.5rem;
-
-		/* Charts & Visualizations */
-		--chart-1: 12 76% 61%;
-		--chart-2: 173 58% 39%;
-		--chart-3: 197 37% 24%;
-		--chart-4: 43 74% 66%;
-		--chart-5: 27 87% 67%;
-
-		/* Animation Durations */
-		--duration-fast: 150ms;
-		--duration-normal: 250ms;
-		--duration-slow: 350ms;
-	}
-
-	.dark {
-		/* Core Colors */
-		--background: 224 71.4% 4.1%;
-		--foreground: 210 20% 98%;
-
-		/* UI Elements */
-		--card: 224 71.4% 4.1%;
-		--card-foreground: 210 20% 98%;
-		--popover: 224 71.4% 4.1%;
-		--popover-foreground: 210 20% 98%;
-
-		/* Brand Colors */
-		--primary: 210 20% 98%;
-		--primary-foreground: 220.9 39.3% 11%;
-		--secondary: 215 27.9% 16.9%;
-		--secondary-foreground: 210 20% 98%;
-
-		/* State Colors */
-		--muted: 215 27.9% 16.9%;
-		--muted-foreground: 217.9 10.6% 64.9%;
-		--accent: 215 27.9% 16.9%;
-		--accent-foreground: 210 20% 98%;
-		--destructive: 0 62.8% 30.6%;
-		--destructive-foreground: 210 20% 98%;
-
-		/* Form Elements */
-		--border: 215 27.9% 16.9%;
-		--input: 215 27.9% 16.9%;
-		--ring: 216 12.2% 83.9%;
-
-		/* Charts & Visualizations */
-		--chart-1: 220 70% 50%;
-		--chart-2: 160 60% 45%;
-		--chart-3: 30 80% 55%;
-		--chart-4: 280 65% 60%;
-		--chart-5: 340 75% 55%;
-	}
-}
-
-@layer base {
-	* {
-		@apply border-border;
-	}
-
-	html {
-		@apply antialiased scroll-smooth;
-	}
-
-	body {
-		@apply bg-background text-foreground min-h-screen;
-		font-feature-settings: "rlig" 1, "calt" 1;
-	}
-
-	/* Focus styles */
-	:focus-visible {
-		@apply outline-none ring-2 ring-ring ring-offset-2;
-	}
-
-	/* Selection styles */
-	::selection {
-		@apply bg-primary text-primary-foreground;
-	}
-}
-
-@layer components {
-
-	/* Common component styles */
-	.btn {
-		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
-	}
-
-	.input {
-		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
-	}
-}
-
-@layer utilities {
-
-	/* Enhanced transitions */
-	.transition-all {
-		transition-property: all;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-normal);
-	}
-
-	.transition-colors {
-		transition-property: background-color, border-color, color, fill, stroke;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-fast);
-	}
-
-	.transition-transform {
-		transition-property: transform;
-		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		transition-duration: var(--duration-fast);
-	}
-
-	/* Hide scrollbar for Chrome, Safari and Opera */
-	.no-scrollbar::-webkit-scrollbar {
-		display: none;
-	}
-
-	/* Hide scrollbar for IE, Edge and Firefox */
-	.no-scrollbar {
-		-ms-overflow-style: none;
-		/* IE and Edge */
-		scrollbar-width: none;
-		/* Firefox */
-	}
-}
-
-/* Custom Scrollbar Styles */
-.custom-scrollbar::-webkit-scrollbar {
-	@apply w-2;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-	@apply bg-secondary rounded-full;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-	@apply rounded-full transition-colors hover:bg-accent-foreground;
-}
-
-/* Media Query Optimizations */
-@media (max-width: 640px) {
-	.custom-scrollbar::-webkit-scrollbar {
-		@apply w-1;
-	}
-}
-
-/* Reduce motion if user prefers */
-@media (prefers-reduced-motion: reduce) {
-	* {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
-	}
-}
-
-@keyframes fillWhite {
-	0% {
-		color: transparent;
-		background: transparent;
-	}
-
-	100% {
-		color: white;
-		background: transparent;
-	}
-}
-
-.fill-white-animation {
-	display: inline-block;
-	/* Ensure each character is treated as a block */
-	animation: fillWhite 0.5s ease-in-out forwards;
-	/* Animation duration */
-	animation-delay: 0s;
-	/* Start immediately, customize with inline styles */
-}
-
-div[role="menu"] {
-	max-width: 95%;
-	/* Prevents menu from exceeding screen width */
-	word-wrap: break-word;
-	/* Ensures text wraps properly */
-	overflow: hidden;
-	/* Hides any overflowing content */
-	border: 1px solid #333;
-	/* Adds a subtle border */
-}
-
-.expanded-player {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	z-index: 50;
-	display: flex;
-	flex-direction: column;
-	height: 100vh;
-	/* Force full height */
-	overflow: hidden;
-	/* Prevent scrolling of the main container */
-}
-
-.player-artwork {
-	width: clamp(240px, 60vw, 320px);
-	height: clamp(240px, 60vw, 320px);
-	margin: 0 auto;
-}
-
-.seekbar {
-	appearance: none;
-	background: rgba(255, 255, 255, 0.2);
-	height: 4px;
-	width: 100%;
-}
-
-
-.seekbar-progress {
-	background: white !important;
-	height: 100%;
-	border-radius: 9999px;
-}
-
-.seekbar-container {
-	background: rgba(255, 255, 255, 0.2);
-	border-radius: 9999px;
-	overflow: hidden;
-}
-
-.seekbar::-webkit-slider-thumb {
-	appearance: none;
-	background: white;
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-}
-
-.seekbar::-moz-range-thumb {
-	background: white;
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-	border: none;
-}
-
-@keyframes modalAppear {
-	from {
-		opacity: 0;
-		transform: scale(0.95);
-	}
-
-	to {
-		opacity: 1;
-		transform: scale(1);
-	}
-}
-
-.animate-modal-appear {
-	animation: modalAppear 0.3s ease-out;
-}
-
+/* Custom Scrollbar */
 .custom-scrollbar {
-	scrollbar-width: thin;
-	scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-	scroll-margin-bottom: 8rem;
-	/* Match DesktopPlayer's height */
-	overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scroll-margin-bottom: 8rem;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-	width: 6px;
+  @apply w-2;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-	background: transparent;
+  @apply bg-secondary rounded-full;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-	background-color: rgba(255, 255, 255, 0.1);
-	border-radius: 3px;
+  @apply rounded-full transition-colors hover:bg-accent-foreground;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-	background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Player Styles */
+.expanded-player {
+  @apply fixed inset-0 z-50 flex flex-col h-screen overflow-hidden;
+}
+
+.player-artwork {
+  width: clamp(240px, 60vw, 320px);
+  height: clamp(240px, 60vw, 320px);
+  margin: 0 auto;
+}
+
+/* Seekbar Styles */
+.seekbar-container {
+  @apply bg-opacity-20 bg-white rounded-full overflow-hidden;
+}
+
+.seekbar {
+  @apply appearance-none bg-opacity-20 bg-white h-1 w-full;
+}
+
+.seekbar-progress {
+  @apply bg-white h-full rounded-full;
+}
+
+.seekbar::-webkit-slider-thumb {
+  @apply appearance-none bg-white w-3 h-3 rounded-full;
+}
+
+.seekbar::-moz-range-thumb {
+  @apply bg-white w-3 h-3 rounded-full border-none;
+}
+
+/* Animations */
+@keyframes modalAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fillWhite {
+  from {
+    color: transparent;
+    background: transparent;
+  }
+  to {
+    color: white;
+    background: transparent;
+  }
+}
+
+.animate-modal-appear {
+  animation: modalAppear 0.3s ease-out;
+}
+
+.fill-white-animation {
+  @apply inline-block;
+  animation: fillWhite 0.5s ease-in-out forwards;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 640px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-1;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
