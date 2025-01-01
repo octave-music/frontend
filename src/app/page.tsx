@@ -1,16 +1,15 @@
-import type { Metadata, Viewport } from 'next'
-import { SpotifyClone } from "../components/oldindex"
-import { StrictMode } from 'react';
-// import { SpotifyClone } from "../components/SpotifyClone"
+import type { Metadata, Viewport } from "next";
+import { SpotifyClone } from "../components/index";
+import { StrictMode } from "react";
 
 export const metadata: Metadata = {
-  title: 'Octave Streaming',
-  description: 'Made by Custom and Abdullah',
+  title: "Octave Streaming",
+  description: "Made by Custom and Abdullah",
   openGraph: {
-    type: 'website',
-    title: 'Octave Streaming',
-    description: 'Made by Custom and Abdullah',
-    siteName: 'Octave Streaming',
+    type: "website",
+    title: "Octave Streaming",
+    description: "Made by Custom and Abdullah",
+    siteName: "Octave Streaming",
     images: [
       {
         url: "/images/OctaveBanner.png",
@@ -25,24 +24,23 @@ export const metadata: Metadata = {
     shortcut: "/images/black_logo.png",
     apple: "/images/black_logo.png",
   },
-}
+};
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
-  width: 'device-width',
+  themeColor: "#000000",
+  width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover'
-}
-
+  viewportFit: "cover",
+};
 
 export default function SpotifyPage() {
   return (
     <StrictMode>
       <main className="min-h-[100dvh] bg-black overscroll-none">
-      <SpotifyClone />
-    </main>
+        <SpotifyClone />
+      </main>
     </StrictMode>
-  )
+  );
 }

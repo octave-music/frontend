@@ -1,11 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
 // Onboarding.tsx
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Music, Search } from 'lucide-react';
-import debounce from 'lodash/debounce';
-import { getSetting } from '../../lib/managers/idbWrapper';
-import { Artist, Track } from "../../lib/types/types"
+import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { Music, Search } from "lucide-react";
+import debounce from "lodash/debounce";
+import { getSetting } from "@/lib/managers/idbWrapper";
+import { Artist, Track } from "@/lib/types/types";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -27,7 +27,8 @@ function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
           Welcome to Octave
         </h1>
         <p className="text-lg text-gray-300 mb-8 leading-relaxed">
-          Your gateway to a world of music tailored just for you. Let's craft your ultimate soundtrack together.
+          Your gateway to a world of music tailored just for you. Let's craft
+          your ultimate soundtrack together.
         </p>
         <button
           onClick={onComplete}
@@ -37,7 +38,9 @@ function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
         </button>
         <div className="mt-10 flex items-center justify-center space-x-2">
           <div className="h-[2px] w-10 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
-          <p className="text-sm text-gray-400">A personalized music experience awaits</p>
+          <p className="text-sm text-gray-400">
+            A personalized music experience awaits
+          </p>
           <div className="h-[2px] w-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
         </div>
       </div>
@@ -48,43 +51,45 @@ function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
 function ArtistSelection({
   onComplete,
   API_BASE_URL,
-  setRecommendedTracks
+  setRecommendedTracks,
 }: {
   onComplete: (selectedArtists: Artist[]) => void;
   API_BASE_URL: string;
   setRecommendedTracks?: (tracks: Track[]) => void;
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [artistSearchResults, setArtistSearchResults] = useState<Artist[]>([]);
   const [selectedArtists, setSelectedArtists] = useState<Artist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const debouncedFetch = useCallback(
-        async (val: string) => {
-          if (!val || val.length < 2) {
-            setArtistSearchResults([]);
-            return;
-          }
-          setIsLoading(true);
-          try {
-            const response = await fetch(`${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(val)}`);
-            const data = await response.json();
-            if (data.results) {
-              const filtered = data.results.filter(
-                (a: Artist) => !selectedArtists.some((sa) => sa.id === a.id)
-              );
-              setArtistSearchResults(filtered);
-            }
-          } catch (error) {
-            console.error('Artist search error:', error);
-            setArtistSearchResults([]);
-          } finally {
-            setIsLoading(false);
-          }
-        },
-        [API_BASE_URL, selectedArtists]
-      );
+    async (val: string) => {
+      if (!val || val.length < 2) {
+        setArtistSearchResults([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(val)}`
+        );
+        const data = await response.json();
+        if (data.results) {
+          const filtered = data.results.filter(
+            (a: Artist) => !selectedArtists.some((sa) => sa.id === a.id)
+          );
+          setArtistSearchResults(filtered);
+        }
+      } catch (error) {
+        console.error("Artist search error:", error);
+        setArtistSearchResults([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [API_BASE_URL, selectedArtists]
+  );
 
   const fetchArtistSearchResults = useMemo(
     () => debounce(debouncedFetch, 300),
@@ -94,12 +99,14 @@ function ArtistSelection({
   useEffect(() => {
     async function fetchStoredRecommendations() {
       try {
-        const storedArtists = await getSetting('favoriteArtists');
+        const storedArtists = await getSetting("favoriteArtists");
         if (storedArtists) {
           const artists: Artist[] = JSON.parse(storedArtists);
           const fetchPromises = artists.map(async (artist) => {
             const response = await fetch(
-              `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
+              `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
+                artist.name
+              )}`
             );
             const data = await response.json();
             return (data.results || []).slice(0, 5);
@@ -114,7 +121,7 @@ function ArtistSelection({
           }
         }
       } catch (error) {
-        console.error('Failed to fetch stored recommended tracks:', error);
+        console.error("Failed to fetch stored recommended tracks:", error);
       }
     }
 
@@ -131,7 +138,7 @@ function ArtistSelection({
     if (selectedArtists.length >= 5) return;
     setSelectedArtists((prev) => [...prev, artist]);
     setArtistSearchResults((prev) => prev.filter((a) => a.id !== artist.id));
-    setSearchTerm('');
+    setSearchTerm("");
   };
 
   const handleArtistUnselect = (artist: Artist) => {
@@ -152,13 +159,14 @@ function ArtistSelection({
             Pick Your Vibe
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Select up to 5 artists you love and we'll create your perfect musical atmosphere
+            Select up to 5 artists you love and we'll create your perfect
+            musical atmosphere
           </p>
         </div>
         <div className="max-w-3xl mx-auto mb-12">
           <div
             className={`relative transform transition-all duration-200 ${
-              isSearchFocused ? 'scale-105' : 'scale-100'
+              isSearchFocused ? "scale-105" : "scale-100"
             }`}
           >
             <div className="relative">
@@ -172,7 +180,7 @@ function ArtistSelection({
                 className="w-full px-6 py-4 text-lg bg-white/10 backdrop-blur-xl border border-white/20 
                   rounded-2xl text-white placeholder-gray-400 outline-none focus:ring-2 
                   focus:ring-purple-500/50 transition-all duration-300"
-                style={{ caretColor: 'white' }}
+                style={{ caretColor: "white" }}
               />
               <div className="absolute right-4 top-1/2 -translate-y-1/2">
                 {isLoading ? (
@@ -186,7 +194,9 @@ function ArtistSelection({
         </div>
         {selectedArtists.length > 0 && (
           <div className="max-w-5xl mx-auto mb-12">
-            <h2 className="text-2xl font-bold text-white mb-6">Selected Artists</h2>
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Selected Artists
+            </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
               {selectedArtists.map((artist) => (
                 <div
@@ -196,7 +206,9 @@ function ArtistSelection({
                   onClick={() => handleArtistUnselect(artist)}
                 >
                   <img
-                    src={artist.picture_medium || '/images/placeholder-image.png'}
+                    src={
+                      artist.picture_medium || "/images/placeholder-image.png"
+                    }
                     alt={artist.name}
                     className="w-full h-full object-cover"
                   />
@@ -215,7 +227,9 @@ function ArtistSelection({
         )}
         {artistSearchResults.length > 0 && (
           <div className="max-w-5xl mx-auto pb-20">
-            <h2 className="text-2xl font-bold text-white mb-6">Search Results</h2>
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Search Results
+            </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
               {artistSearchResults.map((artist) => (
                 <div
@@ -225,7 +239,9 @@ function ArtistSelection({
                   onClick={() => handleArtistSelect(artist)}
                 >
                   <img
-                    src={artist.picture_medium || '/images/placeholder-image.png'}
+                    src={
+                      artist.picture_medium || "/images/placeholder-image.png"
+                    }
                     alt={artist.name}
                     className="w-full h-full object-cover"
                   />
@@ -245,7 +261,9 @@ function ArtistSelection({
         <div className="fixed bottom-0 inset-x-0 bg-black/80 backdrop-blur-xl border-t border-white/10">
           <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
             <p className="text-white">
-              <span className="text-2xl font-bold text-purple-400">{selectedArtists.length}</span>
+              <span className="text-2xl font-bold text-purple-400">
+                {selectedArtists.length}
+              </span>
               <span className="ml-2 text-gray-400">of 5 artists selected</span>
             </p>
             <button
@@ -253,11 +271,13 @@ function ArtistSelection({
               disabled={selectedArtists.length === 0}
               className={`px-8 py-3 rounded-xl font-medium transition-all duration-300 ${
                 selectedArtists.length === 0
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-pink-600 hover:to-purple-600 text-white transform hover:scale-105'
+                  ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-pink-600 hover:to-purple-600 text-white transform hover:scale-105"
               }`}
             >
-              {selectedArtists.length === 0 ? 'Select Artists to Continue' : 'Complete Selection'}
+              {selectedArtists.length === 0
+                ? "Select Artists to Continue"
+                : "Complete Selection"}
             </button>
           </div>
         </div>
@@ -266,7 +286,12 @@ function ArtistSelection({
   );
 }
 
-export default function Onboarding({ onComplete, onArtistSelectionComplete, API_BASE_URL, setRecommendedTracks }: OnboardingProps) {
+export default function Onboarding({
+  onComplete,
+  onArtistSelectionComplete,
+  API_BASE_URL,
+  setRecommendedTracks,
+}: OnboardingProps) {
   const [step, setStep] = useState(1);
 
   const handleStep1Complete = useCallback(() => {

@@ -1,11 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
 // TrackItem.tsx
 
-import React, { useState } from 'react';
-import { Plus, Library, Heart } from 'lucide-react';
-import { cn } from '../../lib/utils/utils'; // Ensure this utility function exists
+import React, { useState } from "react";
+import { Plus, Library, Heart } from "lucide-react";
+import { cn } from "@/lib/utils/utils"; // Ensure this utility function exists
 
-import { TrackItemProps } from "../../lib/types/types"
+import { TrackItemProps } from "@/lib/types/types";
 
 interface ActionButtonProps {
   onClick: (e: React.MouseEvent) => void;
@@ -43,15 +43,19 @@ const TrackItem: React.FC<TrackItemProps> = ({
 
   const handleClick = (_evt: React.MouseEvent) => {
     if (!inPlaylistCreation && onTrackClick) {
-      onTrackClick(track, index);
+      if (typeof index !== "undefined") {
+        onTrackClick(track, index);
+      } else {
+        onTrackClick(track, index ?? 0);
+      }
     }
   };
 
   const trackClasses = cn(
-    'group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative',
-    'hover:bg-gray-700/40 transition-colors duration-200',
-    inPlaylistCreation ? 'selectable' : 'cursor-pointer',
-    isPrevious && 'opacity-50'
+    "group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative",
+    "hover:bg-gray-700/40 transition-colors duration-200",
+    inPlaylistCreation ? "selectable" : "cursor-pointer",
+    isPrevious && "opacity-50"
   );
 
   const ActionButtons = () => (
@@ -77,7 +81,7 @@ const TrackItem: React.FC<TrackItemProps> = ({
           icon={
             <Heart
               className={`w-4 h-4 transition-colors ${
-                isLiked ? 'fill-green-500 text-green-500' : 'text-white'
+                isLiked ? "fill-green-500 text-green-500" : "text-white"
               }`}
             />
           }
@@ -96,8 +100,8 @@ const TrackItem: React.FC<TrackItemProps> = ({
     >
       <div className="relative min-w-[48px]">
         <img
-          src={track.album?.cover_medium || '/images/placeholder-image.png'}
-          alt={`${track.title || 'Track'} album cover`}
+          src={track.album?.cover_medium || "/images/placeholder-image.png"}
+          alt={`${track.title || "Track"} album cover`}
           className="w-12 h-12 rounded-md object-cover"
           loading="lazy"
         />
@@ -107,15 +111,15 @@ const TrackItem: React.FC<TrackItemProps> = ({
         <p className="font-medium truncate">{track.title}</p>
         {showArtist && (
           <p className="text-sm text-gray-400 truncate">
-            {track.artist?.name || 'Unknown Artist'}
+            {track.artist?.name || "Unknown Artist"}
           </p>
         )}
       </div>
 
       <div
         className={cn(
-          'transition-opacity duration-200',
-          isHovered || inPlaylistCreation ? 'opacity-100' : 'opacity-0'
+          "transition-opacity duration-200",
+          isHovered || inPlaylistCreation ? "opacity-100" : "opacity-0"
         )}
       >
         {inPlaylistCreation ? (

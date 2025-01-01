@@ -1,6 +1,6 @@
 // types/types.ts
 
-import React from 'react';
+import React from "react";
 
 export interface Track {
   id: string;
@@ -33,11 +33,20 @@ export interface Lyric {
 export interface ContextMenuOption {
   label: string;
   action: () => void;
+  icon?: React.ReactNode;
+  shortcut?: string;
+  danger?: boolean;
 }
 
 export interface Position {
   x: number;
   y: number;
+}
+
+export interface ContextMenuItem extends ContextMenuOption {
+  icon?: React.ReactNode;
+  shortcut?: string;
+  danger?: boolean;
 }
 
 export interface CustomContextMenuProps {
@@ -56,7 +65,7 @@ export interface TrackItemProps {
   openAddToPlaylistModal?: (track: Track) => void;
   toggleLike?: (track: Track) => void;
   isLiked?: boolean;
-  index?: number;
+  index?: number; 
   isPrevious?: boolean;
   onContextMenu?: React.MouseEventHandler<HTMLDivElement>;
 }
@@ -69,7 +78,7 @@ export interface Artist {
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
 export interface AudioState {

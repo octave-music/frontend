@@ -1,11 +1,11 @@
 // error.tsx
-'use client'
+"use client";
 
 export default function Error({
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -19,5 +19,5 @@ export default function Error({
         </button>
       </div>
     </div>
-  )
+  );
 }

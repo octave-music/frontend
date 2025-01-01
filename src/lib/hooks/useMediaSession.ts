@@ -1,4 +1,4 @@
-import { Track } from "../types/types"
+import { Track } from "../types/types";
 
 interface MediaSessionHandlers {
   getCurrentPlaybackTime: () => number;
@@ -17,8 +17,8 @@ export function setupMediaSession(
   handlers: MediaSessionHandlers
 ) {
   if (
-    typeof window === 'undefined' ||
-    !('mediaSession' in navigator) ||
+    typeof window === "undefined" ||
+    !("mediaSession" in navigator) ||
     !currentTrack ||
     !handlers.audioRef.current
   ) {
@@ -29,7 +29,8 @@ export function setupMediaSession(
     if (
       handlers.audioRef.current &&
       handlers.audioRef.current.duration &&
-      handlers.audioRef.current.currentTime <= handlers.audioRef.current.duration
+      handlers.audioRef.current.currentTime <=
+        handlers.audioRef.current.duration
     ) {
       try {
         navigator.mediaSession.setPositionState({
@@ -38,7 +39,7 @@ export function setupMediaSession(
           position: handlers.audioRef.current.currentTime,
         });
       } catch (e) {
-        console.warn('Failed to set position state:', e);
+        console.warn("Failed to set position state:", e);
       }
     }
   };
@@ -49,50 +50,78 @@ export function setupMediaSession(
       artist: currentTrack.artist.name,
       album: currentTrack.album.title,
       artwork: [
-        { src: currentTrack.album.cover_small, sizes: '56x56', type: 'image/jpeg' },
-        { src: currentTrack.album.cover_medium, sizes: '128x128', type: 'image/jpeg' },
-        { src: currentTrack.album.cover_big, sizes: '256x256', type: 'image/jpeg' },
-        { src: currentTrack.album.cover_xl, sizes: '512x512', type: 'image/jpeg' },
+        {
+          src: currentTrack.album.cover_small,
+          sizes: "56x56",
+          type: "image/jpeg",
+        },
+        {
+          src: currentTrack.album.cover_medium,
+          sizes: "128x128",
+          type: "image/jpeg",
+        },
+        {
+          src: currentTrack.album.cover_big,
+          sizes: "256x256",
+          type: "image/jpeg",
+        },
+        {
+          src: currentTrack.album.cover_xl,
+          sizes: "512x512",
+          type: "image/jpeg",
+        },
       ],
     });
 
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    if (navigator.mediaSession.metadata) {
+      // @ts-expect-error - This is a non-standard property that might work in some browsers
+      navigator.mediaSession.metadata.applicationName = "Octave Streaming";
+    }
 
-    navigator.mediaSession.setActionHandler('play', () => {
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+    navigator.mediaSession.setActionHandler("play", () => {
       if (!isPlaying && currentTrack && handlers.audioRef.current) {
         void handlers.audioRef.current.play();
         handlers.setIsPlaying(true);
-        navigator.mediaSession.playbackState = 'playing';
+        navigator.mediaSession.playbackState = "playing";
       }
     });
 
-    navigator.mediaSession.setActionHandler('pause', () => {
+    navigator.mediaSession.setActionHandler("pause", () => {
       if (isPlaying && handlers.audioRef.current) {
         handlers.audioRef.current.pause();
         handlers.setIsPlaying(false);
-        navigator.mediaSession.playbackState = 'paused';
+        navigator.mediaSession.playbackState = "paused";
       }
     });
 
-    navigator.mediaSession.setActionHandler('nexttrack', handlers.skipTrack);
-    navigator.mediaSession.setActionHandler('previoustrack', handlers.previousTrackFunc);
+    navigator.mediaSession.setActionHandler("nexttrack", handlers.skipTrack);
+    navigator.mediaSession.setActionHandler(
+      "previoustrack",
+      handlers.previousTrackFunc
+    );
 
-    navigator.mediaSession.setActionHandler('seekto', (details) => {
+    navigator.mediaSession.setActionHandler("seekto", (details) => {
       if (details.seekTime != null && handlers.audioRef.current) {
         const clampedSeekTime = Math.min(
           details.seekTime,
           handlers.audioRef.current.duration || 0
         );
-    
+
         // Only seek if the target time is different from the current time
-        if (Math.abs(handlers.audioRef.current.currentTime - clampedSeekTime) > 0.1) {
+        if (
+          Math.abs(handlers.audioRef.current.currentTime - clampedSeekTime) >
+          0.1
+        ) {
           handlers.handleSeek(clampedSeekTime);
         }
         void handlers.audioRef.current.play(); // Ensure playback continues
         setPositionStateIfValid();
       }
     });
-    
 
     const updatePositionState = () => {
       setPositionStateIfValid();
@@ -101,32 +130,34 @@ export function setupMediaSession(
     const positionInterval = setInterval(updatePositionState, 250);
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && handlers.audioRef.current) {
+      if (document.visibilityState === "visible" && handlers.audioRef.current) {
         // Only update playback state if there's a mismatch
-        const actualState = handlers.audioRef.current.paused ? 'paused' : 'playing';
+        const actualState = handlers.audioRef.current.paused
+          ? "paused"
+          : "playing";
         if (navigator.mediaSession.playbackState !== actualState) {
           navigator.mediaSession.playbackState = actualState;
         }
         setPositionStateIfValid(); // Update position state only
       }
     };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(positionInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
       const actions: MediaSessionAction[] = [
-        'play',
-        'pause',
-        'previoustrack',
-        'nexttrack',
-        'seekto',
-        'seekforward',
-        'seekbackward',
+        "play",
+        "pause",
+        "previoustrack",
+        "nexttrack",
+        "seekto",
+        "seekforward",
+        "seekbackward",
       ];
-    
+
       actions.forEach((action) => {
         try {
           navigator.mediaSession.setActionHandler(action, null);
@@ -136,7 +167,7 @@ export function setupMediaSession(
       });
     };
   } catch (error) {
-    console.error('MediaSession API encountered an error:', error);
+    console.error("MediaSession API encountered an error:", error);
     return () => {};
   }
 }

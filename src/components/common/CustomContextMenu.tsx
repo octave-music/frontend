@@ -1,6 +1,6 @@
 // CustomContextMenu.tsx
 
-import React from 'react';
+import React from "react";
 
 interface ContextMenuOption {
   label: string;
@@ -20,7 +20,12 @@ interface CustomContextMenuProps {
   options: ContextMenuOption[];
 }
 
-const CustomContextMenu: React.FC<CustomContextMenuProps> = ({ x, y, onClose, options }) => {
+const CustomContextMenu: React.FC<CustomContextMenuProps> = ({
+  x,
+  y,
+  onClose,
+  options,
+}) => {
   return (
     <div
       className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-[999999]"
