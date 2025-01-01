@@ -175,7 +175,6 @@ const Seekbar: React.FC<SeekbarProps> = ({
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
         style={{
-          backgroundColor: "#e0e0e0",
           height: isMiniplayer ? "2px" : "4px",
           borderRadius: "2px",
           overflow: "hidden",
