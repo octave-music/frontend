@@ -327,7 +327,6 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                       }}
                     >
                       <Play className="w-5 h-5" />
-                      <span>Play All</span>
                     </button>
 
                     <button

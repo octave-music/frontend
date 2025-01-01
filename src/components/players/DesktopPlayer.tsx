@@ -232,10 +232,10 @@ export default function DesktopPlayer({
 }: DesktopPlayerProps) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [tab, setTab] = useState<"queue" | "lyrics" | "details">("queue");
-  const [userScrollingLyrics, setUserScrollingLyrics] = useState(false);
-  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+  const [userScrolling, setUserScrolling] = useState(false);
+    const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
   const isAutoScrollingRef = useRef(false);
   const lyricsRef = useRef<HTMLDivElement>(null);
 
@@ -289,63 +289,58 @@ export default function DesktopPlayer({
   };
 
   // For lyrics
-  const processedLyrics = useMemo(() => {
-    return lyrics.map((lyric, i) => ({
-      ...lyric,
-      endTime: lyrics[i + 1]?.time || duration,
-    }));
-  }, [lyrics, duration]);
-
-  const getLyricProgress = () => {
-    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex])
-      return 0;
-    const current = processedLyrics[currentLyricIndex];
-    const lyricStart = current.time;
-    const lyricEnd = current.endTime || duration;
-    const lyricDuration = lyricEnd - lyricStart;
-    const elapsed = seekPosition - lyricStart;
-    return Math.min(Math.max(elapsed / lyricDuration, 0), 1);
-  };
-  const lyricProgress = getLyricProgress();
-
-  // Auto-scroll to current lyric
-  const scrollToCurrentLyric = useCallback(() => {
-    if (!lyricsRef.current) return;
-    if (!lyricsRef.current || currentLyricIndex === -1 || userScrollingLyrics)
-      return;
-    const container = lyricsRef.current;
-    const currentLine = container.children[currentLyricIndex] as HTMLElement;
-    if (currentLine) {
-      isAutoScrollingRef.current = true;
-      const offsetTop = currentLine.offsetTop;
-      const offsetHeight = currentLine.offsetHeight;
-      const containerHeight = container.clientHeight;
-      const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
-      container.scrollTo({ top: scrollPos, behavior: "smooth" });
-      setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, 1000);
-    }
-  }, [currentLyricIndex, userScrollingLyrics]);
-
-  useEffect(() => {
-    if (tab === "lyrics" && !userScrollingLyrics && currentLyricIndex !== -1) {
-      scrollToCurrentLyric();
-    }
-  }, [currentLyricIndex, tab, userScrollingLyrics, scrollToCurrentLyric]);
-
-  const handleLyricsScroll = () => {
+  const handleUserScroll = () => {
     if (isAutoScrollingRef.current) return;
-    setUserScrollingLyrics(true);
+    setUserScrolling(true);
     if (userScrollTimeoutRef.current)
       clearTimeout(userScrollTimeoutRef.current);
     userScrollTimeoutRef.current = setTimeout(() => {
-      setUserScrollingLyrics(false);
-      if (tab === "lyrics" && currentLyricIndex !== -1) {
-        scrollToCurrentLyric();
-      }
+      setUserScrolling(false);
     }, 3000);
   };
+  
+
+  const processedLyrics = useMemo(() => {
+      return lyrics.map((lyric, i) => ({
+        ...lyric,
+        endTime: lyrics[i + 1]?.time || duration,
+      }));
+    }, [lyrics, duration]);
+  
+    const getLyricProgress = () => {
+      if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex])
+        return 0;
+      const currentL = processedLyrics[currentLyricIndex];
+      const start = currentL.time;
+      const end = currentL.endTime || duration;
+      const segmentDuration = end - start;
+      const elapsed = seekPosition - start;
+      return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
+    };
+  
+    const lyricProgress = getLyricProgress();
+  
+    useEffect(() => {
+      if (!showLyrics || !lyricsRef.current) return;
+      if (!userScrolling) {
+        const container = lyricsRef.current;
+        const currentLyricEl = container.children[currentLyricIndex] as HTMLElement;
+        if (currentLyricEl) {
+          isAutoScrollingRef.current = true;
+          const offsetTop = currentLyricEl.offsetTop;
+          const offsetHeight = currentLyricEl.offsetHeight;
+          const containerHeight = container.clientHeight;
+          const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
+          container.scrollTo({ top: scrollPos, behavior: "smooth" });
+          setTimeout(() => {
+            isAutoScrollingRef.current = false;
+          }, 1000);
+        }
+      }
+    }, [currentLyricIndex, showLyrics, userScrolling]);
+    
+    
+
 
   const TABS = [
     { id: "queue", label: "Queue", icon: ListMusic },
@@ -630,8 +625,8 @@ export default function DesktopPlayer({
                       <div
                         className="p-4 h-full overflow-y-auto"
                         ref={lyricsRef}
-                        onScroll={handleLyricsScroll}
-                      >
+                        onScroll={handleUserScroll}
+                        >
                         {processedLyrics.length > 0 ? (
                           <div className="space-y-4">
                             {processedLyrics.map((lyric, index) => {

@@ -141,6 +141,7 @@ interface DesktopLayoutProps {
   recommendedTracks: Track[];
 
   children?: ReactNode;
+  handleUnpinPlaylist: (playlist: Playlist) => void;
 }
 
 // DesktopLayout.tsx
@@ -169,6 +170,7 @@ const DesktopLayout = ({
   setShowSpotifyToDeezerModal,
   currentPlaylist,
   playlistSearchQuery,
+  handleUnpinPlaylist,
   setPlaylistSearchQuery,
   handlePlaylistSearch,
   playlistSearchResults,
@@ -821,7 +823,7 @@ const DesktopLayout = ({
                         void handlePlaylistSearch(playlistSearchQuery);
                       }
                     }}
-                    className="w-full pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
+                    className="w-[60rem] pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
                                 rounded-xl border border-gray-700 focus:border-purple-500
                                 focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
                   />
@@ -1075,26 +1077,40 @@ const DesktopLayout = ({
         ) : (
           <>
             {playlists.length > 0 && (
-              <section className="mb-8 overflow-y-auto custom-scrollbar">
-                <h2 className="text-2xl font-bold mb-4">Recently played</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  {playlists.slice(0, 6).map((pl, i) => (
+            <section className="mb-8 overflow-y-auto custom-scrollbar">
+              <h2 className="text-2xl font-bold mb-4">Pinned Playlists 📌</h2>
+              <div className="grid grid-cols-3 gap-4">
+                {playlists
+                  .filter((pl) => pl.pinned) // Ensure only pinned playlists are displayed
+                  .map((pl, i) => (
                     <div
                       key={i}
-                      className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center cursor-pointer"
+                      className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center justify-between cursor-pointer"
                       onClick={() => openPlaylist(pl)}
                     >
-                      <img
-                        src={pl.image || "images/defaultPlaylistImage.png"}
-                        alt={pl.name || "images/defaultPlaylistImage.png"}
-                        className="w-16 h-16 rounded mr-4"
-                      />
-                      <span className="font-medium">{pl.name}</span>
+                      <div className="flex items-center">
+                        <img
+                          src={pl.image || "images/defaultPlaylistImage.png"}
+                          alt={pl.name || "Playlist Image"}
+                          className="w-16 h-16 rounded mr-4 object-cover"
+                        />
+                        <span className="font-medium text-white">{pl.name}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the openPlaylist
+                          handleUnpinPlaylist(pl);
+                        }}
+                        className="text-red-500 hover:text-red-400"
+                        aria-label="Unpin Playlist"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
                   ))}
-                </div>
-              </section>
-            )}
+              </div>
+            </section>
+          )}
             <section className="mb-8">
               <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>
               <div

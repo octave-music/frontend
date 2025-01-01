@@ -193,7 +193,6 @@ export function SpotifyClone() {
 
   // Search & Results
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [searchType, setSearchType] = useState("tracks");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -515,6 +514,15 @@ export function SpotifyClone() {
     skipTrack,
     setIsPlaying,
   ]);
+
+  const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
+    const updatedPlaylists = playlists.map((pl) =>
+      pl.name === playlistToUnpin.name ? { ...pl, pinned: false } : pl
+    );
+    setPlaylists(updatedPlaylists);
+    // Persist the updated playlists if necessary
+    updatedPlaylists.forEach((pl) => storePlaylist(pl));
+  };
 
   /**
    * Cycles through audio quality levels in a fixed array order.
@@ -1489,6 +1497,7 @@ export function SpotifyClone() {
             setContextMenuPosition={setContextMenuPosition}
             contextMenuOptions={contextMenuOptions}
             setContextMenuOptions={setContextMenuOptions}
+            handleUnpinPlaylist={handleUnpinPlaylist}
             sidebarCollapsed={sidebarCollapsed}
             setSidebarCollapsed={setSidebarCollapsed}
             playlists={playlists}
@@ -1597,7 +1606,7 @@ export function SpotifyClone() {
             </footer>
           )}
 
-{showContextMenu && contextMenuOptions && (
+        {showContextMenu && contextMenuOptions && (
             <Portal>
               <motion.div
                 initial={{ opacity: 0 }}
