@@ -134,9 +134,6 @@ function getDynamicGreeting(): string {
   return "Good Night!";
 }
 
-const TIME_THRESHOLD = 0.05;
-const THROTTLE_DELAY = 200;
-
 import { motion } from "framer-motion";
 import { Portal } from "@radix-ui/react-portal";
 /**
