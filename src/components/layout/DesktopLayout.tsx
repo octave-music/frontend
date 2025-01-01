@@ -31,6 +31,7 @@ import {
 
 import TrackItem from "../common/TrackItem";
 import CustomContextMenu from "../common/CustomContextMenu"; // You'll need to create this component
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar"
 
 // Utilities
 import { cn } from "@/lib/utils/utils";
@@ -477,12 +478,15 @@ const DesktopLayout = ({
                   )}
                 </>
               )}
-            <div className="relative ml-4">
+            <div className="relative ml-4">         
               <button
                 className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center"
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
-                <User className="w-5 h-5" />
+                <Avatar className="w-full h-full">
+                  <AvatarImage src="https://i.pinimg.com/236x/fb/7a/17/fb7a17e227af3cf2e63c756120842209.jpg" alt="User Avatar" />
+                  <AvatarFallback>U</AvatarFallback>
+                </Avatar>
               </button>
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-64 bg-gray-900 rounded-lg shadow-xl z-10 border border-gray-700">
