@@ -134,9 +134,6 @@ function getDynamicGreeting(): string {
   return "Good Night!";
 }
 
-const TIME_THRESHOLD = 0.05;
-const THROTTLE_DELAY = 200;
-
 import { motion } from "framer-motion";
 import { Portal } from "@radix-ui/react-portal";
 /**
@@ -578,33 +575,37 @@ export function SpotifyClone() {
     (rawTrack: Track) => {
       if (!rawTrack) return;
       const track = sanitizeTrack(rawTrack);
-
+  
       const likedPlaylist = playlists.find((p) => p.name === "Liked Songs");
       if (!likedPlaylist) return;
-
-      const isAlreadyLiked = likedPlaylist.tracks.some(
-        (t) => t.id === track.id
+  
+      const isAlreadyLiked = likedPlaylist.tracks.some((t) => t.id === track.id);
+  
+      // Avoid creating new objects for other playlists to prevent unnecessary re-renders
+      const updatedLikedTracks = isAlreadyLiked
+        ? likedPlaylist.tracks.filter((t) => t.id !== track.id)
+        : [...likedPlaylist.tracks, track];
+  
+      // Only update the specific playlist that changed
+      const updatedLikedPlaylist = { ...likedPlaylist, tracks: updatedLikedTracks };
+  
+      // Replace only the modified playlist in the `playlists` array
+      const updatedPlaylists = playlists.map((playlist) =>
+        playlist.name === "Liked Songs" ? updatedLikedPlaylist : playlist
       );
-
-      const updatedPlaylists = playlists.map((playlist) => {
-        if (playlist.name === "Liked Songs") {
-          const updatedTracks = isAlreadyLiked
-            ? playlist.tracks.filter((t) => t.id !== track.id)
-            : [...playlist.tracks, track];
-          return { ...playlist, tracks: updatedTracks };
-        }
-        return playlist;
-      });
-
+  
       setPlaylists(updatedPlaylists);
-
-      Promise.all(updatedPlaylists.map((p) => storePlaylist(p))).catch((err) =>
-        console.error("Error storing updated playlists:", err)
+  
+      // Persist changes asynchronously
+      storePlaylist(updatedLikedPlaylist).catch((err) =>
+        console.error("Error storing updated playlist:", err)
       );
     },
     [playlists]
   );
+  
 
+  
   /**
    * Toggles "liked" status for the currently playing track from Desktop player UI.
    */
@@ -1225,7 +1226,7 @@ export function SpotifyClone() {
           toast.error("An error occurred while setting up the track.");
         });
     }
-  }, [currentTrack, playlists, playTrackFromSource, fetchLyrics, setIsPlaying]);
+  }, [currentTrack, playTrackFromSource, fetchLyrics, setIsPlaying]);  
 
   useEffect(() => {
     const handleLoadedData = () => {
