@@ -727,22 +727,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                     </div>
                   ))}
                 </div>
-                <div
-                  className={cn(
-                    "absolute left-0 top-0 bottom-4",
-                    "w-12",
-                    "bg-gradient-to-r from-black to-transparent",
-                    "pointer-events-none"
-                  )}
-                />
-                <div
-                  className={cn(
-                    "absolute right-0 top-0 bottom-4",
-                    "w-12",
-                    "bg-gradient-to-l from-black to-transparent",
-                    "pointer-events-none"
-                  )}
-                />
+                
               </div>
             </section>
 
