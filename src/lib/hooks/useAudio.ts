@@ -95,7 +95,7 @@ export function useAudio() {
 
         // First pause any current playback
         try {
-          await audioElement?.pause();
+          audioElement?.pause();
         } catch (pauseError) {
           console.error("Error pausing current playback:", pauseError);
         }
