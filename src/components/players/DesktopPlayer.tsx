@@ -50,7 +50,7 @@ import {
 
 import SimpleBar from "simplebar-react";
 import "simplebar-react/dist/simplebar.min.css";
-import { Track, Lyric } from "../../lib/types/types";
+import { Track, Lyric } from "@/lib/types/types";
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";

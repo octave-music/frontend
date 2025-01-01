@@ -4,8 +4,8 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Music, Search } from "lucide-react";
 import debounce from "lodash/debounce";
-import { getSetting } from "../../lib/managers/idbWrapper";
-import { Artist, Track } from "../../lib/types/types";
+import { getSetting } from "@/lib/managers/idbWrapper";
+import { Artist, Track } from "@/lib/types/types";
 
 interface OnboardingProps {
   onComplete: () => void;

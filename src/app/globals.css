@@ -163,11 +163,11 @@ html {
 
 	/* Common component styles */
 	.btn {
-		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible: outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
 	}
 
 	.input {
-		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder: text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
+		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
 	}
 }
 
@@ -216,7 +216,7 @@ html {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-	@apply bg-accent rounded-full transition-colors hover: bg-accent-foreground;
+	@apply rounded-full transition-colors hover:bg-accent-foreground;
 }
 
 /* Media Query Optimizations */
@@ -355,11 +355,11 @@ html {
 
 	/* Common component styles */
 	.btn {
-		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible: outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+		@apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
 	}
 
 	.input {
-		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder: text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
+		@apply flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
 	}
 }
 
@@ -408,7 +408,7 @@ html {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-	@apply bg-accent rounded-full transition-colors hover: bg-accent-foreground;
+	@apply rounded-full transition-colors hover:bg-accent-foreground;
 }
 
 /* Media Query Optimizations */

@@ -46,7 +46,7 @@ import {
   Guitar,
 } from "lucide-react";
 
-import { Track, Lyric } from "../../lib/types/types";
+import { Track, Lyric } from "@/lib/types/types";
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";

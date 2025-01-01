@@ -4,6 +4,10 @@
   "description": "Your ultimate music streaming companion",
   "start_url": "/",
   "scope": "/",
+  "splash_pages": null,
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "orientation": "portrait",

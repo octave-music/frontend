@@ -73,6 +73,13 @@ export function setupMediaSession(
       ],
     });
 
+    if (navigator.mediaSession.metadata) {
+      // @ts-expect-error - This is a non-standard property that might work in some browsers
+      navigator.mediaSession.metadata.applicationName = "Octave Streaming";
+    }
+
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 
     navigator.mediaSession.setActionHandler("play", () => {

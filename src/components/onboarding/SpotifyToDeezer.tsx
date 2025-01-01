@@ -130,7 +130,7 @@ export const SpotifyToDeezer = () => {
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-black px-4 py-8">
       <div className="w-full max-w-4xl mx-auto bg-gray-900/50 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-gray-800">
         <div className="text-3xl font-bold text-center mb-8 text-white bg-clip-text">
-          Spotify to Deezer Migration
+          Spotify to Octave Migration
         </div>
 
         {!authToken ? (

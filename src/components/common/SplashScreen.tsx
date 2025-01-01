@@ -1,11 +1,33 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
-export default function Loading() {
+export default function SplashScreen() {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadTimer = setTimeout(() => setIsLoaded(true), 100);
+    const hideTimer = setTimeout(() => {
+      setIsVisible(false);
+    }, 2000);
+
+    return () => {
+      clearTimeout(loadTimer);
+      clearTimeout(hideTimer);
+    };
+  }, []);
+
+  if (!isVisible) return null;
+
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black">
-      <div className="flex flex-col items-center space-y-8">
+    <div
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black transition-all duration-500 ease-in-out ${
+        isLoaded ? "opacity-100" : "opacity-0"
+      } ${!isVisible ? "pointer-events-none" : ""}`}
+    >
+      <div className="flex flex-col items-center justify-center space-y-8">
         {/* Loading Circle */}
         <div className="relative">
           <div className="w-16 h-16 border-4 border-gray-700 border-t-white rounded-full animate-spin-slow" />

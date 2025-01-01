@@ -3,9 +3,9 @@
 
 import React, { useState } from "react";
 import { Plus, Library, Heart } from "lucide-react";
-import { cn } from "../../lib/utils/utils"; // Ensure this utility function exists
+import { cn } from "@/lib/utils/utils"; // Ensure this utility function exists
 
-import { TrackItemProps } from "../../lib/types/types";
+import { TrackItemProps } from "@/lib/types/types";
 
 interface ActionButtonProps {
   onClick: (e: React.MouseEvent) => void;
@@ -43,7 +43,11 @@ const TrackItem: React.FC<TrackItemProps> = ({
 
   const handleClick = (_evt: React.MouseEvent) => {
     if (!inPlaylistCreation && onTrackClick) {
-      onTrackClick(track, index);
+      if (typeof index !== "undefined") {
+        onTrackClick(track, index);
+      } else {
+        onTrackClick(track, index ?? 0);
+      }
     }
   };
 
