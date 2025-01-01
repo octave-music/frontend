@@ -727,7 +727,6 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                     </div>
                   ))}
                 </div>
-                
               </div>
             </section>
 

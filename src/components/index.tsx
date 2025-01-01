@@ -31,17 +31,6 @@ import React, {
   useMemo,
   SetStateAction,
 } from "react";
-import {
-  Search,
-  Plus,
-  X,
-  ChevronRight,
-  Music,
-  FolderPlus,
-  ChevronDown,
-  ArrowRight,
-  Trash2,
-} from "lucide-react";
 import debounce from "lodash/debounce";
 import ReactDOM from "react-dom";
 // ----- HOOKS & LIBRARIES -----
@@ -87,6 +76,9 @@ import {
   Artist,
   BeforeInstallPromptEvent,
 } from "@/lib/types/types";
+
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 /**
  * Extend the global Window interface to store PWA prompt event
@@ -308,7 +300,7 @@ export function SpotifyClone() {
       // Check if the track is already in the playlist
       const isAlreadyIn = currentPlaylist.tracks.some((t) => t.id === track.id);
       if (isAlreadyIn) {
-        alert("This track is already in the playlist.");
+        toast.warning("This track is already in the playlist.");
         return;
       }
 
@@ -429,7 +421,7 @@ export function SpotifyClone() {
    */
   const previousTrackFunc = useCallback(() => {
     if (!previousTracks.length || !audioElement) {
-      alert("Cannot go to the previous track: no track in history.");
+      toast.warning("Cannot go to the previous track: no track in history.");
       return;
     }
 
@@ -447,7 +439,7 @@ export function SpotifyClone() {
    */
   const skipTrack = useCallback(() => {
     if (!currentTrack || queue.length <= 1 || !audioElement) {
-      alert("Cannot skip track: no next track available.");
+      toast.warning("Cannot skip track: no next track available.");
       return;
     }
 
@@ -855,7 +847,7 @@ export function SpotifyClone() {
       try {
         const blob = await loadAudioBuffer(track.id);
         if (!blob) {
-          alert("Failed to download track.");
+          toast.error("Failed to download track.");
           return;
         }
 
@@ -864,12 +856,12 @@ export function SpotifyClone() {
 
         // Also allow the user to save to local disk
         saveAs(blob, `${track.title} - ${track.artist.name}.mp3`);
-        alert(
+        toast.warning(
           "Track downloaded and available for offline playback within the app."
         );
       } catch (error) {
         console.error("Error downloading track:", error);
-        alert("Failed to download track.");
+        toast.error("Failed to download track.");
       }
     },
     [loadAudioBuffer]
@@ -1217,7 +1209,7 @@ export function SpotifyClone() {
         )
         .catch((err) => {
           console.error("Error during playback setup:", err);
-          alert("An error occurred while setting up the track.");
+          toast.error("An error occurred while setting up the track.");
         });
     }
   }, [currentTrack, playlists, playTrackFromSource, fetchLyrics, setIsPlaying]);
@@ -1320,295 +1312,278 @@ export function SpotifyClone() {
     loadRecommendedTracks();
   }, []);
 
-  // RENDER
-  if (showOnboarding) {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
-        <Onboarding
-          onComplete={handleOnboardingComplete}
-          onArtistSelectionComplete={handleArtistSelectionComplete}
-          API_BASE_URL={API_BASE_URL}
-          setRecommendedTracks={setRecommendedTracks}
-        />
-      </div>
-    );
-  }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
-      {/* MOBILE */}
-      <MobileLayout
-        greeting={greeting}
-        showSettingsMenu={showSettingsMenu}
-        setCurrentPlaylist={setCurrentPlaylist}
-        setShowSettingsMenu={setShowSettingsMenu}
-        showPwaModal={showPwaModal}
-        setShowPwaModal={setShowPwaModal}
-        view={view}
-        currentPlaylist={currentPlaylist}
-        setQueue={setQueue}
-        setCurrentTrack={setCurrentTrack}
-        setIsPlaying={setIsPlaying}
-        shuffleQueue={shuffleQueue}
-        downloadPlaylist={downloadPlaylist}
-        isDownloading={isDownloading}
-        downloadProgress={downloadProgress}
-        playlistSearchQuery={playlistSearchQuery}
-        setPlaylistSearchQuery={setPlaylistSearchQuery}
-        playlistSearchResults={playlistSearchResults}
-        handlePlaylistSearch={handlePlaylistSearch}
-        addTrackToPlaylist={addTrackToPlaylist}
-        playTrack={playTrack}
-        queue={queue}
-        previousTracks={previousTracks}
-        removeFromQueue={(track: Track) => {
-          const trackIndex = queue.findIndex((t) => t.id === track.id);
-          if (trackIndex !== -1) {
-            removeFromQueue(trackIndex);
-          }
-        }}
-        toggleLike={toggleLike}
-        isTrackLiked={isTrackLiked}
-        showLyrics={showLyrics}
-        toggleLyricsView={toggleLyricsView}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        searchResults={searchResults}
-        handleSearch={handleSearch}
-        isPlayerOpen={isPlayerOpen}
-        setView={(view: string) => {
-          setView(
-            view as SetStateAction<
-              "home" | "search" | "playlist" | "settings" | "library"
-            >
-          );
-        }}
-        mounted={mounted}
-        lyrics={lyrics}
-        currentLyricIndex={currentLyricIndex}
-        repeatMode={repeatMode}
-        setRepeatMode={setRepeatMode}
-        seekPosition={seekPosition}
-        duration={duration}
-        listenCount={listenCount}
-        searchType={searchType}
-        setIsSearchOpen={setIsSearchOpen}
-        recentSearches={recentSearches}
-        setRecentSearches={setRecentSearches}
-        setPlaylistSearchResults={setPlaylistSearchResults}
-        setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
-        setShowCreatePlaylist={setShowCreatePlaylist}
-        sidebarCollapsed={sidebarCollapsed}
-        setSidebarCollapsed={setSidebarCollapsed}
-        addToQueue={addToQueue}
-        openAddToPlaylistModal={openAddToPlaylistModal}
-        handleContextMenu={handleContextMenu}
-        playlists={playlists}
-        setPlaylists={setPlaylists}
-        storePlaylist={storePlaylist}
-        deletePlaylistByName={deletePlaylistByName}
-        jumpBackIn={jumpBackIn}
-        recommendedTracks={recommendedTracks}
-        toggleLikeMobile={toggleLikeMobile}
-        setIsPlayerOpen={setIsPlayerOpen}
-        setContextMenuPosition={setContextMenuPosition}
-        setContextMenuOptions={setContextMenuOptions}
-        setShowContextMenu={setShowContextMenu}
-        isSearchOpen={isSearchOpen}
-        setSearchType={setSearchType}
-        openPlaylist={openPlaylist}
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        togglePlay={togglePlay}
-        skipTrack={skipTrack}
-        previousTrackFunc={previousTrackFunc}
-        handleSeek={handleSeek}
-        shuffleOn={shuffleOn}
+    <>
+      {/* Toast Notifications */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
       />
-      <div className="md:hidden flex flex-col h-[100dvh]">
-        {mounted && currentTrack && (
-          <MobilePlayer
-            currentTrack={currentTrack}
-            currentTrackIndex={queue.findIndex(
-              (t) => t.id === currentTrack?.id
-            )}
-            isPlaying={isPlaying}
-            removeFromQueue={removeFromQueue}
+  
+      {/* Conditional Rendering for Onboarding */}
+      {showOnboarding ? (
+        <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            onArtistSelectionComplete={handleArtistSelectionComplete}
+            API_BASE_URL={API_BASE_URL}
+            setRecommendedTracks={setRecommendedTracks}
+          />
+        </div>
+      ) : (
+        <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
+          {/* Mobile Layout */}
+          <MobileLayout
+            greeting={greeting}
+            showSettingsMenu={showSettingsMenu}
+            setCurrentPlaylist={setCurrentPlaylist}
+            setShowSettingsMenu={setShowSettingsMenu}
+            showPwaModal={showPwaModal}
+            setShowPwaModal={setShowPwaModal}
+            view={view}
+            currentPlaylist={currentPlaylist}
             setQueue={setQueue}
-            togglePlay={togglePlay}
-            skipTrack={skipTrack}
-            previousTrack={previousTrackFunc}
+            setCurrentTrack={setCurrentTrack}
+            setIsPlaying={setIsPlaying}
+            shuffleQueue={shuffleQueue}
+            downloadPlaylist={downloadPlaylist}
+            isDownloading={isDownloading}
+            downloadProgress={downloadProgress}
+            playlistSearchQuery={playlistSearchQuery}
+            setPlaylistSearchQuery={setPlaylistSearchQuery}
+            playlistSearchResults={playlistSearchResults}
+            handlePlaylistSearch={handlePlaylistSearch}
+            addTrackToPlaylist={addTrackToPlaylist}
+            playTrack={playTrack}
+            queue={queue}
+            previousTracks={previousTracks}
+            removeFromQueue={(track: Track) => {
+              const trackIndex = queue.findIndex((t) => t.id === track.id);
+              if (trackIndex !== -1) {
+                removeFromQueue(trackIndex);
+              }
+            }}
+            toggleLike={toggleLike}
+            isTrackLiked={isTrackLiked}
+            showLyrics={showLyrics}
+            toggleLyricsView={toggleLyricsView}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            searchResults={searchResults}
+            handleSearch={handleSearch}
+            isPlayerOpen={isPlayerOpen}
+            setView={(view: string) => {
+              setView(
+                view as SetStateAction<
+                  "home" | "search" | "playlist" | "settings" | "library"
+                >
+              );
+            }}
+            mounted={mounted}
+            lyrics={lyrics}
+            currentLyricIndex={currentLyricIndex}
+            repeatMode={repeatMode}
+            setRepeatMode={setRepeatMode}
             seekPosition={seekPosition}
             duration={duration}
             listenCount={listenCount}
+            searchType={searchType}
+            setIsSearchOpen={setIsSearchOpen}
+            recentSearches={recentSearches}
+            setRecentSearches={setRecentSearches}
+            setPlaylistSearchResults={setPlaylistSearchResults}
+            setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
+            setShowCreatePlaylist={setShowCreatePlaylist}
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            addToQueue={addToQueue}
+            openAddToPlaylistModal={openAddToPlaylistModal}
+            handleContextMenu={handleContextMenu}
+            playlists={playlists}
+            setPlaylists={setPlaylists}
+            storePlaylist={storePlaylist}
+            deletePlaylistByName={deletePlaylistByName}
+            jumpBackIn={jumpBackIn}
+            recommendedTracks={recommendedTracks}
+            toggleLikeMobile={toggleLikeMobile}
+            setIsPlayerOpen={setIsPlayerOpen}
+            setContextMenuPosition={setContextMenuPosition}
+            setContextMenuOptions={setContextMenuOptions}
+            setShowContextMenu={setShowContextMenu}
+            isSearchOpen={isSearchOpen}
+            setSearchType={setSearchType}
+            openPlaylist={openPlaylist}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            togglePlay={togglePlay}
+            skipTrack={skipTrack}
+            previousTrackFunc={previousTrackFunc}
             handleSeek={handleSeek}
-            isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
-            repeatMode={repeatMode}
-            setRepeatMode={setRepeatMode}
-            toggleLike={toggleLikeMobile}
-            lyrics={lyrics}
-            currentLyricIndex={currentLyricIndex}
+            shuffleOn={shuffleOn}
+          />
+  
+          {/* Mobile Player */}
+          <div className="md:hidden flex flex-col h-[100dvh]">
+            {mounted && currentTrack && (
+              <MobilePlayer
+                currentTrack={currentTrack}
+                currentTrackIndex={queue.findIndex(
+                  (t) => t.id === currentTrack?.id
+                )}
+                isPlaying={isPlaying}
+                removeFromQueue={removeFromQueue}
+                setQueue={setQueue}
+                togglePlay={togglePlay}
+                skipTrack={skipTrack}
+                previousTrack={previousTrackFunc}
+                seekPosition={seekPosition}
+                duration={duration}
+                listenCount={listenCount}
+                handleSeek={handleSeek}
+                isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
+                repeatMode={repeatMode}
+                setRepeatMode={setRepeatMode}
+                toggleLike={toggleLikeMobile}
+                lyrics={lyrics}
+                currentLyricIndex={currentLyricIndex}
+                queue={queue}
+                previousTracks={previousTracks}
+                shuffleOn={shuffleOn}
+                shuffleQueue={shuffleQueue}
+                showLyrics={showLyrics}
+                toggleLyricsView={toggleLyricsView}
+                onQueueItemClick={onQueueItemClick}
+                setIsPlayerOpen={setIsPlayerOpen}
+              />
+            )}
+          </div>
+  
+          {/* Desktop Layout */}
+          <DesktopLayout
+            showContextMenu={showContextMenu}
+            setShowContextMenu={setShowContextMenu}
+            contextMenuPosition={contextMenuPosition}
+            setContextMenuPosition={setContextMenuPosition}
+            contextMenuOptions={contextMenuOptions}
+            setContextMenuOptions={setContextMenuOptions}
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            playlists={playlists}
+            setPlaylists={setPlaylists}
+            setView={setView}
+            openPlaylist={openPlaylist}
+            storePlaylist={storePlaylist}
+            deletePlaylistByName={deletePlaylistByName}
+            view={view}
+            greeting={greeting}
+            mounted={mounted}
+            setShowPwaModal={setShowPwaModal}
+            showPwaModal={showPwaModal}
+            showUserMenu={showUserMenu}
+            setShowUserMenu={setShowUserMenu}
+            setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
+            currentPlaylist={currentPlaylist}
+            setCurrentPlaylist={setCurrentPlaylist}
+            playlistSearchQuery={playlistSearchQuery}
+            setPlaylistSearchQuery={setPlaylistSearchQuery}
+            handlePlaylistSearch={handlePlaylistSearch}
+            playlistSearchResults={playlistSearchResults}
+            setPlaylistSearchResults={setPlaylistSearchResults}
+            addTrackToPlaylist={addTrackToPlaylist}
+            setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
+            setShowCreatePlaylist={setShowCreatePlaylist}
+            setQueue={setQueue}
+            setCurrentTrack={setCurrentTrack}
+            setIsPlaying={setIsPlaying}
+            playTrack={playTrack}
+            addToQueue={addToQueue}
+            openAddToPlaylistModal={openAddToPlaylistModal}
+            toggleLike={toggleLike}
+            isTrackLiked={isTrackLiked}
+            handleContextMenu={handleContextMenu}
+            shuffleQueue={shuffleQueue}
+            downloadPlaylist={downloadPlaylist}
+            isDownloading={isDownloading}
+            downloadProgress={downloadProgress}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            searchType={searchType}
+            setSearchType={setSearchType}
+            handleSearch={handleSearch}
+            fetchSearchResults={fetchSearchResults}
+            searchResults={searchResults}
+            recentSearches={recentSearches}
+            setRecentSearches={setRecentSearches}
+            showQueue={showQueue}
             queue={queue}
             previousTracks={previousTracks}
-            shuffleOn={shuffleOn}
-            shuffleQueue={shuffleQueue}
-            showLyrics={showLyrics}
-            toggleLyricsView={toggleLyricsView}
             onQueueItemClick={onQueueItemClick}
-            setIsPlayerOpen={setIsPlayerOpen}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
+            audioQuality={audioQuality}
+            setAudioQuality={setAudioQuality}
+            storeSetting={storeSetting}
+            jumpBackIn={jumpBackIn}
+            recommendedTracks={recommendedTracks}
           />
-        )}
-      </div>
-      {/* DESKTOP LAYOUT */}
-      <DesktopLayout
-        showContextMenu={showContextMenu}
-        setShowContextMenu={setShowContextMenu}
-        contextMenuPosition={contextMenuPosition}
-        setContextMenuPosition={setContextMenuPosition}
-        contextMenuOptions={contextMenuOptions}
-        setContextMenuOptions={setContextMenuOptions}
-        sidebarCollapsed={sidebarCollapsed}
-        setSidebarCollapsed={setSidebarCollapsed}
-        playlists={playlists}
-        setPlaylists={setPlaylists}
-        setView={setView}
-        openPlaylist={openPlaylist}
-        storePlaylist={storePlaylist}
-        deletePlaylistByName={deletePlaylistByName}
-        view={view}
-        greeting={greeting}
-        mounted={mounted}
-        setShowPwaModal={setShowPwaModal}
-        showPwaModal={showPwaModal}
-        showUserMenu={showUserMenu}
-        setShowUserMenu={setShowUserMenu}
-        setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
-        currentPlaylist={currentPlaylist}
-        setCurrentPlaylist={setCurrentPlaylist}
-        playlistSearchQuery={playlistSearchQuery}
-        setPlaylistSearchQuery={setPlaylistSearchQuery}
-        handlePlaylistSearch={handlePlaylistSearch}
-        playlistSearchResults={playlistSearchResults}
-        setPlaylistSearchResults={setPlaylistSearchResults}
-        addTrackToPlaylist={addTrackToPlaylist}
-        setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
-        setShowCreatePlaylist={setShowCreatePlaylist}
-        setQueue={setQueue}
-        setCurrentTrack={setCurrentTrack}
-        setIsPlaying={setIsPlaying}
-        playTrack={playTrack}
-        addToQueue={addToQueue}
-        openAddToPlaylistModal={openAddToPlaylistModal}
-        toggleLike={toggleLike}
-        isTrackLiked={isTrackLiked}
-        handleContextMenu={handleContextMenu}
-        shuffleQueue={shuffleQueue}
-        downloadPlaylist={downloadPlaylist}
-        isDownloading={isDownloading}
-        downloadProgress={downloadProgress}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        searchType={searchType}
-        setSearchType={setSearchType}
-        handleSearch={handleSearch}
-        fetchSearchResults={fetchSearchResults}
-        searchResults={searchResults}
-        recentSearches={recentSearches}
-        setRecentSearches={setRecentSearches}
-        showQueue={showQueue}
-        queue={queue}
-        previousTracks={previousTracks}
-        onQueueItemClick={onQueueItemClick}
-        volume={volume}
-        onVolumeChange={onVolumeChange}
-        audioQuality={audioQuality}
-        setAudioQuality={setAudioQuality}
-        storeSetting={storeSetting}
-        jumpBackIn={jumpBackIn}
-        recommendedTracks={recommendedTracks}
-      />
-      {mounted &&
-        (currentTrack ? (
-          <footer className="fixed bottom-0 left-0 right-0">
-            <DesktopPlayer
-              currentTrack={currentTrack}
-              isPlaying={isPlaying}
-              previousTracks={previousTracks}
-              setQueue={setQueue}
-              togglePlay={togglePlay}
-              skipTrack={skipTrack}
-              previousTrack={previousTrackFunc}
-              seekPosition={seekPosition}
-              duration={duration}
-              handleSeek={handleSeek}
-              isLiked={isTrackLiked(currentTrack)}
-              repeatMode={repeatMode}
-              setRepeatMode={setRepeatMode}
-              toggleLike={toggleLikeDesktop}
-              lyrics={lyrics}
-              currentLyricIndex={currentLyricIndex}
-              showLyrics={showLyrics}
-              toggleLyricsView={toggleLyricsView}
-              shuffleOn={shuffleOn}
-              shuffleQueue={shuffleQueue}
-              queue={queue}
-              currentTrackIndex={queue.findIndex(
-                (x) => x.id === currentTrack.id
+  
+          {/* Desktop Footer */}
+          {mounted && (
+            <footer className="fixed bottom-0 left-0 right-0">
+              {currentTrack ? (
+                <DesktopPlayer
+                  currentTrack={currentTrack}
+                  isPlaying={isPlaying}
+                  previousTracks={previousTracks}
+                  setQueue={setQueue}
+                  togglePlay={togglePlay}
+                  skipTrack={skipTrack}
+                  previousTrack={previousTrackFunc}
+                  seekPosition={seekPosition}
+                  duration={duration}
+                  handleSeek={handleSeek}
+                  isLiked={isTrackLiked(currentTrack)}
+                  repeatMode={repeatMode}
+                  setRepeatMode={setRepeatMode}
+                  toggleLike={toggleLikeDesktop}
+                  lyrics={lyrics}
+                  currentLyricIndex={currentLyricIndex}
+                  showLyrics={showLyrics}
+                  toggleLyricsView={toggleLyricsView}
+                  shuffleOn={shuffleOn}
+                  shuffleQueue={shuffleQueue}
+                  queue={queue}
+                  currentTrackIndex={queue.findIndex(
+                    (x) => x.id === currentTrack.id
+                  )}
+                  removeFromQueue={removeFromQueue}
+                  onQueueItemClick={onQueueItemClick}
+                  setIsPlayerOpen={setIsPlayerOpen}
+                  volume={volume}
+                  onVolumeChange={onVolumeChange}
+                  audioQuality={audioQuality}
+                  onCycleAudioQuality={onCycleAudioQuality}
+                  listenCount={listenCount}
+                  downloadTrack={downloadTrack}
+                />
+              ) : (
+                <div className="bg-gray-800 text-white p-4 text-center">
+                  No track is currently playing.
+                </div>
               )}
-              removeFromQueue={removeFromQueue}
-              onQueueItemClick={onQueueItemClick}
-              setIsPlayerOpen={setIsPlayerOpen}
-              volume={volume}
-              onVolumeChange={onVolumeChange}
-              audioQuality={audioQuality}
-              onCycleAudioQuality={onCycleAudioQuality}
-              listenCount={listenCount}
-              downloadTrack={downloadTrack}
-            />
-          </footer>
-        ) : (
-          <footer className="fixed bottom-0 left-0 right-0">
-            {/* Optional: Placeholder or message when no track is playing */}
-            <div className="bg-gray-800 text-white p-4 text-center">
-              No track is currently playing.
-            </div>
-          </footer>
-        ))}
-      <OtherModals
-        showContextMenu={showContextMenu}
-        contextMenuOptions={contextMenuOptions}
-        contextMenuPosition={contextMenuPosition}
-        setShowContextMenu={setShowContextMenu}
-        showSpotifyToDeezerModal={showSpotifyToDeezerModal}
-        setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
-        showAddToPlaylistModal={showAddToPlaylistModal}
-        setShowAddToPlaylistModal={setShowAddToPlaylistModal}
-        playlists={playlists}
-        selectedPlaylistForAdd={selectedPlaylistForAdd}
-        setSelectedPlaylistForAdd={setSelectedPlaylistForAdd}
-        handleAddToPlaylist={handleAddToPlaylist}
-        showDeleteConfirmation={showDeleteConfirmation}
-        setShowDeleteConfirmation={setShowDeleteConfirmation}
-        selectedPlaylist={selectedPlaylist}
-        deleteConfirmedPlaylist={deleteConfirmedPlaylist}
-        showCreatePlaylist={showCreatePlaylist}
-        setShowCreatePlaylist={setShowCreatePlaylist}
-        newPlaylistName={newPlaylistName}
-        setNewPlaylistName={setNewPlaylistName}
-        createPlaylist={createPlaylist}
-        newPlaylistImage={newPlaylistImage}
-        setNewPlaylistImage={setNewPlaylistImage}
-        showSearchInPlaylistCreation={showSearchInPlaylistCreation}
-        setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        searchResults={searchResults}
-        toggleTrackSelection={toggleTrackSelection}
-        selectedTracksForNewPlaylist={selectedTracksForNewPlaylist}
-        handleContextMenu={handleContextMenu}
-        openAddToPlaylistModal={openAddToPlaylistModal}
-      />
-      ;
-    </div>
-  );
+            </footer>
+          )}
+        </div>
+      )}
+    </>
+  );  
 }
