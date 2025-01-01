@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { ArrowRight, LogIn, Loader2, Music2 } from "lucide-react";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 // Types
 interface SpotifyTrack {
@@ -75,7 +77,7 @@ async function migratePlaylistToDeezer(playlist: SpotifyPlaylist) {
       })),
     };
     console.log("Ready to send to Deezer:", deezerCompatibleData);
-    alert("Playlist migrated successfully!");
+    toast.success("Playlist migrated successfully!");
   } catch (err) {
     console.error("Error migrating playlist:", err);
   }
