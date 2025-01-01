@@ -174,11 +174,25 @@ const Seekbar: React.FC<SeekbarProps> = ({
         } cursor-pointer`}
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
+        style={{
+          backgroundColor: "#e0e0e0",
+          height: isMiniplayer ? "2px" : "4px",
+          borderRadius: "2px",
+          overflow: "hidden",
+          appearance: "none",
+          WebkitAppearance: "none",
+          MozAppearance: "none",
+        }}
       >
         <motion.div
           className="seekbar-progress absolute left-0 top-0 h-full"
-          style={{ width: `${localProgress * 100}%` }}
-          animate={{ width: `${localProgress * 100}%` }}
+          style={{
+            width: `${localProgress * 100}%`,
+            backgroundColor: "#ffffff",
+            opacity: 1,
+            borderRadius: "2px",
+            willChange: "width",
+          }}          animate={{ width: `${localProgress * 100}%` }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
       </div>
@@ -1018,28 +1032,28 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   // Expanded Player (artwork, controls, etc.)
                   <>
                     <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${currentTrack.album.cover_medium})`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                          filter: "blur(20px)",
-                          transform: "scale(1.2)",
-                          zIndex: -1,
-                        }}
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${currentTrack.album.cover_medium})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        filter: "blur(20px)",
+                        transform: "scale(1.2)",
+                        zIndex: -1,
+                      }}
                       ></div>
                       <motion.div
                         drag="x"
                         dragConstraints={{ left: 0, right: 0 }}
                         dragElastic={0.2}
                         onDragEnd={(event, info) => handleDragEnd(info)}
-                        className="relative z-10"
+                        className="relative z-10 w-[min(60vw,320px)] h-[min(60vw,320px)]"
                       >
                         <img
                           src={currentTrack.album.cover_medium || ""}
                           alt={currentTrack.title || ""}
-                          className="rounded-lg shadow-xl"
+                          className="rounded-lg shadow-xl w-full h-full object-cover"
                         />
                       </motion.div>
                     </div>

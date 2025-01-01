@@ -222,23 +222,36 @@ body {
 
 /* Seekbar Styles */
 .seekbar-container {
-  @apply bg-opacity-20 bg-white rounded-full overflow-hidden;
+  @apply bg-opacity-20 bg-white rounded-full overflow-hidden w-full h-1; /* Simplified Tailwind usage */
+  appearance: none;
+  -webkit-appearance: none; /* For Safari and older Android */
+  -moz-appearance: none; /* For older Firefox */
+  background-color: #e0e0e0; /* Fallback color */
 }
 
-.seekbar {
-  @apply appearance-none bg-opacity-20 bg-white h-1 w-full;
+.seekbar-container:focus,
+.seekbar-container:active {
+  outline: none; /* Remove default focus outline */
 }
 
 .seekbar-progress {
-  @apply bg-white h-full rounded-full;
+  @apply bg-white rounded-full; /* Smooth edges for progress */
+  height: 100%; /* Match container height */
+  opacity: 1; /* Fully opaque */
+  background-color: #ffffff; /* Ensure consistent white color */
+  width: 0%; /* Start at 0% width */
+}
+
+.seekbar {
+  @apply appearance-none bg-opacity-20 bg-white h-1 w-full; /* Consistent base style */
 }
 
 .seekbar::-webkit-slider-thumb {
-  @apply appearance-none bg-white w-3 h-3 rounded-full;
+  @apply appearance-none bg-white w-3 h-3 rounded-full; /* Thumb styling for Webkit */
 }
 
 .seekbar::-moz-range-thumb {
-  @apply bg-white w-3 h-3 rounded-full border-none;
+  @apply bg-white w-3 h-3 rounded-full border-none; /* Thumb styling for Firefox */
 }
 
 /* Animations */
