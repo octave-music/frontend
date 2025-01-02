@@ -469,6 +469,23 @@ export function SpotifyClone() {
     });
   }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
 
+  // Fetch new recommendations and add them to the queue
+  const fetchNewRecommendations = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/search/tracks?query=recommended`
+      );
+      const data = await response.json();
+      if (data && data.results) {
+        const newRecommendations = data.results as Track[];
+        setQueue((prevQueue) => [...prevQueue, ...newRecommendations]);
+        setRecommendedTracks(newRecommendations);
+      }
+    } catch (error) {
+      console.error("Error fetching new recommendations:", error);
+    }
+  }, []);
+
   /**
    * Event fired when a track finishes playing. Based on repeatMode, we decide
    * whether to restart the track, move to next track, or stop playback.
@@ -503,6 +520,8 @@ export function SpotifyClone() {
         } else {
           setIsPlaying(false);
           audioElement.pause();
+          // Fetch new recommendations when the queue is exhausted
+          void fetchNewRecommendations();
         }
         break;
     }
@@ -513,6 +532,7 @@ export function SpotifyClone() {
     queue,
     skipTrack,
     setIsPlaying,
+    fetchNewRecommendations,
   ]);
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
@@ -1169,6 +1189,9 @@ export function SpotifyClone() {
         const savedQueue = await getQueue();
         if (savedQueue && savedQueue.length > 0) {
           setQueue(savedQueue);
+        } else {
+          // Fetch new recommendations if the queue is empty
+          await fetchNewRecommendations();
         }
 
         const [vol, sOn, qual, pls, rec, onboard, savedTrack] =
@@ -1201,7 +1224,7 @@ export function SpotifyClone() {
     }
 
     void init();
-  }, [setIsPlaying, setVolume]);
+  }, [setIsPlaying, setVolume, fetchNewRecommendations]);
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1684,7 +1707,7 @@ export function SpotifyClone() {
                 >
                   {/* Decorative elements */}
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl" />
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
                   <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
 
                   {/* Header */}
@@ -1713,7 +1736,7 @@ export function SpotifyClone() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
           <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 w-full max-w-md border border-gray-800 shadow-2xl">
             <div className="flex items-center space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-[#1a237e]/10 flex items-center justify-center flex-shrink-0">
                 <FolderPlus className="w-6 h-6 text-green-500" />
               </div>
               <div>

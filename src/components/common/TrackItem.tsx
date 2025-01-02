@@ -125,7 +125,7 @@ const TrackItem: React.FC<TrackItemProps> = ({
         {inPlaylistCreation ? (
           <input
             type="checkbox"
-            className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-green-500 
+            className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-[#1a237e] 
                        transition-colors duration-200 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
           />

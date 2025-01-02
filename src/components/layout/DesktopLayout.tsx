@@ -233,7 +233,8 @@ const DesktopLayout = ({
           sidebarCollapsed ? "w-20" : "w-72",
           "overflow-y-auto overflow-x-hidden",
           "scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-500 hover:scrollbar-thumb-gray-400",
-          "rounded-r-xl"
+          "rounded-r-xl",
+          "flex flex-col items-center"
         )}
       >
         <button
@@ -733,7 +734,7 @@ const DesktopLayout = ({
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gray-900/80 to-gray-900"></div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-12 z-10">
+              <div className="absolute bottom-0 left-0 right-0 p-12">
                 <div className="max-w-7xl mx-auto">
                   <div className="flex items-end space-x-6">
                     <img
@@ -1083,30 +1084,30 @@ const DesktopLayout = ({
                 {playlists
                   .filter((pl) => pl.pinned) // Ensure only pinned playlists are displayed
                   .map((pl, i) => (
-                    <div
-                      key={i}
-                      className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center justify-between cursor-pointer"
-                      onClick={() => openPlaylist(pl)}
-                    >
-                      <div className="flex items-center">
-                        <img
-                          src={pl.image || "images/defaultPlaylistImage.png"}
-                          alt={pl.name || "Playlist Image"}
-                          className="w-16 h-16 rounded mr-4 object-cover"
-                        />
-                        <span className="font-medium text-white">{pl.name}</span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent triggering the openPlaylist
-                          handleUnpinPlaylist(pl);
-                        }}
-                        className="text-red-500 hover:text-red-400"
-                        aria-label="Unpin Playlist"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
+                  <div
+                    key={i}
+                    className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center justify-between cursor-pointer hover:bg-gray-700 transition-colors duration-200"
+                    onClick={() => openPlaylist(pl)}
+                  >
+                    <div className="flex items-center">
+                    <img
+                      src={pl.image || "images/defaultPlaylistImage.png"}
+                      alt={pl.name || "Playlist Image"}
+                      className="w-16 h-16 rounded mr-4 object-cover"
+                    />
+                    <span className="font-medium text-white">{pl.name}</span>
                     </div>
+                    <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent triggering the openPlaylist
+                      handleUnpinPlaylist(pl);
+                    }}
+                    className="text-gray-400 hover:text-red-500 transition-colors duration-200"
+                    aria-label="Unpin Playlist"
+                    >
+                    <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   ))}
               </div>
             </section>

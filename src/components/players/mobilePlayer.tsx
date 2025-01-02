@@ -253,7 +253,7 @@ const ActionButton: React.FC<{
       className={`w-12 h-12 rounded-full flex items-center justify-center
         ${
           active
-            ? "bg-green-500/20 text-green-500"
+            ? "bg-[#1a237e]/20 text-green-500"
             : "bg-white/10 text-white/60"
         }
         transition-all duration-200 hover:bg-white/20`}
@@ -1168,7 +1168,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                               </p>
                             </div>
                             {qual === audioQuality && (
-                              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                              <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
                                 <motion.div
                                   className="w-3 h-3 bg-white rounded-full"
                                   layoutId="quality-indicator"

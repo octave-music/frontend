@@ -429,8 +429,8 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                         </div>
                         <button
                           onClick={() => void addTrackToPlaylist(track)}
-                          className="flex items-center space-x-2 bg-green-500/20 text-green-400
-                                hover:bg-green-500 hover:text-white px-4 py-2 rounded-lg
+                          className="flex items-center space-x-2 bg-[#1a237e]/20 text-green-400
+                                hover:bg-[#1a237e] hover:text-white px-4 py-2 rounded-lg
                                 transition-all duration-300"
                         >
                           <Plus className="w-4 h-4" />
@@ -703,7 +703,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                             onClick={() => playTrack(track)}
                             className={cn(
                               "p-3 rounded-full",
-                              "bg-green-500",
+                              "bg-[#1a237e]",
                               "hover:bg-green-400",
                               "hover:scale-105",
                               "transform",
