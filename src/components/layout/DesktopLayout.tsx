@@ -176,7 +176,6 @@ const DesktopLayout = ({
   playlistSearchResults,
   setPlaylistSearchResults,
   addTrackToPlaylist,
-  setShowSearchInPlaylistCreation,
   setQueue,
   setCurrentTrack,
   setIsPlaying,
@@ -211,7 +210,6 @@ const DesktopLayout = ({
   downloadPlaylist,
   isDownloading,
   downloadProgress,
-  setCurrentPlaylist,
 }: DesktopLayoutProps) => {
   return (
     <div className="hidden md:flex flex-1 gap-2 p-2 overflow-y-auto custom-scrollbar">
@@ -888,18 +886,6 @@ const DesktopLayout = ({
                   <div className="flex flex-col items-center justify-center py-20">
                     <Music className="w-16 h-16 text-gray-600 mb-4" />
                     <p className="text-gray-400 mb-4">This playlist is empty</p>
-                    <button
-                      className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700
-                                    text-white rounded-full px-6 py-3 font-medium
-                                    transition-all duration-300 hover:scale-105"
-                      onClick={() => {
-                        setShowSearchInPlaylistCreation(true);
-                        setCurrentPlaylist(currentPlaylist);
-                      }}
-                    >
-                      <Plus className="w-5 h-5" />
-                      <span>Add Songs</span>
-                    </button>
                   </div>
                 ) : (
                   currentPlaylist.tracks.map((track, idx) => (
