@@ -21,12 +21,7 @@ function safeTracksArray(tracks: Track[]): Track[] {
   return tracks.map((t) => JSON.parse(JSON.stringify(t)));
 }
 
-function isSafari(): boolean {
-  return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-}
-
-
-const DB_VERSION = 5; // Bump the version if needed to trigger onupgradeneeded
+const DB_VERSION = 4; // Bump the version if needed to trigger onupgradeneeded
 const DB_NAME = "OctaveDB";
 
 export async function openIDB(): Promise<IDBDatabase> {
@@ -71,35 +66,25 @@ export async function openIDB(): Promise<IDBDatabase> {
 // ================================
 // 1) TRACK BLOB (Offline Audio)
 // ================================
-export async function storeTrackBlob(trackId: string, blob: Blob): Promise<void> {
+export async function storeTrackBlob(
+  trackId: string,
+  blob: Blob
+): Promise<void> {
   const db = await openIDB();
-
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction("tracks", "readwrite");
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
 
     const store = tx.objectStore("tracks");
-
-    if (isSafari()) {
-      // Convert Blob to Base64 for Safari
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        store.put({ id: trackId, blob: reader.result });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    } else {
-      // Store Blob directly for other browsers
-      store.put({ id: trackId, blob });
-    }
+    store.put({ id: trackId, blob });
   });
 }
 
-
-export async function getOfflineBlob(trackId: string): Promise<Blob | undefined> {
+export async function getOfflineBlob(
+  trackId: string
+): Promise<Blob | undefined> {
   const db = await openIDB();
-
   return new Promise<Blob | undefined>((resolve, reject) => {
     const tx = db.transaction("tracks", "readonly");
     const store = tx.objectStore("tracks");
@@ -108,20 +93,11 @@ export async function getOfflineBlob(trackId: string): Promise<Blob | undefined>
     req.onsuccess = () => {
       const result = req.result;
       if (result) {
-        if (isSafari() && typeof result.blob === "string") {
-          // Convert Base64 back to Blob for Safari
-          const base64 = result.blob.split(",")[1];
-          const binary = atob(base64);
-          const array = Uint8Array.from(binary, char => char.charCodeAt(0));
-          resolve(new Blob([array]));
-        } else {
-          resolve(result.blob as Blob);
-        }
+        resolve(result.blob as Blob);
       } else {
         resolve(undefined);
       }
     };
-
     req.onerror = () => reject(req.error);
   });
 }

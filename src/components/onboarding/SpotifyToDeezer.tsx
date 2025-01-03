@@ -4,139 +4,103 @@ import { ArrowRight, Loader2, Music2 } from "lucide-react";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { storePlaylist } from "@/lib/managers/idbWrapper"; 
-import { Playlist } from "@/lib/types/types"; 
+import { Playlist, Track } from "@/lib/types/types"; 
 
 // Types
-interface SpotifyTrack {
+interface DeezerTrack {
   id: string;
   title: string;
-  duration: number;
-  explicit_content_cover: boolean;
-  explicit_content_lyrics: boolean;
-  explicit_lyrics: boolean;
-  link: string;
-  md5_image: string;
   preview: string;
-  rank: number;
-  readable: boolean;
-  title_short: string;
-  title_version: string;
-  type: string;
-  name: string;
   artist: {
-    id: string;
-    link: string;
-    picture: string;
-    picture_big: string;
-    picture_medium: string;
-    picture_small: string;
-    picture_xl: string;
-    tracklist: string;
-    type: string;
     name: string;
+    picture: string;
+    picture_small: string;
+    picture_medium: string;
+    picture_big: string;
+    picture_xl: string;
   };
   album: {
-    id: string;
     title: string;
-    cover_big: string;
-    cover_medium: string;
-    cover_small: string;
-    md5_image: string;
-    tracklist: string;
-    type: string;
-    cover_xl: string;
-    name: string;
     cover: string;
+    cover_small: string;
+    cover_medium: string;
+    cover_big: string;
+    cover_xl: string;
   };
 }
 
-interface SpotifyPlaylist {
-  name: string;
-  tracks: SpotifyTrack[];
+interface ConvertedPlaylist {
+  playlist_name: string;
+  tracks: DeezerTrack[];
 }
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz/api/convertPlaylist";
 
-async function convertSpotifyToOctave(playlistUrl: string) {
-  try {
-    const response = await fetch(`${API_BASE_URL}?url=${encodeURIComponent(playlistUrl)}`);
-    if (!response.ok) throw new Error("Failed to convert playlist");
-    return await response.json();
-  } catch (err) {
-    console.error("Error converting playlist:", err);
-    throw err;
+async function convertSpotifyToOctave(playlistUrl: string): Promise<ConvertedPlaylist> {
+  const response = await fetch(`${API_BASE_URL}?url=${encodeURIComponent(playlistUrl)}`);
+  if (!response.ok) {
+    throw new Error("Failed to convert playlist");
   }
+  return response.json();
 }
 
-export const SpotifyToDeezer = () => {
+interface SpotifyToDeezerProps {
+  onClose: () => void;
+  onPlaylistImported: () => void;
+}
+
+export const SpotifyToDeezer: React.FC<SpotifyToDeezerProps> = ({ onClose, onPlaylistImported }) => {
   const [playlistUrl, setPlaylistUrl] = useState<string>("");
-  const [octavePlaylist, setOctavePlaylist] = useState<SpotifyPlaylist | null>(null);
+  const [convertedPlaylist, setConvertedPlaylist] = useState<ConvertedPlaylist | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleConversion = async () => {
+    if (!playlistUrl.includes("spotify.com/playlist/")) {
+      toast.error("Please enter a valid Spotify playlist URL");
+      return;
+    }
+
     setLoading(true);
     try {
-      const convertedPlaylist = await convertSpotifyToOctave(playlistUrl);
-      setOctavePlaylist(convertedPlaylist);
-      await storePlaylist(convertedPlaylist);
+      const converted = await convertSpotifyToOctave(playlistUrl);
+      setConvertedPlaylist(converted);
       toast.success("Playlist converted successfully!");
     } catch (err) {
-      toast.error("Failed to convert playlist");
+      console.error("Conversion error:", err);
+      toast.error("Failed to convert playlist. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleMigrate = async () => {
-    if (octavePlaylist) {
-      const playlist: Playlist = {
-        name: octavePlaylist.tracks[0]?.album.name || "Unknown Playlist",
-        image: octavePlaylist.tracks[0]?.album.cover_xl || "/api/placeholder/400/225",
-        tracks: octavePlaylist.tracks.map((track) => ({
+    if (!convertedPlaylist) return;
+
+    try {
+      const octavePlaylist: Playlist = {
+        name: convertedPlaylist.playlist_name || "Imported Spotify Playlist",
+        image: convertedPlaylist.tracks[0]?.album.cover_xl || "/images/defaultPlaylistImage.png",
+        tracks: convertedPlaylist.tracks.map((track): Track => ({
           id: track.id.toString(),
           title: track.title,
-          artist: {
-            id: track.artist.id,
-            name: track.artist.name,
-            link: track.artist.link,
-            picture: track.artist.picture,
-            picture_big: track.artist.picture_big,
-            picture_medium: track.artist.picture_medium,
-            picture_small: track.artist.picture_small,
-            picture_xl: track.artist.picture_xl,
-            tracklist: track.artist.tracklist,
-            type: track.artist.type,
-          },
+          artist: { name: track.artist.name },
           album: {
-            id: track.album.id,
             title: track.album.title,
-            cover: track.album.cover,
-            cover_big: track.album.cover_big,
             cover_medium: track.album.cover_medium,
             cover_small: track.album.cover_small,
-            cover_xl: track.album.cover_xl,
-            md5_image: track.album.md5_image,
-            tracklist: track.album.tracklist,
-            type: track.album.type,
-          },
-          duration: track.duration,
-          explicit_content_cover: track.explicit_content_cover,
-          explicit_content_lyrics: track.explicit_content_lyrics,
-          explicit_lyrics: track.explicit_lyrics,
-          link: track.link,
-          md5_image: track.md5_image,
-          preview: track.preview,
-          rank: track.rank,
-          readable: track.readable,
-          title_short: track.title_short,
-          title_version: track.title_version,
-          type: track.type,
-        })),
+            cover_big: track.album.cover_big,
+            cover_xl: track.album.cover_xl
+          }
+        }))
       };
-      
-      console.log("Migrating playlist:", playlist);
-      await storePlaylist(playlist);
-      toast.success("Playlist migrated successfully!");
+
+      await storePlaylist(octavePlaylist);
+      toast.success("Playlist imported successfully!");
+      onPlaylistImported();
+      onClose();
+    } catch (err) {
+      console.error("Migration error:", err);
+      toast.error("Failed to import playlist");
     }
   };
 
@@ -147,72 +111,81 @@ export const SpotifyToDeezer = () => {
           Spotify to Octave Conversion
         </div>
 
-        {!octavePlaylist && (
+        {!convertedPlaylist ? (
           <div className="text-center py-12">
             <div className="relative w-24 h-24 mx-auto mb-6">
               <Music2 className="w-full h-full text-green-400 animate-pulse" />
               <div className="absolute inset-0 bg-green-400/20 rounded-full blur-xl"></div>
             </div>
-            <h2 className="text-2xl font-semibold mb-4 text-white">
-              Convert Your Spotify Playlist to Octave
-            </h2>
-            <p className="text-gray-400 mb-8">
-              Enter your Spotify playlist URL to get started with the conversion process
-            </p>
-            <input
-              type="text"
-              value={playlistUrl}
-              onChange={(e) => setPlaylistUrl(e.target.value)}
-              placeholder="Enter Spotify Playlist URL"
-              className="w-full px-4 py-2 mb-4 text-gray-900 rounded-full"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={playlistUrl}
+                onChange={(e) => setPlaylistUrl(e.target.value)}
+                placeholder="https://open.spotify.com/playlist/..."
+                className="w-full px-4 py-3 bg-gray-800/50 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:bg-gray-800 outline-none transition-all duration-200"
+              />
+            </div>
+
             <button
               onClick={handleConversion}
               disabled={loading}
-              className="inline-flex items-center bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-4 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/25"
+              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white py-3 rounded-lg transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (
-                <Loader2 className="w-6 h-6 animate-spin mr-3" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <ArrowRight className="w-6 h-6 mr-3" />
+                <>
+                  <ArrowRight className="w-5 h-5" />
+                  <span>Convert Playlist</span>
+                </>
               )}
-              Convert Playlist
             </button>
           </div>
-        )}
-
-        {octavePlaylist && (
-          <div className="mt-8">
-            <h3 className="text-2xl font-bold text-white mb-4">Converted Playlist</h3>
-            <div className="bg-gray-800/40 rounded-xl overflow-hidden group hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] border border-gray-700">
-              <div className="relative aspect-video">
-                <Image
-                  src={octavePlaylist.tracks[0]?.album.cover_xl || "/api/placeholder/400/225"}
-                  alt={octavePlaylist.name}
-                  fill
-                  className="object-cover brightness-90 blur-sm group-hover:brightness-110 group-hover:blur-none transition-all duration-300"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent opacity-80">
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <button
-                      onClick={handleMigrate}
-                      className="inline-flex items-center bg-white/90 hover:bg-white text-gray-900 px-6 py-3 rounded-full transition-all duration-300 transform hover:scale-105 shadow-xl"
-                    >
-                      <ArrowRight className="w-5 h-5 mr-2" />
-                      Migrate to Octave
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5">
-                <h3 className="font-semibold text-lg text-white truncate">
-                  {octavePlaylist.name}
-                </h3>
-                <p className="text-gray-400">
-                  {octavePlaylist.tracks.length} tracks
-                </p>
+        ) : (
+          <div className="space-y-6">
+            <div className="relative aspect-video rounded-lg overflow-hidden">
+              <Image
+                src={convertedPlaylist.tracks[0]?.album.cover_xl || "/images/defaultPlaylistImage.png"}
+                alt={convertedPlaylist.playlist_name}
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+              <div className="absolute bottom-4 left-4">
+                <h3 className="text-xl font-bold text-white">{convertedPlaylist.playlist_name}</h3>
+                <p className="text-gray-200">{convertedPlaylist.tracks.length} tracks</p>
               </div>
             </div>
+
+            <div className="max-h-[300px] overflow-y-auto space-y-2 custom-scrollbar">
+              {convertedPlaylist.tracks.map((track) => (
+                <div 
+                  key={track.id} 
+                  className="flex items-center space-x-3 p-2 hover:bg-gray-800/50 rounded-lg transition-colors"
+                >
+                  <Image
+                    src={track.album.cover_small}
+                    alt={track.title}
+                    width={40}
+                    height={40}
+                    className="rounded"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white truncate">{track.title}</p>
+                    <p className="text-gray-400 text-sm truncate">{track.artist.name}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleMigrate}
+              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white py-3 rounded-lg transition-all duration-300 transform hover:scale-[1.02]"
+            >
+              <Music2 className="w-5 h-5" />
+              <span>Import to Octave</span>
+            </button>
           </div>
         )}
       </div>

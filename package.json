@@ -33,6 +33,7 @@
     "next": "14.2.11",
     "next-pwa": "^5.6.0",
     "node-vibrant": "3.2.1-alpha.1",
+    "pako": "^2.1.0",
     "path": "^0.12.7",
     "react": "^18.3.1",
     "react-beautiful-dnd": "^13.1.1",
@@ -45,6 +46,7 @@
     "simplebar-react": "^3.3.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.0.3",
     "web-bluetooth-utils": "^1.1.1"
   },
   "devDependencies": {

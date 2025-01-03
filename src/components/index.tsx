@@ -226,8 +226,7 @@ export function SpotifyClone() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [showSpotifyToDeezerModal, setShowSpotifyToDeezerModal] =
-    useState(false);
+  const [showSpotifyToDeezerModal, setShowSpotifyToDeezerModal] = useState(false);
 
   // Playlist Creation
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -1370,6 +1369,7 @@ export function SpotifyClone() {
             setCurrentPlaylist={setCurrentPlaylist}
             setShowSettingsMenu={setShowSettingsMenu}
             showPwaModal={showPwaModal}
+            storeSetting={storeSetting}
             setShowPwaModal={setShowPwaModal}
             view={view}
             currentPlaylist={currentPlaylist}
@@ -1402,6 +1402,8 @@ export function SpotifyClone() {
             setSearchQuery={setSearchQuery}
             searchResults={searchResults}
             handleSearch={handleSearch}
+            audioQuality={audioQuality}
+            setAudioQuality={setAudioQuality}
             isPlayerOpen={isPlayerOpen}
             setView={(view: string) => {
               setView(
@@ -1446,6 +1448,8 @@ export function SpotifyClone() {
             openPlaylist={openPlaylist}
             currentTrack={currentTrack}
             isPlaying={isPlaying}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
             togglePlay={togglePlay}
             skipTrack={skipTrack}
             previousTrackFunc={previousTrackFunc}
@@ -1670,45 +1674,52 @@ export function SpotifyClone() {
             </Portal>
           )}
 
-          {showSpotifyToDeezerModal && (
-            <div
-              className="fixed inset-0 z-[99999] overflow-y-auto"
-              onClick={() => setShowSpotifyToDeezerModal(false)}
-            >
-              <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
+        {showSpotifyToDeezerModal && (
+          <div
+            className="fixed inset-0 z-[99999] overflow-y-auto"
+            onClick={() => setShowSpotifyToDeezerModal(false)}
+          >
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
 
-              <div className="flex min-h-screen items-center justify-center p-4">
-                <div
-                  className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Decorative elements */}
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
-                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="flex min-h-screen items-center justify-center p-4">
+              <div
+                className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Decorative elements */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
 
-                  {/* Header */}
-                  <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
-                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
-                      Migrate Playlists to Deezer
-                    </h2>
-                    <button
-                      className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
-                      onClick={() => setShowSpotifyToDeezerModal(false)}
-                    >
-                      <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
-                    </button>
-                  </div>
+                {/* Header */}
+                <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
+                  <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+                    Import Spotify Playlist
+                  </h2>
+                  <button
+                    className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
+                    onClick={() => setShowSpotifyToDeezerModal(false)}
+                  >
+                    <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                  </button>
+                </div>
 
-                  {/* Content */}
-                  <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar">
-                    <SpotifyToDeezer />
-                  </div>
+                {/* Content */}
+                <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar p-6">
+                  <SpotifyToDeezer
+                    onClose={() => setShowSpotifyToDeezerModal(false)}
+                    onPlaylistImported={async () => {
+                      const updatedPlaylists = await getAllPlaylists();
+                      setPlaylists(updatedPlaylists);
+                      toast.success("Playlist imported successfully!");
+                      setShowSpotifyToDeezerModal(false);
+                    }}
+                  />
                 </div>
               </div>
             </div>
-          )}  
-
+          </div>
+        )}
       {showAddToPlaylistModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
           <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 w-full max-w-md border border-gray-800 shadow-2xl">
