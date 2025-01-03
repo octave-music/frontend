@@ -272,25 +272,37 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
         </div>
       </header>
 
-      <nav className="px-4 mb-4">
-        <ul className="flex space-x-2 overflow-x-auto custom-scrollbar">
+      <nav className="px-4 mb-4 relative">
+      <div className="overflow-x-auto no-scrollbar">
+        <ul className="flex whitespace-nowrap gap-2 pb-2">
           <li>
-            <button className="bg-gray-800 rounded-full px-4 py-2 text-sm font-medium">
+            <button className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-200 min-w-max">
               Music
             </button>
           </li>
           <li>
-            <button className="bg-gray-800 rounded-full px-4 py-2 text-sm font-medium">
-              Podcasts &amp; Shows
+            <button className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-200 min-w-max">
+              Podcasts & Shows
             </button>
           </li>
           <li>
-            <button className="bg-gray-800 rounded-full px-4 py-2 text-sm font-medium">
+            <button className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-200 min-w-max">
               Audiobooks
             </button>
           </li>
+          <li>
+            <button className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-200 min-w-max">
+              Live
+            </button>
+          </li>
+          <li>
+            <button className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-200 min-w-max">
+              New Releases
+            </button>
+          </li>
         </ul>
-      </nav>
+      </div>
+    </nav>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-[calc(4rem+2rem+env(safe-area-inset-bottom))]">
         {/* Conditional rendering of the current view */}
