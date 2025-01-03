@@ -1,5 +1,3 @@
-// useAudio.ts
-
 import { useCallback, useRef, useState, useEffect } from "react";
 import {
   storeTrackBlob,
@@ -18,6 +16,8 @@ export function useAudio() {
   const [currentTime, setCurrentTime] = useState(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const lastTrackRef = useRef<Track | null>(null);
+  const lastTimeRef = useRef<number>(0);
 
   const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
 
@@ -31,13 +31,11 @@ export function useAudio() {
 
     const handleTimeUpdate = () => {
       if (!audioElement) return;
-
       const newTime = audioElement.currentTime;
-
-      // Batch state updates (throttle updates to prevent re-renders every frame)
+      lastTimeRef.current = newTime; // Keep track of the last known time
+      
       setCurrentTime((prevTime) => {
         if (Math.abs(newTime - prevTime) > 0.2) {
-          // Only update if difference > threshold
           return newTime;
         }
         return prevTime;
@@ -66,7 +64,6 @@ export function useAudio() {
     audioElement.addEventListener("play", handlePlay);
     audioElement.addEventListener("pause", handlePause);
 
-    // Cleanup
     return () => {
       if (!audioElement) return;
       audioElement.removeEventListener("timeupdate", handleTimeUpdate);
@@ -93,9 +90,12 @@ export function useAudio() {
           return;
         }
 
+        // Store the track reference
+        lastTrackRef.current = track;
+
         // First pause any current playback
         try {
-          audioElement?.pause();
+          audioElement.pause();
         } catch (pauseError) {
           console.error("Error pausing current playback:", pauseError);
         }
@@ -128,9 +128,11 @@ export function useAudio() {
 
           const handleLoadedData = async () => {
             if (!audioElement) return;
-
             URL.revokeObjectURL(objectUrl);
+            
+            // Set the time offset before playing
             audioElement.currentTime = timeOffset;
+            lastTimeRef.current = timeOffset;
 
             try {
               await audioElement.play();
@@ -138,6 +140,7 @@ export function useAudio() {
               setIsPlaying(true);
             } catch (playError) {
               console.error("Play error:", playError);
+              setCurrentTrack(track);
             }
             resolve();
           };
@@ -152,22 +155,6 @@ export function useAudio() {
             once: true,
           });
           audioElement.addEventListener("error", handleError, { once: true });
-
-          audioElement.addEventListener(
-            "play",
-            (e) => {
-              e.stopPropagation(); // Add this
-            },
-            true
-          ); // Use capture phase
-
-          audioElement.addEventListener(
-            "playing",
-            (e) => {
-              e.stopPropagation(); // Add this
-            },
-            true
-          ); // Use capture phase
         });
       } catch (err) {
         console.error("Error playing track:", err);
@@ -177,14 +164,35 @@ export function useAudio() {
     [setCurrentTrack, setIsPlaying]
   );
 
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (!audioElement) return;
+
+      if (!document.hidden && lastTrackRef.current && !audioElement.src) {
+        // Only attempt to restore if we have a last track and the audio source is empty
+        console.log("Restoring audio state...");
+        const timeToResume = lastTimeRef.current;
+        await playTrackFromSource(lastTrackRef.current, timeToResume);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [playTrackFromSource]);
+
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;
+    lastTimeRef.current = audioElement.currentTime; // Store the time when pausing
     audioElement.pause();
     setIsPlaying(false);
   }, []);
 
   const handleSeek = useCallback((time: number) => {
     if (!audioElement) return;
+    lastTimeRef.current = time;
     audioElement.currentTime = time;
   }, []);
 
