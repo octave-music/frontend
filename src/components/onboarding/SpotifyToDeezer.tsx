@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Image from "next/image";
-import { ArrowRight, LogIn, Loader2, Music2 } from "lucide-react";
+import { ArrowRight, Loader2, Music2 } from "lucide-react";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { storePlaylist } from "@/lib/managers/idbWrapper"; 
@@ -8,9 +8,42 @@ import { Playlist, Track } from "@/lib/types/types";
 
 // Types
 interface SpotifyTrack {
+  id: any;
+  title: any;
+  duration: any;
+  explicit_content_cover: any;
+  explicit_content_lyrics: any;
+  explicit_lyrics: any;
+  link: any;
+  md5_image: any;
+  preview: any;
+  rank: any;
+  readable: any;
+  title_short: any;
+  title_version: any;
+  type: any;
   name: string;
-  artist: string;
+  artist: {
+    id: any;
+    link: any;
+    picture: any;
+    picture_big: any;
+    picture_medium: any;
+    picture_small: any;
+    picture_xl: any;
+    tracklist: any;
+    type: any;
+    name: string;
+  };
   album: {
+    id: any;
+    title: any;
+    cover_big: any;
+    cover_medium: any;
+    cover_small: any;
+    md5_image: any;
+    tracklist: any;
+    type: any;
     cover_xl: string;
     name: string;
     cover: string;
@@ -18,15 +51,8 @@ interface SpotifyTrack {
 }
 
 interface SpotifyPlaylist {
-  playlist_name: string;
-  tracks: SpotifyTrack[];
-}
-
-
-interface SpotifyUser {
   name: string;
-  email: string;
-  image?: string;
+  tracks: SpotifyTrack[];
 }
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz/api/convertPlaylist";
@@ -52,7 +78,7 @@ export const SpotifyToDeezer = () => {
     try {
       const convertedPlaylist = await convertSpotifyToOctave(playlistUrl);
       setOctavePlaylist(convertedPlaylist);
-      await storePlaylist(convertedPlaylist); // use the store from the idb wrapper to store the playlist
+      await storePlaylist(convertedPlaylist);
       toast.success("Playlist converted successfully!");
     } catch (err) {
       toast.error("Failed to convert playlist");
@@ -67,23 +93,49 @@ export const SpotifyToDeezer = () => {
         name: octavePlaylist.tracks[0]?.album.name || "Unknown Playlist",
         image: octavePlaylist.tracks[0]?.album.cover_xl || "/api/placeholder/400/225",
         tracks: octavePlaylist.tracks.map((track, index) => ({
-          id: index.toString(),
-          title: track.name,
-          artist: { name: track.artist },
-          album: {
-            title: track.album.name,
-            cover_medium: track.album.cover,
-            cover_small: track.album.cover,
-            cover_big: track.album.cover,
-            cover_xl: track.album.cover_xl,
+          id: track.id.toString(),
+          title: track.title,
+          artist: {
+        id: track.artist.id,
+        name: track.artist.name,
+        link: track.artist.link,
+        picture: track.artist.picture,
+        picture_big: track.artist.picture_big,
+        picture_medium: track.artist.picture_medium,
+        picture_small: track.artist.picture_small,
+        picture_xl: track.artist.picture_xl,
+        tracklist: track.artist.tracklist,
+        type: track.artist.type,
           },
+          album: {
+        id: track.album.id,
+        title: track.album.title,
+        cover: track.album.cover,
+        cover_big: track.album.cover_big,
+        cover_medium: track.album.cover_medium,
+        cover_small: track.album.cover_small,
+        cover_xl: track.album.cover_xl,
+        md5_image: track.album.md5_image,
+        tracklist: track.album.tracklist,
+        type: track.album.type,
+          },
+          duration: track.duration,
+          explicit_content_cover: track.explicit_content_cover,
+          explicit_content_lyrics: track.explicit_content_lyrics,
+          explicit_lyrics: track.explicit_lyrics,
+          link: track.link,
+          md5_image: track.md5_image,
+          preview: track.preview,
+          rank: track.rank,
+          readable: track.readable,
+          title_short: track.title_short,
+          title_version: track.title_version,
+          type: track.type,
         })),
       };
+      
       console.log("Migrating playlist:", playlist);
       await storePlaylist(playlist);
-      // hide the modal as if the x button was pressed 
-      // refresh the playlist view aswell since changes dont take to effect until a refresh
-
       toast.success("Playlist migrated successfully!");
     }
   };
@@ -95,7 +147,7 @@ export const SpotifyToDeezer = () => {
           Spotify to Octave Conversion
         </div>
 
-        {!octavePlaylist && ( 
+        {!octavePlaylist && (
           <div className="text-center py-12">
             <div className="relative w-24 h-24 mx-auto mb-6">
               <Music2 className="w-full h-full text-green-400 animate-pulse" />
@@ -136,7 +188,7 @@ export const SpotifyToDeezer = () => {
               <div className="relative aspect-video">
                 <Image
                   src={octavePlaylist.tracks[0]?.album.cover_xl || "/api/placeholder/400/225"}
-                  alt={octavePlaylist.playlist_name}
+                  alt={octavePlaylist.name}
                   fill
                   className="object-cover brightness-90 blur-sm group-hover:brightness-110 group-hover:blur-none transition-all duration-300"
                 />
@@ -154,7 +206,7 @@ export const SpotifyToDeezer = () => {
               </div>
               <div className="p-5">
                 <h3 className="font-semibold text-lg text-white truncate">
-                  {octavePlaylist.playlist_name}
+                  {octavePlaylist.name}
                 </h3>
                 <p className="text-gray-400">
                   {octavePlaylist.tracks.length} tracks
