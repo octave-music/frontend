@@ -4,6 +4,9 @@ import withPWA from 'next-pwa';
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
+  images: {
+    domains: ['api.deezer.com', 'cdn-images.dzcdn.net'],
+  },
   webpack(config) {
     config.resolve.alias['@'] = new URL('./src', import.meta.url).pathname;
     return config;

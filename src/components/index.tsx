@@ -193,7 +193,6 @@ export function SpotifyClone() {
 
   // Search & Results
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [searchType, setSearchType] = useState("tracks");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -470,6 +469,23 @@ export function SpotifyClone() {
     });
   }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
 
+  // Fetch new recommendations and add them to the queue
+  const fetchNewRecommendations = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/search/tracks?query=recommended`
+      );
+      const data = await response.json();
+      if (data && data.results) {
+        const newRecommendations = data.results as Track[];
+        setQueue((prevQueue) => [...prevQueue, ...newRecommendations]);
+        setRecommendedTracks(newRecommendations);
+      }
+    } catch (error) {
+      console.error("Error fetching new recommendations:", error);
+    }
+  }, []);
+
   /**
    * Event fired when a track finishes playing. Based on repeatMode, we decide
    * whether to restart the track, move to next track, or stop playback.
@@ -504,6 +520,8 @@ export function SpotifyClone() {
         } else {
           setIsPlaying(false);
           audioElement.pause();
+          // Fetch new recommendations when the queue is exhausted
+          void fetchNewRecommendations();
         }
         break;
     }
@@ -514,7 +532,17 @@ export function SpotifyClone() {
     queue,
     skipTrack,
     setIsPlaying,
+    fetchNewRecommendations,
   ]);
+
+  const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
+    const updatedPlaylists = playlists.map((pl) =>
+      pl.name === playlistToUnpin.name ? { ...pl, pinned: false } : pl
+    );
+    setPlaylists(updatedPlaylists);
+    // Persist the updated playlists if necessary
+    updatedPlaylists.forEach((pl) => storePlaylist(pl));
+  };
 
   /**
    * Cycles through audio quality levels in a fixed array order.
@@ -1161,6 +1189,9 @@ export function SpotifyClone() {
         const savedQueue = await getQueue();
         if (savedQueue && savedQueue.length > 0) {
           setQueue(savedQueue);
+        } else {
+          // Fetch new recommendations if the queue is empty
+          await fetchNewRecommendations();
         }
 
         const [vol, sOn, qual, pls, rec, onboard, savedTrack] =
@@ -1193,7 +1224,7 @@ export function SpotifyClone() {
     }
 
     void init();
-  }, [setIsPlaying, setVolume]);
+  }, [setIsPlaying, setVolume, fetchNewRecommendations]);
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1489,6 +1520,7 @@ export function SpotifyClone() {
             setContextMenuPosition={setContextMenuPosition}
             contextMenuOptions={contextMenuOptions}
             setContextMenuOptions={setContextMenuOptions}
+            handleUnpinPlaylist={handleUnpinPlaylist}
             sidebarCollapsed={sidebarCollapsed}
             setSidebarCollapsed={setSidebarCollapsed}
             playlists={playlists}
@@ -1597,7 +1629,7 @@ export function SpotifyClone() {
             </footer>
           )}
 
-{showContextMenu && contextMenuOptions && (
+        {showContextMenu && contextMenuOptions && (
             <Portal>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -1675,7 +1707,7 @@ export function SpotifyClone() {
                 >
                   {/* Decorative elements */}
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl" />
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
                   <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
 
                   {/* Header */}
@@ -1704,7 +1736,7 @@ export function SpotifyClone() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
           <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 w-full max-w-md border border-gray-800 shadow-2xl">
             <div className="flex items-center space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-[#1a237e]/10 flex items-center justify-center flex-shrink-0">
                 <FolderPlus className="w-6 h-6 text-green-500" />
               </div>
               <div>
@@ -1926,115 +1958,6 @@ export function SpotifyClone() {
           </div>
         </div>
       )}
-
-      {/* Add songs after creation */}
-      {showSearchInPlaylistCreation && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-          <div
-            className="bg-gradient-to-b from-gray-900 to-black rounded-2xl w-full max-w-3xl 
-                        border border-gray-800 shadow-2xl"
-          >
-            <div className="flex items-center justify-between p-6 border-b border-gray-800">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">
-                  Add Songs to Your Playlist
-                </h2>
-                <p className="text-gray-400 text-sm">
-                  Search and select songs to add to your playlist
-                </p>
-              </div>
-              <button
-                onClick={() => setShowSearchInPlaylistCreation(false)}
-                className="p-2 hover:bg-gray-800/50 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-400 hover:text-white" />
-              </button>
-            </div>
-            <div className="p-6 border-b border-gray-800">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search for songs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-800/50 text-white 
-                            placeholder-gray-400 border border-gray-700 
-                            focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20
-                            transition-all duration-300"
-                />
-              </div>
-            </div>
-            <div className="p-6" style={{ height: "400px" }}>
-              {searchResults.length > 0 ? (
-                <div className="h-full overflow-y-auto custom-scrollbar pr-2">
-                  <div className="space-y-2">
-                    {searchResults.map((track, idx) => (
-                      <div
-                        key={track.id}
-                        className="group bg-gray-800/40 hover:bg-gray-800/60 rounded-xl transition-all duration-200"
-                      >
-                        <TrackItem
-                          track={track}
-                          index={idx}
-                          inPlaylistCreation
-                          openAddToPlaylistModal={openAddToPlaylistModal}
-                          onTrackClick={() => toggleTrackSelection(track)}
-                          onContextMenu={(e) => handleContextMenu(e, track)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : searchQuery ? (
-                <div className="h-full flex flex-col items-center justify-center text-center">
-                  <Search className="w-8 h-8 text-gray-500 mb-4" />
-                  <p className="text-gray-300 font-medium">No songs found</p>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Try searching for something else
-                  </p>
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center">
-                  <Music className="w-8 h-8 text-gray-500 mb-4" />
-                  <p className="text-gray-300 font-medium">
-                    Start searching for songs
-                  </p>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Find the perfect tracks for your playlist
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between p-6 border-t border-gray-800 bg-gray-900/50">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-purple-500/10 text-purple-400 rounded-full flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <p className="text-sm font-medium text-gray-300">
-                  {selectedTracksForNewPlaylist.length} songs selected
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowSearchInPlaylistCreation(false)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800/50 transition-all duration-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setShowSearchInPlaylistCreation(false)}
-                  className="px-6 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition-all duration-300 flex items-center space-x-2"
-                  disabled={selectedTracksForNewPlaylist.length === 0}
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Selected</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        )}
         </div>
       )}
     </>

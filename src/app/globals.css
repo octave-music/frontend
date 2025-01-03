@@ -252,6 +252,12 @@ body {
   position: relative;
 }
 
+.lyrics-container {
+  overflow-y: auto;
+  max-height: 400px; /* Adjust as needed */
+}
+
+
 /* For Edge and Others */
 .seekbar::-ms-thumb {
   @apply w-4 h-4 bg-white rounded-full shadow;

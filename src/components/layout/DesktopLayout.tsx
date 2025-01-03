@@ -31,6 +31,7 @@ import {
 
 import TrackItem from "../common/TrackItem";
 import CustomContextMenu from "../common/CustomContextMenu"; // You'll need to create this component
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar"
 
 // Utilities
 import { cn } from "@/lib/utils/utils";
@@ -140,6 +141,7 @@ interface DesktopLayoutProps {
   recommendedTracks: Track[];
 
   children?: ReactNode;
+  handleUnpinPlaylist: (playlist: Playlist) => void;
 }
 
 // DesktopLayout.tsx
@@ -168,12 +170,12 @@ const DesktopLayout = ({
   setShowSpotifyToDeezerModal,
   currentPlaylist,
   playlistSearchQuery,
+  handleUnpinPlaylist,
   setPlaylistSearchQuery,
   handlePlaylistSearch,
   playlistSearchResults,
   setPlaylistSearchResults,
   addTrackToPlaylist,
-  setShowSearchInPlaylistCreation,
   setQueue,
   setCurrentTrack,
   setIsPlaying,
@@ -208,7 +210,6 @@ const DesktopLayout = ({
   downloadPlaylist,
   isDownloading,
   downloadProgress,
-  setCurrentPlaylist,
 }: DesktopLayoutProps) => {
   return (
     <div className="hidden md:flex flex-1 gap-2 p-2 overflow-y-auto custom-scrollbar">
@@ -230,7 +231,8 @@ const DesktopLayout = ({
           sidebarCollapsed ? "w-20" : "w-72",
           "overflow-y-auto overflow-x-hidden",
           "scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-500 hover:scrollbar-thumb-gray-400",
-          "rounded-r-xl"
+          "rounded-r-xl",
+          "flex flex-col items-center"
         )}
       >
         <button
@@ -477,12 +479,15 @@ const DesktopLayout = ({
                   )}
                 </>
               )}
-            <div className="relative ml-4">
+            <div className="relative ml-4">         
               <button
                 className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center"
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
-                <User className="w-5 h-5" />
+                <Avatar className="w-full h-full">
+                  <AvatarImage src="https://i.pinimg.com/236x/fb/7a/17/fb7a17e227af3cf2e63c756120842209.jpg" alt="User Avatar" />
+                  <AvatarFallback>U</AvatarFallback>
+                </Avatar>
               </button>
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-64 bg-gray-900 rounded-lg shadow-xl z-10 border border-gray-700">
@@ -727,7 +732,7 @@ const DesktopLayout = ({
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gray-900/80 to-gray-900"></div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-12 z-10">
+              <div className="absolute bottom-0 left-0 right-0 p-12">
                 <div className="max-w-7xl mx-auto">
                   <div className="flex items-end space-x-6">
                     <img
@@ -817,7 +822,7 @@ const DesktopLayout = ({
                         void handlePlaylistSearch(playlistSearchQuery);
                       }
                     }}
-                    className="w-full pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
+                    className="w-[60rem] pl-12 pr-12 py-4 bg-gray-800/30 text-white placeholder-gray-400
                                 rounded-xl border border-gray-700 focus:border-purple-500
                                 focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
                   />
@@ -881,18 +886,6 @@ const DesktopLayout = ({
                   <div className="flex flex-col items-center justify-center py-20">
                     <Music className="w-16 h-16 text-gray-600 mb-4" />
                     <p className="text-gray-400 mb-4">This playlist is empty</p>
-                    <button
-                      className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700
-                                    text-white rounded-full px-6 py-3 font-medium
-                                    transition-all duration-300 hover:scale-105"
-                      onClick={() => {
-                        setShowSearchInPlaylistCreation(true);
-                        setCurrentPlaylist(currentPlaylist);
-                      }}
-                    >
-                      <Plus className="w-5 h-5" />
-                      <span>Add Songs</span>
-                    </button>
                   </div>
                 ) : (
                   currentPlaylist.tracks.map((track, idx) => (
@@ -1071,26 +1064,40 @@ const DesktopLayout = ({
         ) : (
           <>
             {playlists.length > 0 && (
-              <section className="mb-8 overflow-y-auto custom-scrollbar">
-                <h2 className="text-2xl font-bold mb-4">Recently played</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  {playlists.slice(0, 6).map((pl, i) => (
-                    <div
-                      key={i}
-                      className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center cursor-pointer"
-                      onClick={() => openPlaylist(pl)}
-                    >
-                      <img
-                        src={pl.image || "images/defaultPlaylistImage.png"}
-                        alt={pl.name || "images/defaultPlaylistImage.png"}
-                        className="w-16 h-16 rounded mr-4"
-                      />
-                      <span className="font-medium">{pl.name}</span>
+            <section className="mb-8 overflow-y-auto custom-scrollbar">
+              <h2 className="text-2xl font-bold mb-4">Pinned Playlists 📌</h2>
+              <div className="grid grid-cols-3 gap-4">
+                {playlists
+                  .filter((pl) => pl.pinned) // Ensure only pinned playlists are displayed
+                  .map((pl, i) => (
+                  <div
+                    key={i}
+                    className="bg-gray-800 bg-opacity-40 rounded-lg p-4 flex items-center justify-between cursor-pointer hover:bg-gray-700 transition-colors duration-200"
+                    onClick={() => openPlaylist(pl)}
+                  >
+                    <div className="flex items-center">
+                    <img
+                      src={pl.image || "images/defaultPlaylistImage.png"}
+                      alt={pl.name || "Playlist Image"}
+                      className="w-16 h-16 rounded mr-4 object-cover"
+                    />
+                    <span className="font-medium text-white">{pl.name}</span>
                     </div>
+                    <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent triggering the openPlaylist
+                      handleUnpinPlaylist(pl);
+                    }}
+                    className="text-gray-400 hover:text-red-500 transition-colors duration-200"
+                    aria-label="Unpin Playlist"
+                    >
+                    <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   ))}
-                </div>
-              </section>
-            )}
+              </div>
+            </section>
+          )}
             <section className="mb-8">
               <h2 className="text-2xl font-bold mb-4">Jump Back In</h2>
               <div
