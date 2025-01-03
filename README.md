@@ -7,7 +7,7 @@
 
   <div>
     <a href="https://beta.octave.gold"><img alt="Visit the website" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/documentation/website_vector.svg"></a>
-    <a href="https://discord.gg/octave"><img alt="Discord Server" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/social/discord-plural_vector.svg"></a>
+    <a href="https://discord.gg/streamflix"><img alt="Discord Server" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/social/discord-plural_vector.svg"></a>
   </div>
 
   <div>
@@ -178,12 +178,3 @@ If you like Octave, please consider supporting the project:
     <img src="https://img.shields.io/discord/928759631575130172?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Community" />
   </a>
 </div>
-```
-
-### Highlights and Design Features:
-- **HTML Elements**: I added image tags, badges, and aligned sections to improve readability and visual appeal.
-- **Emojis**: Used emojis to represent key features (e.g., 🎧 for audio, 🚀 for installation).
-- **Badges and Links**: Included GitHub and Discord badges that link to your project's resources.
-- **Screenshots**: Inserted screenshots for desktop and mobile to give users a visual preview of the app.
-- **Centered Content**: Centered the project logo, images, and important sections for a more modern look.
-- **Contributing Section**: Provided guidelines for contributing with a simple flow to make it easy for developers to get involved.
