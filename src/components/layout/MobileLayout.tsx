@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @next/next/no-img-element */
 import React from "react";
 import { motion } from "framer-motion";
@@ -5,7 +6,6 @@ import {
   Home,
   Search,
   Library,
-  Bell,
   Cog,
   Clock,
   Play,
@@ -17,10 +17,20 @@ import {
   X,
   MoreVertical,
   Music,
+  User,
+  ChevronRight,
+  Volume2,
+  Check,
+  Wifi,
+  Shield,
+  Bell,
+  Beaker
 } from "lucide-react";
 
 // Hooks & Utilities
 import { storeSetting } from "@/lib/managers/idbWrapper";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar"
 
 // Components
 import TrackItem from ".././common/TrackItem";
@@ -32,6 +42,7 @@ import { cn } from "@/lib/utils/utils";
 import { Track, Playlist, Lyric, ContextMenuOption } from "@/lib/types/types";
 
 type RepeatMode = "off" | "all" | "one";
+type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 
 type MobileLayoutProps = {
   // Existing props
@@ -80,6 +91,12 @@ type MobileLayoutProps = {
   setIsSearchOpen: (value: boolean) => void;
   recentSearches: string[];
   setRecentSearches: (searches: string[]) => void;
+
+  volume: number;
+  onVolumeChange: (volume: number) => void;
+  audioQuality: AudioQuality;
+  setAudioQuality: (quality: AudioQuality) => void;
+  storeSetting: (key: string, value: any) => Promise<void>;
 
   // Added props based on errors
   setPlaylistSearchResults: (tracks: Track[]) => void; // For playlist search results
@@ -141,18 +158,21 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
     addTrackToPlaylist,
     playTrack,
     toggleLike,
+    onVolumeChange,
     isTrackLiked,
     searchQuery,
     setSearchQuery,
     searchResults,
+    setAudioQuality,
+    audioQuality,
     handleSearch,
     isPlayerOpen,
     setView,
     searchType,
     setIsSearchOpen,
     recentSearches,
+    volume,
     setRecentSearches,
-    // New props added below
     setPlaylistSearchResults,
     setShowCreatePlaylist,
     sidebarCollapsed,
@@ -180,20 +200,29 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
       <header className="p-4 flex justify-between items-center">
         <h1 className="text-xl md:text-2xl font-semibold">{greeting}</h1>
         <div className="flex space-x-4">
-          <Bell className="w-6 h-6" />
-          <Clock className="w-6 h-6" />
           <div className="relative">
-            <button
-              className="w-6 h-6 rounded-full flex items-center justify-center"
-              onClick={() => setShowSettingsMenu((p) => !p)}
-            >
-              <Cog className="w-6 h-6 text-white" />
+              <button
+                className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center"
+                onClick={() => setShowSettingsMenu((p) => !p)}
+                >
+                <Avatar className="w-full h-full">
+                  <AvatarImage src="https://i.pinimg.com/236x/fb/7a/17/fb7a17e227af3cf2e63c756120842209.jpg" alt="User Avatar" />
+                  <AvatarFallback>U</AvatarFallback>
+                </Avatar>
             </button>
             {showSettingsMenu && (
-              <div
-                className="absolute right-0 mt-2 w-48 bg-[#0a1929] rounded-lg shadow-xl z-[99999]
-                  border border-[#1e3a5f] animate-slideIn"
-              >
+              <div className="absolute right-0 mt-2 w-64 bg-gray-900 rounded-lg shadow-xl z-10 border border-gray-700">
+                <button
+                  className="flex items-center px-4 py-2.5 text-gray-300 hover:bg-[#1a237e] w-full text-left
+                  transition-colors duration-200 group rounded-t-lg"                  
+                  onClick={() => {
+                    setView("settings");
+                    setShowSettingsMenu(false);
+                  }}
+                >
+                  <Cog className="w-5 h-5 mr-3" />
+                  Settings
+                </button>
                 <button
                   className="flex items-center px-4 py-2.5 text-gray-300 hover:bg-[#1a237e] w-full text-left
                     transition-colors duration-200 group rounded-t-lg"
@@ -212,9 +241,6 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                 >
                   <Download className="w-4 h-4 mr-3 text-[#90caf9] group-hover:text-white" />
                   Install App
-                  <span className="ml-2 bg-[#1a237e] text-xs text-white px-2 py-0.5 rounded-full">
-                    New
-                  </span>
                 </button>
                 <button
                   className="flex items-center px-4 py-2.5 text-gray-300 hover:bg-gray-700 w-full text-left
@@ -271,6 +297,143 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
           </div>
         </div>
       </header>
+
+      {view === "settings" && (
+        <section className="w-full min-h-screen overflow-y-auto bg-gray-900 px-4 py-6" style={{ paddingBottom: "15rem" }} >
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2">Settings</h2>
+            <div className="inline-flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-3 py-1.5 rounded-full">
+              <User className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Pro Account</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Account Section */}
+            <button className="w-full bg-gray-800/40 active:bg-gray-800/60 rounded-lg p-4">
+              <div className="flex items-center">
+                <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
+                  <User className="w-5 h-5" />
+                </div>
+                <div className="ml-3 flex-1 text-left">
+                  <h3 className="text-lg font-semibold text-white">Account</h3>
+                  <p className="text-sm text-gray-400">Manage account settings</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </div>
+            </button>
+
+            {/* Playback Section */}
+            <div className="bg-gray-800/40 rounded-lg p-4">
+              <div className="flex items-center mb-4">
+                <div className="p-2.5 bg-green-500/10 text-green-400 rounded-lg">
+                  <Music className="w-5 h-5" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-lg font-semibold text-white">Playback</h3>
+                  <p className="text-sm text-gray-400">Audio settings</p>
+                </div>
+              </div>
+
+              {/* Volume Control */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-300">Volume</span>
+                  <div className="flex items-center space-x-2">
+                    <Volume2 className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-400">{Math.round(volume * 100)}%</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer"
+                />
+              </div>
+
+              {/* Audio Quality */}
+              <div>
+                <span className="text-sm text-gray-300 block mb-2">Audio Quality</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {["MAX", "HIGH", "NORMAL", "DATA_SAVER"].map((quality) => (
+                    <button
+                      key={quality}
+                      onClick={() => {
+                        setAudioQuality(
+                          quality as
+                          | "MAX"
+                          | "HIGH"
+                          | "NORMAL"
+                          | "DATA_SAVER"
+                        );
+                        void storeSetting("musicQuality", quality as | "MAX"
+                          | "HIGH"
+                          | "NORMAL"
+                          | "DATA_SAVER" );
+                      }}
+                      className={`relative p-2.5 rounded-lg border transition-colors ${
+                        audioQuality === quality
+                          ? "border-purple-500 bg-purple-500/10 text-white"
+                          : "border-gray-700 bg-gray-800/40 text-gray-400"
+                      }`}
+                    >
+                      <span className="text-xs font-medium">{quality.replace("_", " ")}</span>
+                      {audioQuality === quality && (
+                        <Check className="absolute top-1 right-1 w-3 h-3 text-purple-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Data Saver Toggle */}
+            <div className="bg-gray-800/40 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="p-2.5 bg-yellow-500/10 text-yellow-400 rounded-lg">
+                    <Wifi className="w-5 h-5" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-lg font-semibold text-white">Data Saver</h3>
+                    <p className="text-sm text-gray-400">Currently: {audioQuality}</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center">
+                  <input type="checkbox" className="sr-only peer" />
+                  <div className="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:bg-purple-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Quick Settings */}
+            <div className="grid grid-cols-1 gap-3">
+              {[
+                { icon: Shield, title: "Privacy", desc: "Privacy settings", color: "rose" },
+                { icon: Bell, title: "Notifications", desc: "Notification preferences", color: "orange" },
+                { icon: Beaker, title: "Beta Features", desc: "Try new features", color: "emerald" }
+              ].map(({ icon: Icon, title, desc, color }) => (
+                <button
+                  key={title}
+                  className="w-full bg-gray-800/40 active:bg-gray-800/60 rounded-lg p-4 text-left"
+                >
+                  <div className={`p-2.5 bg-${color}-500/10 text-${color}-400 rounded-lg w-fit mb-2`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">{title}</h3>
+                  <p className="text-sm text-gray-400">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      
 
       <nav className="px-4 mb-4 relative">
       <div className="overflow-x-auto no-scrollbar">

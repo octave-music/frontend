@@ -1369,6 +1369,7 @@ export function SpotifyClone() {
             setCurrentPlaylist={setCurrentPlaylist}
             setShowSettingsMenu={setShowSettingsMenu}
             showPwaModal={showPwaModal}
+            storeSetting={storeSetting}
             setShowPwaModal={setShowPwaModal}
             view={view}
             currentPlaylist={currentPlaylist}
@@ -1401,6 +1402,8 @@ export function SpotifyClone() {
             setSearchQuery={setSearchQuery}
             searchResults={searchResults}
             handleSearch={handleSearch}
+            audioQuality={audioQuality}
+            setAudioQuality={setAudioQuality}
             isPlayerOpen={isPlayerOpen}
             setView={(view: string) => {
               setView(
@@ -1445,6 +1448,8 @@ export function SpotifyClone() {
             openPlaylist={openPlaylist}
             currentTrack={currentTrack}
             isPlaying={isPlaying}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
             togglePlay={togglePlay}
             skipTrack={skipTrack}
             previousTrackFunc={previousTrackFunc}
