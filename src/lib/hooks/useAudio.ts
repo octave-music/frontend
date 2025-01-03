@@ -18,6 +18,8 @@ export function useAudio() {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const lastTrackRef = useRef<Track | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const currentBlobUrlRef = useRef<string | null>(null);
+  const wasTabHidden = useRef<boolean>(false);
 
   const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
 
@@ -82,44 +84,65 @@ export function useAudio() {
     return audioElement?.currentTime || 0;
   }, []);
 
+  const cleanupBlobUrl = useCallback(() => {
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
+  }, []);
+
+  // Function to fetch fresh track data
+  const fetchTrackData = useCallback(async (trackId: string): Promise<Blob> => {
+    const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch the track from the server.");
+    }
+    const audioBlob = await response.blob();
+    await storeTrackBlob(trackId, audioBlob); // Cache for future use
+    return audioBlob;
+  }, []);
+
   const playTrackFromSource = useCallback(
-    async (track: Track, timeOffset = 0) => {
+    async (track: Track, timeOffset = 0, forceFresh = false) => {
       try {
         if (!audioElement) {
           console.error("Audio element not available");
           return;
         }
 
-        // Store the track reference
         lastTrackRef.current = track;
 
-        // First pause any current playback
         try {
           audioElement.pause();
         } catch (pauseError) {
           console.error("Error pausing current playback:", pauseError);
         }
 
-        // Attempt to retrieve the track's Blob from IndexedDB
-        let offlineData = await getOfflineBlob(track.id);
+        cleanupBlobUrl();
 
-        if (!offlineData) {
-          const response = await fetch(
-            `${API_BASE_URL}/api/track/${track.id}.mp3`
-          );
-          if (!response.ok) {
-            throw new Error("Failed to fetch the track from the server.");
+        let audioBlob: Blob;
+        
+        // If forceFresh is true or we're resuming after tab was hidden, 
+        // fetch new data regardless of cache
+        if (forceFresh || wasTabHidden.current) {
+          audioBlob = await fetchTrackData(track.id);
+          wasTabHidden.current = false; // Reset the flag
+        } else {
+          // Try cache first
+          const cachedBlob = await getOfflineBlob(track.id);
+          if (cachedBlob) {
+            audioBlob = cachedBlob;
+          } else {
+            audioBlob = await fetchTrackData(track.id);
           }
-          offlineData = await response.blob();
-          await storeTrackBlob(track.id, offlineData);
         }
 
-        const objectUrl = URL.createObjectURL(offlineData);
+        const objectUrl = URL.createObjectURL(audioBlob);
+        currentBlobUrlRef.current = objectUrl;
 
-        // Wait for the audio to be loaded before playing
         return new Promise<void>((resolve) => {
           if (!audioElement) {
-            URL.revokeObjectURL(objectUrl);
+            cleanupBlobUrl();
             resolve();
             return;
           }
@@ -128,9 +151,7 @@ export function useAudio() {
 
           const handleLoadedData = async () => {
             if (!audioElement) return;
-            URL.revokeObjectURL(objectUrl);
             
-            // Set the time offset before playing
             audioElement.currentTime = timeOffset;
             lastTimeRef.current = timeOffset;
 
@@ -147,13 +168,11 @@ export function useAudio() {
 
           const handleError = (e: Event) => {
             console.error("Audio loading error:", e);
-            URL.revokeObjectURL(objectUrl);
+            cleanupBlobUrl();
             resolve();
           };
 
-          audioElement.addEventListener("loadeddata", handleLoadedData, {
-            once: true,
-          });
+          audioElement.addEventListener("loadeddata", handleLoadedData, { once: true });
           audioElement.addEventListener("error", handleError, { once: true });
         });
       } catch (err) {
@@ -161,18 +180,21 @@ export function useAudio() {
         setIsPlaying(false);
       }
     },
-    [setCurrentTrack, setIsPlaying]
+    [cleanupBlobUrl, fetchTrackData, setCurrentTrack, setIsPlaying]
   );
 
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (!audioElement) return;
 
-      if (!document.hidden && lastTrackRef.current && !audioElement.src) {
-        // Only attempt to restore if we have a last track and the audio source is empty
-        console.log("Restoring audio state...");
+      if (document.hidden) {
+        // Tab is being hidden
+        wasTabHidden.current = true;
+      } else if (lastTrackRef.current && !isPlaying) {
+        // Tab is becoming visible and we have a track to resume
         const timeToResume = lastTimeRef.current;
-        await playTrackFromSource(lastTrackRef.current, timeToResume);
+        // Force fresh data fetch when resuming
+        await playTrackFromSource(lastTrackRef.current, timeToResume, true);
       }
     };
 
@@ -181,7 +203,8 @@ export function useAudio() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [playTrackFromSource]);
+  }, [playTrackFromSource, isPlaying]);
+
 
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;

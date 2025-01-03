@@ -1296,28 +1296,6 @@ export function SpotifyClone() {
   }, [playlistSearchQuery, handlePlaylistSearch]);
 
   useEffect(() => {
-    if (
-      typeof screen !== "undefined" &&
-      "orientation" in screen &&
-      screen.orientation
-    ) {
-      (screen.orientation as any).lock("portrait").catch((err: Error) => {
-        console.warn("Screen orientation lock failed:", err);
-      });
-    }
-
-    return () => {
-      if (
-        typeof screen !== "undefined" &&
-        "orientation" in screen &&
-        screen.orientation
-      ) {
-        (screen.orientation as any).unlock();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (previousTracks.length > 0) {
       void storeSetting("previousTracks", JSON.stringify(previousTracks)).catch(
         (err) => console.error("Failed to store previous tracks:", err)
@@ -1356,7 +1334,6 @@ export function SpotifyClone() {
 
     loadRecommendedTracks();
   }, []);
-
 
   return (
     <>
