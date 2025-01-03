@@ -7084,6 +7084,7 @@ snapshots:
       next: 14.2.11(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-pwa: 5.6.0(@babel/core@7.26.0)(next@14.2.11(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(webpack@5.97.1)
       node-vibrant: 3.2.1-alpha.1
+      pako: 2.1.0
       path: 0.12.7
       react: 18.3.1
       react-beautiful-dnd: 13.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -7096,6 +7097,7 @@ snapshots:
       simplebar-react: 3.3.0(react@18.3.1)
       tailwind-merge: 2.6.0
       tailwindcss-animate: 1.0.7(tailwindcss@3.4.17)
+      uuid: 11.0.3
       web-bluetooth-utils: 1.1.1
     transitivePeerDependencies:
       - '@babel/core'
