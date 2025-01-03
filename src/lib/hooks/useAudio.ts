@@ -6,6 +6,7 @@ import {
 } from "../managers/idbWrapper";
 import audioElement from "../managers/audioManager";
 import { Track } from "../types/types";
+import { toast } from "react-toastify";
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
 
@@ -121,8 +122,8 @@ export function useAudio() {
         cleanupBlobUrl();
 
         let audioBlob: Blob;
-        
-        // If forceFresh is true or we're resuming after tab was hidden, 
+
+        // If forceFresh is true or we're resuming after tab was hidden,
         // fetch new data regardless of cache
         if (forceFresh || wasTabHidden.current) {
           audioBlob = await fetchTrackData(track.id);
@@ -151,7 +152,7 @@ export function useAudio() {
 
           const handleLoadedData = async () => {
             if (!audioElement) return;
-            
+
             audioElement.currentTime = timeOffset;
             lastTimeRef.current = timeOffset;
 
@@ -161,7 +162,9 @@ export function useAudio() {
               setIsPlaying(true);
             } catch (playError) {
               console.error("Play error:", playError);
-              setCurrentTrack(track);
+              setIsPlaying(false);
+              // Optionally notify the user
+              toast.error("Playback was blocked. Please interact with the page to start playback.");
             }
             resolve();
           };
@@ -182,6 +185,7 @@ export function useAudio() {
     },
     [cleanupBlobUrl, fetchTrackData, setCurrentTrack, setIsPlaying]
   );
+
 
   useEffect(() => {
     const handleVisibilityChange = async () => {

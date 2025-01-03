@@ -72,28 +72,43 @@ export async function openIDB(): Promise<IDBDatabase> {
 // 1) TRACK BLOB (Offline Audio)
 // ================================
 export async function storeTrackBlob(trackId: string, blob: Blob): Promise<void> {
-  const db = await openIDB();
-
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("tracks", "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-
-    const store = tx.objectStore("tracks");
-
-    if (isSafari()) {
-      // Convert Blob to Base64 for Safari
+  if (isSafari()) {
+    // Convert Blob to Base64 first
+    const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        store.put({ id: trackId, blob: reader.result });
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("Failed to convert Blob to base64"));
+        }
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error("FileReader error"));
       reader.readAsDataURL(blob);
-    } else {
-      // Store Blob directly for other browsers
+    });
+
+    // Open transaction and store the Base64 string
+    const db = await openIDB();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("tracks", "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+
+      const store = tx.objectStore("tracks");
+      store.put({ id: trackId, blob: base64 });
+    });
+  } else {
+    // For non-Safari browsers, store the Blob directly
+    const db = await openIDB();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("tracks", "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+
+      const store = tx.objectStore("tracks");
       store.put({ id: trackId, blob });
-    }
-  });
+    });
+  }
 }
 
 
