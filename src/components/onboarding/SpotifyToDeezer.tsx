@@ -4,46 +4,46 @@ import { ArrowRight, Loader2, Music2 } from "lucide-react";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { storePlaylist } from "@/lib/managers/idbWrapper"; 
-import { Playlist, Track } from "@/lib/types/types"; 
+import { Playlist } from "@/lib/types/types"; 
 
 // Types
 interface SpotifyTrack {
-  id: any;
-  title: any;
-  duration: any;
-  explicit_content_cover: any;
-  explicit_content_lyrics: any;
-  explicit_lyrics: any;
-  link: any;
-  md5_image: any;
-  preview: any;
-  rank: any;
-  readable: any;
-  title_short: any;
-  title_version: any;
-  type: any;
+  id: string;
+  title: string;
+  duration: number;
+  explicit_content_cover: boolean;
+  explicit_content_lyrics: boolean;
+  explicit_lyrics: boolean;
+  link: string;
+  md5_image: string;
+  preview: string;
+  rank: number;
+  readable: boolean;
+  title_short: string;
+  title_version: string;
+  type: string;
   name: string;
   artist: {
-    id: any;
-    link: any;
-    picture: any;
-    picture_big: any;
-    picture_medium: any;
-    picture_small: any;
-    picture_xl: any;
-    tracklist: any;
-    type: any;
+    id: string;
+    link: string;
+    picture: string;
+    picture_big: string;
+    picture_medium: string;
+    picture_small: string;
+    picture_xl: string;
+    tracklist: string;
+    type: string;
     name: string;
   };
   album: {
-    id: any;
-    title: any;
-    cover_big: any;
-    cover_medium: any;
-    cover_small: any;
-    md5_image: any;
-    tracklist: any;
-    type: any;
+    id: string;
+    title: string;
+    cover_big: string;
+    cover_medium: string;
+    cover_small: string;
+    md5_image: string;
+    tracklist: string;
+    type: string;
     cover_xl: string;
     name: string;
     cover: string;
@@ -92,32 +92,32 @@ export const SpotifyToDeezer = () => {
       const playlist: Playlist = {
         name: octavePlaylist.tracks[0]?.album.name || "Unknown Playlist",
         image: octavePlaylist.tracks[0]?.album.cover_xl || "/api/placeholder/400/225",
-        tracks: octavePlaylist.tracks.map((track, index) => ({
+        tracks: octavePlaylist.tracks.map((track) => ({
           id: track.id.toString(),
           title: track.title,
           artist: {
-        id: track.artist.id,
-        name: track.artist.name,
-        link: track.artist.link,
-        picture: track.artist.picture,
-        picture_big: track.artist.picture_big,
-        picture_medium: track.artist.picture_medium,
-        picture_small: track.artist.picture_small,
-        picture_xl: track.artist.picture_xl,
-        tracklist: track.artist.tracklist,
-        type: track.artist.type,
+            id: track.artist.id,
+            name: track.artist.name,
+            link: track.artist.link,
+            picture: track.artist.picture,
+            picture_big: track.artist.picture_big,
+            picture_medium: track.artist.picture_medium,
+            picture_small: track.artist.picture_small,
+            picture_xl: track.artist.picture_xl,
+            tracklist: track.artist.tracklist,
+            type: track.artist.type,
           },
           album: {
-        id: track.album.id,
-        title: track.album.title,
-        cover: track.album.cover,
-        cover_big: track.album.cover_big,
-        cover_medium: track.album.cover_medium,
-        cover_small: track.album.cover_small,
-        cover_xl: track.album.cover_xl,
-        md5_image: track.album.md5_image,
-        tracklist: track.album.tracklist,
-        type: track.album.type,
+            id: track.album.id,
+            title: track.album.title,
+            cover: track.album.cover,
+            cover_big: track.album.cover_big,
+            cover_medium: track.album.cover_medium,
+            cover_small: track.album.cover_small,
+            cover_xl: track.album.cover_xl,
+            md5_image: track.album.md5_image,
+            tracklist: track.album.tracklist,
+            type: track.album.type,
           },
           duration: track.duration,
           explicit_content_cover: track.explicit_content_cover,
