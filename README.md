@@ -1,180 +1,117 @@
-
 <div align="center">
   <img width="600" src="public/images/OctaveBanner.png" alt="Octave Logo">
 
-  <h1>Octave</h1>
-  <p>An open-source music streaming application providing a seamless experience for both mobile and desktop users. Enjoy features like no audio ads, infinite skips, offline playback, high-quality audio, and more—free of charge with a sleek and responsive UI.</p>
+  # Octave - Your Ultimate Music Companion
+  
+  > A feature-rich music streaming platform that puts you in control of your listening experience.
+  
+  Experience premium music streaming features without the premium price tag. Available on desktop and mobile through our sleek Progressive Web App.
 
-  <div>
-    <a href="https://beta.octave.gold"><img alt="Visit the website" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/documentation/website_vector.svg"></a>
-    <a href="https://discord.gg/streamflix"><img alt="Discord Server" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/social/discord-plural_vector.svg"></a>
-  </div>
+  [![Visit Website](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/documentation/website_vector.svg)](https://beta.octave.gold)
+  [![Join Discord](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/social/discord-plural_vector.svg)](https://discord.gg/streamflix)
 
-  <div>
-    <a href="https://patreon.com/octaveapps"><img alt="Support me on Patreon" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/patreon-singular_vector.svg"></a>
-    <a href="https://www.buymeacoffee.com/octaveapps"><img alt="Buy me a Coffee" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/buymeacoffee-singular_vector.svg"></a>
-  </div>
+  [![Support on Patreon](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/patreon-singular_vector.svg)](https://patreon.com/octaveapps)
+  [![Buy me a Coffee](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/buymeacoffee-singular_vector.svg)](https://www.buymeacoffee.com/octaveapps)
 
-  <a href="https://github.com/octave-music/frontend">
-    <img alt="GitHub Repo" height="45" src="https://img.shields.io/badge/Repo-GitHub-181717?style=for-the-badge&logo=github">
-  </a>
+  [![GitHub Repo](https://img.shields.io/badge/Repo-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/octave-music/frontend)
 </div>
 
----
+## ✨ Why Octave?
 
-<!-- ## 📸 Screenshots
+Experience music streaming without compromises. Octave delivers premium features completely free:
 
-<div align="center">
-  <img src="assets/octave-desktop.png" alt="Octave Desktop" width="600">
-  <br />
-  <img src="assets/octave-mobile.png" alt="Octave Mobile" width="600">
-</div>
+- 🎵 **Pure Listening Experience**
+  - Ad-free streaming
+  - Unlimited track skips
+  - Premium audio quality
+  - Offline playback support
 
---- -->
+- 📱 **Cross-Platform Excellence**
+  - Progressive Web App (PWA) for mobile
+  - Responsive desktop interface
+  - Seamless device switching
 
-## 🌟 Features
+- 🎯 **Smart Features**
+  - AI-powered music recommendations
+  - Discord Rich Presence integration
+  - Advanced playlist management
+  - Comprehensive queue control
 
-- 🚫 **No ads**: Stream music without interruptions using public and free APIs.
-- 🔄 **Infinite skips**: Skip as many tracks as you like.
-- 📱 **PWA support**: Enjoy a native-like experience on mobile devices with Progressive Web App support.
-- ⬇️ **Offline playback**: Download music and listen without an internet connection.
-- 🎶 **High-quality audio**: Stream your music in the highest quality possible.
-- 🎧 **Personalized onboarding**: Get tailored recommendations when you first sign up.
-- 🎤 **Search tracks and artists**: Easily find any song or artist in the database.
-- 📑 **Playlist management**: Create, delete, pin, or unpin your playlists. Import playlists from other services.
-- 🔄 **Queue management**: Organize your queue for the perfect listening experience.
-- 🕹️ **Playback controls**: Local control for play, pause, shuffle, repeat, and skip.
-- 🤖 **Discord Rich Presence**: Share your music activity with your friends on Discord.
+## 🚀 Quick Start
 
----
+Get up and running with Octave in minutes:
 
-## 🚀 Installation
+```bash
+# Clone the repository
+git clone https://github.com/octave-music/frontend.git
 
-To get started with Octave, follow these steps:
+# Navigate to project directory
+cd frontend
 
-1. **Clone the repository**:
+# Install dependencies
+pnpm install
 
-    ```bash
-    git clone https://github.com/octave-music/frontend.git
-    cd frontend
-    ```
+# Start development server
+pnpm dev
+```
 
-2. **Install dependencies** (Make sure you have `pnpm` installed):
+## 💻 Development Commands
 
-    ```bash
-    pnpm install
-    ```
+```bash
+pnpm dev      # Launch development server
+pnpm build    # Create production build
+pnpm start    # Start production server
+pnpm lint     # Run code linting
+```
 
----
-
-## 🖥️ Usage
-
-Once you have installed the dependencies, you can run the following commands:
-
-- **Start the development server**:
-
-    ```bash
-    pnpm dev
-    ```
-
-    This will launch the Next.js development server, and you can view the application at `http://localhost:3000`.
-
-- **Build the project for production**:
-
-    ```bash
-    pnpm build
-    ```
-
-- **Start the production server**:
-
-    ```bash
-    pnpm start
-    ```
-
----
-
-## 🛠️ Scripts
-
-- `pnpm dev`: Starts the development server.
-- `pnpm build`: Builds the project for production.
-- `pnpm start`: Starts the production server.
-- `pnpm lint`: Runs ESLint to check for any linting errors.
-
----
-
-## 🗂️ Project Structure
+## 📁 Project Architecture
 
 ```
-.
-├── .eslintrc.json
-├── components.json
-├── next-env.d.ts
-├── next.config.mjs
-├── package.json
-├── pnpm-lock.yaml
-├── postcss.config.mjs
-├── public/
+frontend/
+├── public/               # Static assets
 │   ├── images/
-│   ├── manifest.json
-│   ├── sw.js
-│   └── workbox-4754cb34.js
+│   └── manifest.json
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   └── page.tsx
-│   ├── components/
-│   │   ├── common/
-│   │   ├── layout/
-│   │   ├── onboarding/
-│   │   └── players/
-│   ├── lib/
-│   └── pages/
-├── tailwind.config.ts
-├── tsconfig.json
-└── wrangler.toml
+│   ├── app/             # App routes
+│   ├── components/      # UI components
+│   ├── lib/            # Utilities
+│   └── pages/          # Page components
+├── next.config.mjs      # Next.js config
+└── tailwind.config.ts   # Styling config
 ```
 
----
+## 🛠️ Technology Stack
 
-## ⚙️ Configuration
-
-- **Tailwind CSS**: The configuration is located in `tailwind.config.ts`.
-- **PostCSS**: The configuration is located in `postcss.config.mjs`.
-- **Next.js**: The configuration is located in `next.config.mjs`.
-
----
+- **Frontend Framework**: Next.js
+- **Styling**: Tailwind CSS
+- **Language**: TypeScript
+- **Package Manager**: pnpm
+- **PWA Support**: Built-in
 
 ## 🤝 Contributing
 
-Contributions are welcome! To contribute, follow these steps:
+We welcome contributions! Here's how you can help:
 
-1. Fork the repository.
-2. Create a new branch for your feature or bugfix.
-3. Make your changes.
-4. Commit and push your changes to your fork.
-5. Open a pull request for review.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
----
+## 📄 License
 
-## 📝 License
+Distributed under the MIT License. See `LICENSE` for more information.
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+## 💝 Support the Project
 
----
+If you find Octave valuable, consider supporting its development:
 
-### Support
-
-If you like Octave, please consider supporting the project:
-
-<a href="https://www.buymeacoffee.com/octaveapps"><img alt="Buy Me a Coffee" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/buymeacoffee-singular_vector.svg"></a>
-
----
+[![Buy Me A Coffee](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/buymeacoffee-singular_vector.svg)](https://www.buymeacoffee.com/octaveapps)
 
 <div align="center">
-  <a href="https://github.com/octave-music/frontend">
-    <img src="https://img.shields.io/github/stars/octave-music/frontend?style=for-the-badge&logo=github" alt="GitHub Stars" />
-  </a>
-  <a href="https://discord.gg/streamflix">
-    <img src="https://img.shields.io/discord/928759631575130172?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Community" />
-  </a>
+
+  [![GitHub Stars](https://img.shields.io/github/stars/octave-music/frontend?style=for-the-badge&logo=github)](https://github.com/octave-music/frontend)
+  [![Discord](https://img.shields.io/discord/928759631575130172?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/streamflix)
+
+  **Made with ❤️ by the Octave Team**
 </div>
