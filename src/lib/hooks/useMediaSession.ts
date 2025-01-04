@@ -3,14 +3,13 @@ import { Track } from "../types/types";
 interface MediaSessionHandlers {
   getCurrentPlaybackTime: () => number;
   handleSeek: (time: number) => void;
-  playTrackFromSource: (track: Track, startTime?: number) => Promise<void>;
+  playTrackFromSource: (track: Track, startTime?: number) => Promise<(() => void) | undefined>;
   pauseAudio: () => void;
   previousTrackFunc: () => void;
   skipTrack: () => void;
   setIsPlaying: (playing: boolean) => void;
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 }
-
 export function setupMediaSession(
   currentTrack: Track | null,
   isPlaying: boolean,

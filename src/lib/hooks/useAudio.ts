@@ -5,6 +5,8 @@ import {
   storeTrackBlob,
   getOfflineBlob,
   storeSetting,
+  validateBlob,
+  refreshTrackBlob
 } from "../managers/idbWrapper";
 import audioElement from "../managers/audioManager";
 import { Track } from "../types/types";
@@ -87,95 +89,199 @@ export function useAudio() {
 
   const playTrackFromSource = useCallback(
     async (track: Track, timeOffset = 0) => {
+      if (!audioElement) {
+        console.error("Audio element not available");
+        return;
+      }
+
       try {
-        if (!audioElement) {
-          console.error("Audio element not available");
-          return;
-        }
-
         // First pause any current playback
-        try {
-          audioElement?.pause();
-        } catch (pauseError) {
-          console.error("Error pausing current playback:", pauseError);
+        audioElement.pause();
+
+        // Keep track of the last active blob URL
+        let currentBlobUrl: string | null = null;
+
+        const tryPlayback = async (blob: Blob): Promise<void> => {
+          if (!audioElement) return;
+
+          // Revoke previous blob URL if it exists
+          if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+          }
+          
+          currentBlobUrl = URL.createObjectURL(blob);
+          audioElement.src = currentBlobUrl;
+
+          return new Promise<void>((resolve, reject) => {
+            const handleLoadedData = async () => {
+              if (!audioElement) {
+                reject(new Error("Audio element not available"));
+                return;
+              }
+
+              audioElement.currentTime = timeOffset;
+
+              try {
+                await audioElement.play();
+                setCurrentTrack(track);
+                setIsPlaying(true);
+                resolve();
+              } catch (playError) {
+                console.error("Play error:", playError);
+                reject(playError);
+              }
+            };
+
+            const handleError = async (e: Event) => {
+              console.error("Audio loading error:", e);
+              
+              // If we get an error, try refreshing the blob from the server
+              try {
+                const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
+                if (!response.ok) throw new Error("Failed to fetch track");
+                
+                const newBlob = await response.blob();
+                await storeTrackBlob(track.id, newBlob);
+                await tryPlayback(newBlob);
+                resolve();
+              } catch (refreshError) {
+                console.error("Failed to refresh track:", refreshError);
+                reject(refreshError);
+              }
+            };
+
+            if (audioElement) {
+              audioElement.addEventListener("loadeddata", handleLoadedData, { once: true });
+              audioElement.addEventListener("error", handleError, { once: true });
+            }
+          });
+        };
+
+        // First try to get from IndexedDB
+        let blob: Blob | undefined = await getOfflineBlob(track.id);
+
+        // If offline data exists but fails to play, fetch fresh copy
+        if (blob) {
+          try {
+            await tryPlayback(blob);
+          } catch (offlineError) {
+            console.error("Offline playback failed, fetching fresh copy:", offlineError);
+            blob = undefined;
+          }
         }
 
-        // Attempt to retrieve the track's Blob from IndexedDB
-        let offlineData = await getOfflineBlob(track.id);
-
-        if (!offlineData) {
-          const response = await fetch(
-            `${API_BASE_URL}/api/track/${track.id}.mp3`
-          );
+        // If no offline data or it failed, fetch from server
+        if (!blob) {
+          const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
           if (!response.ok) {
             throw new Error("Failed to fetch the track from the server.");
           }
-          offlineData = await response.blob();
-          await storeTrackBlob(track.id, offlineData);
+          blob = await response.blob();
+          await storeTrackBlob(track.id, blob);
+          await tryPlayback(blob);
         }
 
-        const objectUrl = URL.createObjectURL(offlineData);
+        // Set up auto-refresh mechanism
+        const setupAutoRefresh = () => {
+          if (!audioElement) return;
 
-        // Wait for the audio to be loaded before playing
-        return new Promise<void>((resolve) => {
-          if (!audioElement) {
-            URL.revokeObjectURL(objectUrl);
-            resolve();
-            return;
-          }
-
-          audioElement.src = objectUrl;
-
-          const handleLoadedData = async () => {
-            if (!audioElement) return;
-
-            URL.revokeObjectURL(objectUrl);
-            audioElement.currentTime = timeOffset;
-
-            try {
-              await audioElement.play();
-              setCurrentTrack(track);
-              setIsPlaying(true);
-            } catch (playError) {
-              console.error("Play error:", playError);
+          const refreshBlob = async () => {
+            if (navigator.onLine) {
+              try {
+                const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
+                if (!response.ok) throw new Error("Failed to fetch track");
+                const newBlob = await response.blob();
+                await storeTrackBlob(track.id, newBlob);
+              } catch (err) {
+                console.error("Failed to refresh blob:", err);
+              }
             }
-            resolve();
           };
 
-          const handleError = (e: Event) => {
-            console.error("Audio loading error:", e);
-            URL.revokeObjectURL(objectUrl);
-            resolve();
+          // Refresh on pause
+          const handlePause = () => {
+            refreshBlob();
           };
 
-          audioElement.addEventListener("loadeddata", handleLoadedData, {
-            once: true,
-          });
-          audioElement.addEventListener("error", handleError, { once: true });
+          // Refresh periodically while paused
+          let refreshInterval: NodeJS.Timeout | null = null;
+          
+          const handleVisibilityChange = () => {
+            if (document.hidden) {
+              if (refreshInterval) clearInterval(refreshInterval);
+            } else {
+              refreshBlob();
+              refreshInterval = setInterval(refreshBlob, 60000); // Refresh every minute when visible
+            }
+          };
 
-          audioElement.addEventListener(
-            "play",
-            (e) => {
-              e.stopPropagation(); // Add this
-            },
-            true
-          ); // Use capture phase
+          audioElement.addEventListener("pause", handlePause);
+          document.addEventListener("visibilitychange", handleVisibilityChange);
 
-          audioElement.addEventListener(
-            "playing",
-            (e) => {
-              e.stopPropagation(); // Add this
-            },
-            true
-          ); // Use capture phase
-        });
+          // Return cleanup function
+          return () => {
+            if (refreshInterval) clearInterval(refreshInterval);
+            audioElement?.removeEventListener("pause", handlePause);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+          };
+        };
+
+        const cleanup = setupAutoRefresh();
+
+        // Return combined cleanup function
+        return () => {
+          if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+          }
+          if (cleanup) cleanup();
+        };
+
       } catch (err) {
         console.error("Error playing track:", err);
         setIsPlaying(false);
+        throw err;
       }
     },
     [setCurrentTrack, setIsPlaying]
   );
+
+  useEffect(() => {
+    if (!audioElement) return;
+  
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && currentTrack && !isPlaying) {
+        // Check if the blob is still valid when returning to the tab
+        const isValid = await validateBlob(currentTrack.id);
+        
+        if (!isValid && navigator.onLine) {
+          // If invalid and we're online, refresh it
+          try {
+            await refreshTrackBlob(currentTrack.id);
+            // Update audio source with new blob
+            const newBlob = await getOfflineBlob(currentTrack.id);
+            if (newBlob && audioElement) {
+              const newUrl = URL.createObjectURL(newBlob);
+              audioElement.src = newUrl;
+              // Store current time before changing source
+              const currentTime = audioElement.currentTime;
+              audioElement.currentTime = currentTime;
+              
+              // Cleanup old URL after source change
+              return () => URL.revokeObjectURL(newUrl);
+            }
+          } catch (error) {
+            console.error("Failed to refresh track blob:", error);
+          }
+        }
+      }
+    };
+  
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+  
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentTrack, isPlaying]);
 
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;

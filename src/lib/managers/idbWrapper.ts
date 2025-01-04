@@ -6,6 +6,8 @@
 
 import { Track, Playlist } from "../types/types";
 
+const API_BASE_URL = "https://mbck.cloudgen.xyz";
+
 interface RecentlyPlayedEntry {
   timestamp: number;
   track: Track;
@@ -21,7 +23,7 @@ function safeTracksArray(tracks: Track[]): Track[] {
   return tracks.map((t) => JSON.parse(JSON.stringify(t)));
 }
 
-const DB_VERSION = 4; // Bump the version if needed to trigger onupgradeneeded
+const DB_VERSION = 6; // Bump the version if needed to trigger onupgradeneeded
 const DB_NAME = "OctaveDB";
 
 export async function openIDB(): Promise<IDBDatabase> {
@@ -333,4 +335,36 @@ export async function storeRecommendedTracks(tracks: Track[]) {
 export async function getRecommendedTracks(): Promise<Track[] | null> {
   const data = await getSetting("recommendedTracks");
   return data ? (JSON.parse(data) as Track[]) : null;
+}
+
+
+export async function validateBlob(trackId: string): Promise<boolean> {
+  try {
+    const blob = await getOfflineBlob(trackId);
+    if (!blob) return false;
+
+    // Try to create an object URL from the blob
+    const url = URL.createObjectURL(blob);
+    
+    // Immediately revoke it to free memory
+    URL.revokeObjectURL(url);
+    
+    return true;
+  } catch (error) {
+    console.error(`Blob validation failed for track ${trackId}:`, error);
+    return false;
+  }
+}
+
+export async function refreshTrackBlob(trackId: string): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+    if (!response.ok) throw new Error("Failed to fetch track");
+    
+    const newBlob = await response.blob();
+    await storeTrackBlob(trackId, newBlob);
+  } catch (error) {
+    console.error(`Failed to refresh blob for track ${trackId}:`, error);
+    throw error;
+  }
 }
