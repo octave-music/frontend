@@ -658,6 +658,7 @@ export function SpotifyClone() {
       );
       return [...prev, ...filtered];
     });
+    toast.success("Added track to queue!");
   }, []);
 
   /**
