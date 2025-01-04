@@ -30,7 +30,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.441.0",
     "music-app": "file:",
-    "next": "14.2.11",
+    "next": "14.2.21",
     "next-pwa": "^5.6.0",
     "node-vibrant": "3.2.1-alpha.1",
     "pako": "^2.1.0",
