@@ -1,32 +1,108 @@
-/* eslint-disable @next/next/no-img-element */
-// TrackItem.tsx
-
-import React, { useState } from "react";
-import { Plus, Library, Heart } from "lucide-react";
-import { cn } from "@/lib/utils/utils"; // Ensure this utility function exists
-
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useState, useEffect, memo } from "react";
+import { Plus, Library, Heart, Play } from "lucide-react";
+import { cn } from "@/lib/utils/utils";
 import { TrackItemProps } from "@/lib/types/types";
+import Image from "next/image";
 
 interface ActionButtonProps {
-  onClick: (e: React.MouseEvent) => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   icon: React.ReactNode;
+  label: string;
+  active?: boolean;
 }
 
-const ActionButton: React.FC<ActionButtonProps> = ({ onClick, icon }) => {
-  return (
-    <button
-      className="bg-gray-700 hover:bg-gray-600 rounded-full p-2 transition-colors duration-200 group relative"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(e);
-      }}
-    >
-      <span className="text-white">{icon}</span>
-    </button>
-  );
-};
+const ActionButton = memo<ActionButtonProps>(({ onClick, icon, active = false }) => (
+  <button
+    className={cn(
+      "flex items-center justify-center",
+      "w-8 h-8 rounded-full",
+      "transition-all duration-300 ease-out",
+      "hover:scale-110 hover:bg-white/10",
+      "focus:outline-none focus:ring-2 focus:ring-white/20",
+      active && "text-green-400",
+      "sm:bg-transparent bg-white/10"
+    )}
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick(e);
+    }}
+  >
+    {icon}
+  </button>
+));
+ActionButton.displayName = 'ActionButton';
 
-const TrackItem: React.FC<TrackItemProps> = ({
+const ScrollingText = memo<{ text: string }>(({ text }) => {
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    const textElement = document.createElement('span');
+    textElement.style.visibility = 'hidden';
+    textElement.style.whiteSpace = 'nowrap';
+    textElement.textContent = text;
+    document.body.appendChild(textElement);
+    const textWidth = textElement.offsetWidth;
+    document.body.removeChild(textElement);
+
+    setShouldScroll(textWidth > 150);
+  }, [text]);
+
+  return (
+    <div
+      className="relative overflow-hidden w-full"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <p
+        className={cn(
+          "whitespace-nowrap transition-transform duration-300 ease-linear",
+          shouldScroll && isHovered && "animate-marquee"
+        )}
+      >
+        {text}
+      </p>
+    </div>
+  );
+});
+ScrollingText.displayName = 'ScrollingText';
+
+const ActionButtons = memo<{
+  track: TrackItemProps['track'];
+  addToQueue?: (track: any) => void;
+  openAddToPlaylistModal?: (track: any) => void;
+  toggleLike?: (track: any) => void;
+  isLiked?: boolean;
+}>(({ track, addToQueue, openAddToPlaylistModal, toggleLike, isLiked }) => (
+  <div className="flex items-center gap-1 sm:gap-2 transition-all duration-300 shrink-0">
+    {addToQueue && (
+      <ActionButton
+        onClick={() => addToQueue(track)}
+        icon={<Plus className="w-4 h-4" />}
+        label="Add to Queue"
+      />
+    )}
+    {openAddToPlaylistModal && (
+      <ActionButton
+        onClick={() => openAddToPlaylistModal(track)}
+        icon={<Library className="w-4 h-4" />}
+        label="Add to Playlist"
+      />
+    )}
+    {toggleLike && (
+      <ActionButton
+        onClick={() => toggleLike(track)}
+        icon={<Heart className={cn("w-4 h-4", isLiked && "fill-current")} />}
+        label={isLiked ? "Unlike" : "Like"}
+        active={isLiked}
+      />
+    )}
+  </div>
+));
+ActionButtons.displayName = 'ActionButtons';
+
+const TrackItem = memo<TrackItemProps>(({
   track,
   showArtist = true,
   inPlaylistCreation = false,
@@ -40,54 +116,34 @@ const TrackItem: React.FC<TrackItemProps> = ({
   onContextMenu,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const handleClick = (_evt: React.MouseEvent) => {
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const handleClick = (_e: React.MouseEvent) => {
     if (!inPlaylistCreation && onTrackClick) {
-      if (typeof index !== "undefined") {
-        onTrackClick(track, index);
-      } else {
-        onTrackClick(track, index ?? 0);
-      }
+      onTrackClick(track, index ?? 0);
     }
   };
 
   const trackClasses = cn(
-    "group flex items-center gap-4 bg-gray-800/40 rounded-lg p-3 relative",
-    "hover:bg-gray-700/40 transition-colors duration-200",
+    "group relative flex items-center gap-3",
+    "p-2 sm:p-3",
+    "rounded-xl",
+    "transition-all duration-300 ease-out",
+    "border border-transparent",
+    "hover:border-white/10",
+    "hover:shadow-lg hover:shadow-black/5",
+    "sm:hover:bg-white/5 bg-white/5",
     inPlaylistCreation ? "selectable" : "cursor-pointer",
     isPrevious && "opacity-50"
-  );
-
-  const ActionButtons = () => (
-    <div className="flex items-center space-x-2 transition-all duration-200">
-      {addToQueue && (
-        <ActionButton
-          onClick={() => addToQueue(track)}
-          icon={<Plus className="w-4 h-4" />}
-        />
-      )}
-      {openAddToPlaylistModal && (
-        <ActionButton
-          onClick={() => {
-            console.log("Library icon clicked for track:", track);
-            openAddToPlaylistModal(track);
-          }}
-          icon={<Library className="w-4 h-4" />}
-        />
-      )}
-      {toggleLike && (
-        <ActionButton
-          onClick={() => toggleLike(track)}
-          icon={
-            <Heart
-              className={`w-4 h-4 transition-colors ${
-                isLiked ? "fill-green-500 text-green-500" : "text-white"
-              }`}
-            />
-          }
-        />
-      )}
-    </div>
   );
 
   return (
@@ -98,43 +154,71 @@ const TrackItem: React.FC<TrackItemProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="relative min-w-[48px]">
-        <img
+      <div className="relative aspect-square w-12 shrink-0">
+        <Image
           src={track.album?.cover_medium || "/images/placeholder-image.png"}
           alt={`${track.title || "Track"} album cover`}
-          className="w-12 h-12 rounded-md object-cover"
-          loading="lazy"
+          className={cn(
+            "rounded-lg object-cover",
+            "transition-transform duration-300",
+            "group-hover:shadow-lg",
+            isHovered && "scale-105"
+          )}
+          fill
+          sizes="48px"
+          priority={false}
         />
+        {!isMobile && (
+          <div className={cn(
+            "absolute inset-0 flex items-center justify-center",
+            "bg-black/40 rounded-lg",
+            "transition-opacity duration-300",
+            isHovered ? "opacity-100" : "opacity-0"
+          )}>
+            <Play className="w-6 h-6 fill-current" />
+          </div>
+        )}
       </div>
 
-      <div className="flex-grow min-w-0">
-        <p className="font-medium truncate">{track.title}</p>
+      <div className="flex-grow min-w-0 space-y-0.5">
+        <ScrollingText text={track.title} />
         {showArtist && (
-          <p className="text-sm text-gray-400 truncate">
-            {track.artist?.name || "Unknown Artist"}
-          </p>
+          <ScrollingText text={track.artist?.name || "Unknown Artist"} />
         )}
       </div>
 
-      <div
-        className={cn(
-          "transition-opacity duration-200",
-          isHovered || inPlaylistCreation ? "opacity-100" : "opacity-0"
-        )}
-      >
+      <div className={cn(
+        "transition-all duration-300",
+        "sm:opacity-0 sm:translate-x-4",
+        (isHovered || isMobile || inPlaylistCreation) && "sm:opacity-100 sm:translate-x-0"
+      )}>
         {inPlaylistCreation ? (
           <input
             type="checkbox"
-            className="h-5 w-5 rounded-full border-none bg-gray-700 checked:bg-[#1a237e] 
-                       transition-colors duration-200 cursor-pointer"
+            className={cn(
+              "h-5 w-5 rounded-full",
+              "border-2 border-white/20",
+              "bg-transparent",
+              "checked:bg-green-400 checked:border-transparent",
+              "transition-all duration-300",
+              "focus:ring-2 focus:ring-white/20",
+              "cursor-pointer"
+            )}
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <ActionButtons />
+          <ActionButtons
+            track={track}
+            addToQueue={addToQueue}
+            openAddToPlaylistModal={openAddToPlaylistModal}
+            toggleLike={toggleLike}
+            isLiked={isLiked}
+          />
         )}
       </div>
     </div>
   );
-};
+});
+TrackItem.displayName = 'TrackItem';
 
 export default TrackItem;

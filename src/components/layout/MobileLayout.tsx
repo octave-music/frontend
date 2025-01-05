@@ -299,7 +299,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
       </header>
 
       {view === "settings" && (
-        <section className="w-full min-h-screen overflow-y-auto bg-gray-900 px-4 py-6" style={{ paddingBottom: "15rem" }} >
+        <section className="w-full min-h-screen overflow-y-auto px-4 py-6" style={{ paddingBottom: "15rem" }} >
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2">Settings</h2>
             <div className="inline-flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-3 py-1.5 rounded-full">

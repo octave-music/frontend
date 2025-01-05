@@ -864,14 +864,6 @@ export function SpotifyClone() {
     createCompositeImage,
   ]);
 
-  const toggleTrackSelection = useCallback((tr: Track) => {
-    setSelectedTracksForNewPlaylist((prev) =>
-      prev.find((x) => x.id === tr.id)
-        ? prev.filter((x) => x.id !== tr.id)
-        : [...prev, tr]
-    );
-  }, []);
-
   /**
    * Opens a playlist and navigates the user to the 'playlist' view.
    */
@@ -1239,26 +1231,50 @@ export function SpotifyClone() {
   }, [queue]);
 
   useEffect(() => {
-    if (currentTrack) {
-      void playTrackFromSource(currentTrack, 0)
-        .then(() => {
-          setIsPlaying(true);
-          void fetchLyrics(currentTrack);
-          return storeRecentlyPlayed(currentTrack);
-        })
-        .then((recent) => setJumpBackIn(recent))
-        .then(() => getListenCounts())
-        .then((counts) => setListenCount(counts[currentTrack.id] || 0))
-        .then(() =>
-          setupDiscordRPC(currentTrack.title, currentTrack.artist.name)
-        )
-        .catch((err) => {
-          console.error("Error during playback setup:", err);
-          toast.error("An error occurred while setting up the track.");
-        });
-    }
-  }, [currentTrack, playTrackFromSource, fetchLyrics, setIsPlaying]);  
+    let isCurrentEffect = true;
+  
+    const setupTrack = async () => {
+      if (!currentTrack) return;
+  
+      try {
+        // Only proceed if this is still the current effect
+        if (!isCurrentEffect) return;
+        
+        await playTrackFromSource(currentTrack, 0);
+        
+        if (!isCurrentEffect) return;
+        setIsPlaying(true);
+        
+        // Fetch lyrics and store recently played in parallel
+        const [, recent] = await Promise.all([
+          fetchLyrics(currentTrack),
+          storeRecentlyPlayed(currentTrack)
+        ]);
+        
+        if (!isCurrentEffect) return;
+        setJumpBackIn(recent);
+        
+        const counts = await getListenCounts();
+        if (!isCurrentEffect) return;
+        setListenCount(counts[currentTrack.id] || 0);
+        
+        await setupDiscordRPC(currentTrack.title, currentTrack.artist.name);
+      } catch (err) {
+        if (!isCurrentEffect) return;
+        console.error("Error during playback setup:", err);
+        toast.error("An error occurred while setting up the track.");
+      }
+    };
+  
+    void setupTrack();
+  
+    // Cleanup function
+    return () => {
+      isCurrentEffect = false;
+    };
+  }, [currentTrack, playTrackFromSource, fetchLyrics, setIsPlaying]);
 
+  
   useEffect(() => {
     const handleLoadedData = () => {
       if (audioElement) {

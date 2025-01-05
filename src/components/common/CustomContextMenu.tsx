@@ -1,6 +1,5 @@
 // CustomContextMenu.tsx
-
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 interface ContextMenuOption {
   label: string;
@@ -26,24 +25,49 @@ const CustomContextMenu: React.FC<CustomContextMenuProps> = ({
   onClose,
   options,
 }) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
+  // Ensure menu stays within viewport
+  const adjustedPosition = {
+    x: Math.min(x, window.innerWidth - (menuRef.current?.offsetWidth || 200)),
+    y: Math.min(y, window.innerHeight - (menuRef.current?.offsetHeight || 150)),
+  };
+
   return (
     <div
-      className="fixed bg-gray-800 rounded-lg shadow-lg p-2 z-[999999]"
-      style={{ top: y, left: x }}
-      onMouseLeave={onClose}
+      ref={menuRef}
+      className="fixed bg-[#1a1a1a] rounded-lg shadow-xl z-[999999] min-w-[200px] max-w-[250px] overflow-hidden border border-gray-700/50"
+      style={{
+        top: adjustedPosition.y,
+        left: adjustedPosition.x,
+      }}
     >
-      {options.map((opt, i) => (
-        <button
-          key={i}
-          className="block w-full text-left px-4 py-2 hover:bg-gray-700 text-white"
-          onClick={() => {
-            opt.action();
-            onClose();
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
+      <div className="py-1">
+        {options.map((opt, i) => (
+          <button
+            key={i}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-gray-700/50 transition-colors duration-150 ease-in-out focus:outline-none focus:bg-gray-700/70 whitespace-nowrap font-medium"
+            onClick={(e) => {
+              e.stopPropagation();
+              opt.action();
+              onClose();
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

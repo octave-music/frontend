@@ -356,15 +356,16 @@ export async function validateBlob(trackId: string): Promise<boolean> {
   }
 }
 
-export async function refreshTrackBlob(trackId: string): Promise<void> {
+export async function refreshTrackBlob(trackId: string): Promise<Blob> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
     if (!response.ok) throw new Error("Failed to fetch track");
-    
+
     const newBlob = await response.blob();
     await storeTrackBlob(trackId, newBlob);
+    return newBlob; // Return the Blob here
   } catch (error) {
     console.error(`Failed to refresh blob for track ${trackId}:`, error);
-    throw error;
+    throw error; // Rethrow the error for the caller to handle
   }
 }

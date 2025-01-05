@@ -6,9 +6,9 @@ import {
   getOfflineBlob,
   storeSetting,
   validateBlob,
-  refreshTrackBlob
+  refreshTrackBlob,
 } from "../managers/idbWrapper";
-import audioElement from "../managers/audioManager";
+import audioElement from "../managers/audioManager"; // Ensure this can be null
 import { Track } from "../types/types";
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
@@ -18,11 +18,22 @@ export function useAudio() {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
 
   const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
+  const validationIntervalRef = useRef<number | null>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
 
+  // Safely access navigator
+  const isClient = typeof navigator !== "undefined";
+  const isSafari =
+    isClient &&
+    /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isiOS =
+    isClient &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  // Initialize audio element event listeners
   useEffect(() => {
     if (!audioElement) return;
 
@@ -33,17 +44,10 @@ export function useAudio() {
 
     const handleTimeUpdate = () => {
       if (!audioElement) return;
-
       const newTime = audioElement.currentTime;
-
-      // Batch state updates (throttle updates to prevent re-renders every frame)
-      setCurrentTime((prevTime) => {
-        if (Math.abs(newTime - prevTime) > 0.2) {
-          // Only update if difference > threshold
-          return newTime;
-        }
-        return prevTime;
-      });
+      setCurrentTime((prevTime) =>
+        Math.abs(newTime - prevTime) > 0.2 ? newTime : prevTime
+      );
     };
 
     const handleLoadedMetadata = () => {
@@ -56,6 +60,7 @@ export function useAudio() {
       if (onTrackEndCallbackRef.current) {
         onTrackEndCallbackRef.current();
       }
+      setIsPlaying(false);
     };
 
     const handlePlay = () => setIsPlaying(true);
@@ -70,14 +75,100 @@ export function useAudio() {
 
     // Cleanup
     return () => {
-      if (!audioElement) return;
-      audioElement.removeEventListener("timeupdate", handleTimeUpdate);
-      audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audioElement.removeEventListener("ended", handleEnded);
-      audioElement.removeEventListener("play", handlePlay);
-      audioElement.removeEventListener("pause", handlePause);
+      if (audioElement) {
+        audioElement.removeEventListener("timeupdate", handleTimeUpdate);
+        audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        audioElement.removeEventListener("ended", handleEnded);
+        audioElement.removeEventListener("play", handlePlay);
+        audioElement.removeEventListener("pause", handlePause);
+      }
     };
   }, []);
+
+  // Handle visibility change for blob validation
+  useEffect(() => {
+    if (!audioElement) return;
+
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && currentTrack && !isPlaying) {
+        const isValid = await validateBlob(currentTrack.id);
+        if (!isValid && navigator.onLine) {
+          try {
+            await refreshTrackBlob(currentTrack.id);
+            const newBlob = await getOfflineBlob(currentTrack.id);
+            if (newBlob && audioElement) {
+              const newUrl = URL.createObjectURL(newBlob);
+              const currentTime = audioElement.currentTime;
+              audioElement.src = newUrl;
+              audioElement.currentTime = currentTime;
+              await audioElement.play();
+              setCurrentTrack(currentTrack);
+              setIsPlaying(true);
+              // Revoke the old URL
+              if (currentBlobUrlRef.current) {
+                URL.revokeObjectURL(currentBlobUrlRef.current);
+              }
+              currentBlobUrlRef.current = newUrl;
+            }
+          } catch (error) {
+            console.error(
+              "Failed to refresh track blob on visibility change:",
+              error
+            );
+          }
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentTrack, isPlaying]);
+
+  // Handle global audio errors
+  useEffect(() => {
+    if (!audioElement) return;
+
+    const handleError = async (e: Event) => {
+      console.error("Playback error:", e);
+
+      if (currentTrack) {
+        try {
+          const blob = await refreshTrackBlob(currentTrack.id);
+          if (blob && audioElement) {
+            const url = URL.createObjectURL(blob);
+            const currentTime = audioElement.currentTime;
+            audioElement.src = url;
+            audioElement.currentTime = currentTime;
+            await audioElement.play();
+            setIsPlaying(true);
+            // Revoke the old URL
+            if (currentBlobUrlRef.current) {
+              URL.revokeObjectURL(currentBlobUrlRef.current);
+            }
+            currentBlobUrlRef.current = url;
+            return;
+          }
+        } catch (error) {
+          console.error("Recovery failed:", error);
+        }
+      }
+
+      // Pause playback if recovery fails
+      if (audioElement) {
+        audioElement.pause();
+      }
+      setIsPlaying(false);
+    };
+
+    audioElement.addEventListener("error", handleError);
+
+    return () => {
+      if (audioElement) audioElement.removeEventListener("error", handleError);
+    };
+  }, [currentTrack]);
 
   const setOnTrackEndCallback = useCallback((callback: () => void) => {
     onTrackEndCallbackRef.current = callback;
@@ -87,201 +178,204 @@ export function useAudio() {
     return audioElement?.currentTime || 0;
   }, []);
 
+  const refreshBlob = useCallback(async (trackId: string): Promise<Blob | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+      if (!response.ok) throw new Error("Failed to fetch track");
+      const newBlob = await response.blob();
+      await storeTrackBlob(trackId, newBlob);
+      return newBlob;
+    } catch (error) {
+      console.error("Failed to refresh blob:", error);
+      return null;
+    }
+  }, []);
+
+  const validateAndRefreshBlob = useCallback(
+    async (trackId: string): Promise<Blob | null> => {
+      try {
+        const blob = await getOfflineBlob(trackId);
+        if (!blob) return null;
+
+        // Test if blob is actually readable
+        try {
+          const testUrl = URL.createObjectURL(blob);
+          const testAudio = new Audio();
+
+          await new Promise<void>((resolve, reject) => {
+            if (!testAudio) {
+              reject(new Error("Failed to create test audio element"));
+              return;
+            }
+            testAudio.onloadedmetadata = () => {
+              resolve();
+            };
+            testAudio.onerror = () => {
+              reject(new Error("Blob is not playable"));
+            };
+            testAudio.src = testUrl;
+          });
+
+          URL.revokeObjectURL(testUrl);
+          return blob;
+        } catch (error) {
+          console.warn("Blob validation failed, fetching fresh copy:", error);
+          return await refreshBlob(trackId);
+        }
+      } catch (error) {
+        console.error("Blob handling error:", error);
+        return null;
+      }
+    },
+    [refreshBlob]
+  );
+
+  const streamAudioForSafari = useCallback(
+    async (track: Track, timeOffset = 0): Promise<() => void> => {
+      if (!audioElement) throw new Error("Audio element not available");
+
+      try {
+        const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
+        audioElement.src = streamUrl;
+        audioElement.currentTime = timeOffset;
+
+        await audioElement.play();
+        setCurrentTrack(track);
+        setIsPlaying(true);
+
+        const checkConnection = () => {
+          if (!navigator.onLine && audioElement) {
+            audioElement.pause();
+            setIsPlaying(false);
+            if (validationIntervalRef.current) {
+              clearInterval(validationIntervalRef.current);
+              validationIntervalRef.current = null;
+            }
+          }
+        };
+
+        validationIntervalRef.current = window.setInterval(checkConnection, 5000);
+
+        // Cleanup function
+        return () => {
+          if (validationIntervalRef.current) {
+            clearInterval(validationIntervalRef.current);
+            validationIntervalRef.current = null;
+          }
+          if (audioElement) {
+            audioElement.pause();
+            audioElement.src = "";
+          }
+        };
+      } catch (error) {
+        console.error("Safari streaming error:", error);
+        throw error;
+      }
+    },
+    []
+  );
+
   const playTrackFromSource = useCallback(
     async (track: Track, timeOffset = 0) => {
       if (!audioElement) {
-        console.error("Audio element not available");
-        return;
+        return Promise.reject(new Error("Audio element not available"));
       }
 
+      // Cleanup any existing playback
+      const cleanupAll = () => {
+        if (validationIntervalRef.current) {
+          clearInterval(validationIntervalRef.current);
+          validationIntervalRef.current = null;
+        }
+        if (currentBlobUrlRef.current) {
+          URL.revokeObjectURL(currentBlobUrlRef.current);
+          currentBlobUrlRef.current = null;
+        }
+      };
+
       try {
-        // First pause any current playback
+        // Pause and reset audio element
         audioElement.pause();
+        audioElement.src = "";
+        audioElement.load();
+        cleanupAll();
 
-        // Keep track of the last active blob URL
-        let currentBlobUrl: string | null = null;
-
-        const tryPlayback = async (blob: Blob): Promise<void> => {
-          if (!audioElement) return;
-
-          // Revoke previous blob URL if it exists
-          if (currentBlobUrl) {
-            URL.revokeObjectURL(currentBlobUrl);
-          }
-          
-          currentBlobUrl = URL.createObjectURL(blob);
-          audioElement.src = currentBlobUrl;
-
-          return new Promise<void>((resolve, reject) => {
-            const handleLoadedData = async () => {
-              if (!audioElement) {
-                reject(new Error("Audio element not available"));
-                return;
-              }
-
-              audioElement.currentTime = timeOffset;
-
-              try {
-                await audioElement.play();
-                setCurrentTrack(track);
-                setIsPlaying(true);
-                resolve();
-              } catch (playError) {
-                console.error("Play error:", playError);
-                reject(playError);
-              }
-            };
-
-            const handleError = async (e: Event) => {
-              console.error("Audio loading error:", e);
-              
-              // If we get an error, try refreshing the blob from the server
-              try {
-                const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
-                if (!response.ok) throw new Error("Failed to fetch track");
-                
-                const newBlob = await response.blob();
-                await storeTrackBlob(track.id, newBlob);
-                await tryPlayback(newBlob);
-                resolve();
-              } catch (refreshError) {
-                console.error("Failed to refresh track:", refreshError);
-                reject(refreshError);
-              }
-            };
-
-            if (audioElement) {
-              audioElement.addEventListener("loadeddata", handleLoadedData, { once: true });
-              audioElement.addEventListener("error", handleError, { once: true });
-            }
-          });
-        };
-
-        // First try to get from IndexedDB
-        let blob: Blob | undefined = await getOfflineBlob(track.id);
-
-        // If offline data exists but fails to play, fetch fresh copy
-        if (blob) {
-          try {
-            await tryPlayback(blob);
-          } catch (offlineError) {
-            console.error("Offline playback failed, fetching fresh copy:", offlineError);
-            blob = undefined;
-          }
+        if (isSafari || isiOS) {
+          // Handle Safari/iOS streaming
+          const cleanup = await streamAudioForSafari(track, timeOffset);
+          return cleanup;
         }
 
-        // If no offline data or it failed, fetch from server
+        // Validate or fetch blob
+        let blob = await validateAndRefreshBlob(track.id);
         if (!blob) {
           const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
-          if (!response.ok) {
-            throw new Error("Failed to fetch the track from the server.");
-          }
+          if (!response.ok) throw new Error("Failed to fetch track");
           blob = await response.blob();
           await storeTrackBlob(track.id, blob);
-          await tryPlayback(blob);
         }
 
-        // Set up auto-refresh mechanism
-        const setupAutoRefresh = () => {
-          if (!audioElement) return;
+        // Create blob URL
+        const blobUrl = URL.createObjectURL(blob);
+        currentBlobUrlRef.current = blobUrl;
+        audioElement.src = blobUrl;
 
-          const refreshBlob = async () => {
-            if (navigator.onLine) {
-              try {
-                const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`);
-                if (!response.ok) throw new Error("Failed to fetch track");
-                const newBlob = await response.blob();
-                await storeTrackBlob(track.id, newBlob);
-              } catch (err) {
-                console.error("Failed to refresh blob:", err);
+        // Play the audio
+        await audioElement.play();
+        audioElement.currentTime = timeOffset;
+        setCurrentTrack(track);
+        setIsPlaying(true);
+
+        // Setup periodic validation
+        const validatePlayback = async () => {
+          if (!isPlaying || !currentTrack || currentTrack.id !== track.id) return;
+
+          const validBlob = await validateAndRefreshBlob(track.id);
+          if (!validBlob && navigator.onLine) {
+            try {
+              const newBlob = await refreshBlob(track.id);
+              if (newBlob && audioElement) {
+                const newUrl = URL.createObjectURL(newBlob);
+                const currentTime = audioElement.currentTime;
+                audioElement.src = newUrl;
+                audioElement.currentTime = currentTime;
+                setCurrentTrack(track);
+                setIsPlaying(true);
+                // Revoke old URL
+                if (currentBlobUrlRef.current) {
+                  URL.revokeObjectURL(currentBlobUrlRef.current);
+                }
+                currentBlobUrlRef.current = newUrl;
               }
+            } catch (error) {
+              console.error("Failed to refresh track blob during validation:", error);
             }
-          };
-
-          // Refresh on pause
-          const handlePause = () => {
-            refreshBlob();
-          };
-
-          // Refresh periodically while paused
-          let refreshInterval: NodeJS.Timeout | null = null;
-          
-          const handleVisibilityChange = () => {
-            if (document.hidden) {
-              if (refreshInterval) clearInterval(refreshInterval);
-            } else {
-              refreshBlob();
-              refreshInterval = setInterval(refreshBlob, 60000); // Refresh every minute when visible
-            }
-          };
-
-          audioElement.addEventListener("pause", handlePause);
-          document.addEventListener("visibilitychange", handleVisibilityChange);
-
-          // Return cleanup function
-          return () => {
-            if (refreshInterval) clearInterval(refreshInterval);
-            audioElement?.removeEventListener("pause", handlePause);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-          };
-        };
-
-        const cleanup = setupAutoRefresh();
-
-        // Return combined cleanup function
-        return () => {
-          if (currentBlobUrl) {
-            URL.revokeObjectURL(currentBlobUrl);
           }
-          if (cleanup) cleanup();
         };
 
+        validationIntervalRef.current = window.setInterval(validatePlayback, 30000);
+
+        // Return cleanup function
+        return () => {
+          cleanupAll();
+        };
       } catch (err) {
         console.error("Error playing track:", err);
+        cleanupAll();
         setIsPlaying(false);
         throw err;
       }
     },
-    [setCurrentTrack, setIsPlaying]
+    [
+      isSafari,
+      isiOS,
+      validateAndRefreshBlob,
+      refreshBlob,
+      streamAudioForSafari,
+      currentTrack,
+      isPlaying,
+    ]
   );
-
-  useEffect(() => {
-    if (!audioElement) return;
-  
-    const handleVisibilityChange = async () => {
-      if (!document.hidden && currentTrack && !isPlaying) {
-        // Check if the blob is still valid when returning to the tab
-        const isValid = await validateBlob(currentTrack.id);
-        
-        if (!isValid && navigator.onLine) {
-          // If invalid and we're online, refresh it
-          try {
-            await refreshTrackBlob(currentTrack.id);
-            // Update audio source with new blob
-            const newBlob = await getOfflineBlob(currentTrack.id);
-            if (newBlob && audioElement) {
-              const newUrl = URL.createObjectURL(newBlob);
-              audioElement.src = newUrl;
-              // Store current time before changing source
-              const currentTime = audioElement.currentTime;
-              audioElement.currentTime = currentTime;
-              
-              // Cleanup old URL after source change
-              return () => URL.revokeObjectURL(newUrl);
-            }
-          } catch (error) {
-            console.error("Failed to refresh track blob:", error);
-          }
-        }
-      }
-    };
-  
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-  
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [currentTrack, isPlaying]);
 
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;
@@ -296,30 +390,31 @@ export function useAudio() {
 
   const onVolumeChange = useCallback((v: number) => {
     if (!audioElement) return;
-    setVolume(v);
-    audioElement.volume = v;
-    void storeSetting("volume", String(v));
+    const clampedVolume = Math.min(Math.max(v, 0), 1); // Ensure volume is between 0 and 1
+    setVolume(clampedVolume);
+    audioElement.volume = clampedVolume;
+    void storeSetting("volume", String(clampedVolume));
   }, []);
 
-  const loadAudioBuffer = useCallback(
-    async (trackId: string): Promise<Blob | null> => {
-      const offlineData = await getOfflineBlob(trackId);
-      if (offlineData) return offlineData;
+  const loadAudioBuffer = useCallback(async (trackId: string): Promise<Blob | null> => {
+    const offlineData = await getOfflineBlob(trackId);
+    if (offlineData) return offlineData;
 
-      try {
-        const url = `${API_BASE_URL}/api/track/${trackId}.mp3`;
-        const resp = await fetch(url);
-        if (!resp.ok) return null;
-        const mp3 = await resp.blob();
-        await storeTrackBlob(trackId, mp3);
-        return mp3;
-      } catch (error) {
-        console.error("Error loading audio buffer:", error);
+    try {
+      const url = `${API_BASE_URL}/api/track/${trackId}.mp3`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        console.error(`Failed to fetch track with ID ${trackId}`);
         return null;
       }
-    },
-    []
-  );
+      const mp3 = await resp.blob();
+      await storeTrackBlob(trackId, mp3);
+      return mp3;
+    } catch (error) {
+      console.error("Error loading audio buffer:", error);
+      return null;
+    }
+  }, []);
 
   return {
     isPlaying,

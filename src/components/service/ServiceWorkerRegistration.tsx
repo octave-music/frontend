@@ -21,12 +21,10 @@ const ServiceWorkerRegistration = () => {
               installingWorker.onstatechange = () => {
                 if (installingWorker.state === "installed") {
                   if (navigator.serviceWorker.controller) {
-                    // New update available
                     if (confirm("New version available. Refresh to update?")) {
                       window.location.reload();
                     }
                   } else {
-                    // Content cached for offline use
                     console.log("Content is cached for offline use.");
                   }
                 }
@@ -36,11 +34,18 @@ const ServiceWorkerRegistration = () => {
           .catch((error) => {
             console.error("Service Worker registration failed:", error);
           });
+
+        // Add controller change handling
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (document.visibilityState === "visible") {
+            window.location.reload();
+          }
+        });
       });
     }
   }, []);
 
-  return null; // This component doesn't render anything
+  return null;
 };
 
 export default ServiceWorkerRegistration;
