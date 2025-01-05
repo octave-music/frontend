@@ -47,6 +47,7 @@ import {
 
 import { Track, Lyric } from "@/lib/types/types";
 import Image from "next/image";
+import { usePalette } from 'react-palette';
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
@@ -310,6 +311,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   const isAutoScrollingRef = useRef(false);
   const lyricsRef = useRef<HTMLDivElement>(null);
   const [canShowActions, setCanShowActions] = useState(true);
+  const { data } = usePalette(currentTrack.album.cover_medium);
 
   useEffect(() => {
     let resizeTimeout: NodeJS.Timeout | null = null;
@@ -1038,24 +1040,20 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   // Expanded Player (artwork, controls, etc.)
                   <>
                     <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
-                      {/* Add an outer container for the background */}
-                      <div className="absolute inset-0 overflow-hidden">
-                        <div
-                          className="absolute inset-[-10%] /* Extend beyond boundaries */"
-                          style={{
-                            backgroundImage: `linear-gradient(180deg, 
-                              rgba(0,0,0,0.3), 
-                              rgba(0,0,0,0.7)
-                            ), url(${currentTrack.album.cover_medium})`,
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                            filter: "blur(30px) brightness(0.7)",
-                            transform: "scale(1.5)", /* Increased scale for better coverage */
-                            zIndex: -1,
-                          }}
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-black/80 z-[-1]" />
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          filter: "blur(25px) brightness(1.2) saturate(1.3)", // Increased brightness and saturation
+                          transform: "scale(1.8)", // Slightly reduced from 2 for more visible effect
+                          opacity: 0.95, // Increased opacity for more visibility
+                          mask: "radial-gradient(circle at center, black 40%, transparent 80%)", // Adjusted gradient stops
+                          WebkitMask: "radial-gradient(circle at center, black 40%, transparent 80%)",
+                          zIndex: -1,
+                        }}
+                      />
                       <motion.div
                         drag="x"
                         dragConstraints={{ left: 0, right: 0 }}
@@ -1072,7 +1070,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                           priority
                         />
                       </motion.div>
-                    </div>
+                    </div>     
                     <div className="w-full text-center mb-8">
                       <h2 className="text-2xl font-bold text-white mb-2">
                         {currentTrack.title}
