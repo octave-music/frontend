@@ -1110,6 +1110,8 @@ const DesktopLayout = ({
                       src={track.album.cover_medium || "/images/defaultSongImage.png"}
                       alt={track.title || "No Track Found"}
                       fill
+                      priority
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
                       className={cn(
                         "object-cover",
                         "transform transition-transform duration-300",

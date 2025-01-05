@@ -852,7 +852,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                         width={180}
                         height={180}
                         draggable={false}
-                        loading="lazy"
+                        priority
                       />
                         <div
                           className={cn(
