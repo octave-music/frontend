@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @next/next/no-img-element */
 import React, {
   useState,
   useEffect,
@@ -47,6 +46,7 @@ import {
 } from "lucide-react";
 
 import { Track, Lyric } from "@/lib/types/types";
+import Image from "next/image";
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
@@ -112,7 +112,7 @@ const Seekbar: React.FC<SeekbarProps> = ({
 
   useEffect(() => {
     if (!isDragging) {
-      setLocalProgress(progress);
+      setLocalProgress(isNaN(progress) ? 0 : progress);
     }
   }, [progress, isDragging]);
 
@@ -131,7 +131,7 @@ const Seekbar: React.FC<SeekbarProps> = ({
     (clientX: number) => {
       if (isDragging) {
         const newP = calculateProgress(clientX);
-        setLocalProgress(newP);
+        setLocalProgress(isNaN(newP) ? 0 : newP);
       }
     },
     [isDragging, calculateProgress]
@@ -179,19 +179,17 @@ const Seekbar: React.FC<SeekbarProps> = ({
           borderRadius: "2px",
           overflow: "hidden",
           appearance: "none",
-          WebkitAppearance: "none",
-          MozAppearance: "none",
         }}
       >
         <motion.div
           className="seekbar-progress absolute left-0 top-0 h-full"
           style={{
-            width: `${localProgress * 100}%`,
             backgroundColor: "#ffffff",
             opacity: 1,
             borderRadius: "2px",
             willChange: "width",
-          }}          animate={{ width: `${localProgress * 100}%` }}
+          }}
+          animate={{ width: `${isNaN(localProgress) ? 0 : localProgress * 100}%` }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
       </div>
@@ -451,7 +449,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
     let isCancelled = false;
 
-    const img = new Image();
+    const img = new window.Image();
     img.crossOrigin = "Anonymous";
     img.src = currentTrack.album.cover_medium;
 
@@ -716,9 +714,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     className="relative w-12 h-12 rounded-lg overflow-hidden"
                     whileHover={{ scale: 1.05 }}
                   >
-                    <img
+                    <Image
                       src={currentTrack.album.cover_medium || ""}
                       alt={currentTrack.title || ""}
+                      fill
+                      sizes="(max-width: 768px) 48px, 96px"
+                      className="object-cover"
+                      priority
                     />
                   </motion.div>
                   <div className="flex-1 min-w-0">
@@ -881,11 +883,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                           onClick={() => onQueueItemClick(t, -1 * (i + 1))}
                         >
                           <div className="w-12 h-12 rounded-lg overflow-hidden">
-                            <img
-                              src={t.album.cover_medium}
-                              alt={t.title}
-                              className="object-cover"
-                            />
+                          <Image
+                            src={t.album.cover_medium}
+                            alt={t.title}
+                            fill
+                            sizes="(max-width: 768px) 48px, 96px"
+                            className="object-cover"
+                          />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-gray-400 font-medium truncate">
@@ -922,10 +926,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                                 onClick={() => onQueueItemClick(tr, i)}
                               >
                                 <div className="w-12 h-12 relative rounded-lg overflow-hidden">
-                                  <img
-                                    src={tr.album.cover_medium}
-                                    alt={tr.title}
-                                  />
+                                <Image
+                                  src={tr.album.cover_medium}
+                                  alt={tr.title}
+                                  fill
+                                  sizes="(max-width: 768px) 48px, 96px"
+                                  className="object-cover"
+                                />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-medium truncate">
@@ -1031,17 +1038,24 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   // Expanded Player (artwork, controls, etc.)
                   <>
                     <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${currentTrack.album.cover_medium})`,
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                        filter: "blur(20px)",
-                        transform: "scale(1.2)",
-                        zIndex: -1,
-                      }}
-                      ></div>
+                      {/* Add an outer container for the background */}
+                      <div className="absolute inset-0 overflow-hidden">
+                        <div
+                          className="absolute inset-[-10%] /* Extend beyond boundaries */"
+                          style={{
+                            backgroundImage: `linear-gradient(180deg, 
+                              rgba(0,0,0,0.3), 
+                              rgba(0,0,0,0.7)
+                            ), url(${currentTrack.album.cover_medium})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                            filter: "blur(30px) brightness(0.7)",
+                            transform: "scale(1.5)", /* Increased scale for better coverage */
+                            zIndex: -1,
+                          }}
+                        />
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-black/80 z-[-1]" />
                       <motion.div
                         drag="x"
                         dragConstraints={{ left: 0, right: 0 }}
@@ -1049,10 +1063,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         onDragEnd={(event, info) => handleDragEnd(info)}
                         className="relative z-10 w-[min(60vw,320px)] h-[min(60vw,320px)]"
                       >
-                        <img
+                        <Image
                           src={currentTrack.album.cover_medium || ""}
                           alt={currentTrack.title || ""}
-                          className="rounded-lg shadow-xl w-full h-full object-cover"
+                          fill
+                          sizes="(max-width: 768px) 60vw, 320px"
+                          className="rounded-lg shadow-xl object-cover"
+                          priority
                         />
                       </motion.div>
                     </div>

@@ -21,7 +21,7 @@ const nextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
     formats: ['image/webp'],
-    minimumCacheTTL: 60, // Cache images for 60 seconds minimum
+    minimumCacheTTL: 60,
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
@@ -29,10 +29,8 @@ const nextConfig = {
 
   // Webpack optimizations
   webpack(config, { dev }) {
-    // Alias configuration
     config.resolve.alias['@'] = new URL('./src', import.meta.url).pathname;
 
-    // Enable tree shaking
     if (!dev) {
       config.optimization = {
         ...config.optimization,
@@ -41,7 +39,6 @@ const nextConfig = {
       };
     }
 
-    // Optimize images
     config.module.rules.push({
       test: /\.(png|jpe?g|gif|svg|webp)$/i,
       use: [
@@ -75,10 +72,9 @@ const nextConfig = {
 
   // Performance optimizations
   experimental: {
-    optimizeCss: true, // Enable CSS optimization
+    optimizeCss: true,
     optimizePackageImports: ['lodash', 'date-fns'],
     scrollRestoration: true,
-    serverActions: true,
   },
 
   // Compression
@@ -86,14 +82,13 @@ const nextConfig = {
 
   // Cache optimization
   onDemandEntries: {
-    maxInactiveAge: 60 * 60 * 1000, // 1 hour
+    maxInactiveAge: 60 * 60 * 1000,
     pagesBufferLength: 5,
   },
 
   // Build optimization
   poweredByHeader: false,
   generateEtags: true,
-  keepAlive: true,
 };
 
 // PWA configuration
@@ -110,7 +105,7 @@ const withPWAConfig = withPWA({
         cacheName: 'image-cache',
         expiration: {
           maxEntries: 100,
-          maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+          maxAgeSeconds: 7 * 24 * 60 * 60,
         },
         cacheableResponse: {
           statuses: [0, 200],
@@ -124,7 +119,7 @@ const withPWAConfig = withPWA({
         cacheName: 'static-image-assets',
         expiration: {
           maxEntries: 100,
-          maxAgeSeconds: 24 * 60 * 60, // 24 hours
+          maxAgeSeconds: 24 * 60 * 60,
         },
       },
     },
@@ -135,7 +130,7 @@ const withPWAConfig = withPWA({
         cacheName: 'static-resources',
         expiration: {
           maxEntries: 50,
-          maxAgeSeconds: 24 * 60 * 60, // 24 hours
+          maxAgeSeconds: 24 * 60 * 60,
         },
       },
     },

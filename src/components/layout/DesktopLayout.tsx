@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { ReactNode } from "react";
 
@@ -35,6 +34,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar"
 
 // Utilities
 import { cn } from "@/lib/utils/utils";
+import Image from "next/image";
+
 
 // Types
 import type { Track, Playlist } from "@/lib/types/types";
@@ -346,14 +347,14 @@ const DesktopLayout = ({
                   onClick={() => openPlaylist(pl)}
                 >
                   <div className="relative flex-shrink-0">
-                    <img
-                      src={pl.image || "images/defaultPlaylistImage.png"}
-                      alt={pl.name}
-                      className={cn(
-                        "rounded-md object-cover shadow-md",
-                        sidebarCollapsed ? "w-10 h-10" : "w-12 h-12"
-                      )}
-                    />
+                  <Image 
+                    src={pl.image || "/images/defaultPlaylistImage.png"}
+                    alt={pl.name}
+                    width={sidebarCollapsed ? 40 : 48}
+                    height={sidebarCollapsed ? 40 : 48}
+                    className="rounded-md object-cover shadow-md"
+                    priority
+                  />
                     {pl.downloaded && (
                       <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-0.5">
                         <Download className="w-2.5 h-2.5 text-white" />
@@ -717,26 +718,26 @@ const DesktopLayout = ({
           <section className="relative min-h-screen bg-gradient-to-b from-gray-900 to-black">
             <div className="relative h-[50vh] overflow-hidden">
               <div className="absolute inset-0">
-                <img
-                  src={
-                    currentPlaylist.image || "/images/defaultPlaylistImage.png"
-                  }
-                  alt={currentPlaylist.name || "Playlist cover"}
-                  className="w-full h-full object-cover"
-                />
+              <Image
+                src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                alt={currentPlaylist.name || "Playlist cover"}
+                fill
+                className="object-cover"
+                priority
+              />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gray-900/80 to-gray-900"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-12">
                 <div className="max-w-7xl mx-auto">
                   <div className="flex items-end space-x-6">
-                    <img
-                      src={
-                        currentPlaylist.image ||
-                        "/images/defaultPlaylistImage.png"
-                      }
-                      alt={currentPlaylist.name || "Playlist cover"}
-                      className="w-48 h-48 object-cover rounded-xl shadow-2xl"
-                    />
+                  <Image
+                    src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
+                    alt={currentPlaylist.name || "Playlist cover"}
+                    width={192}
+                    height={192}
+                    className="object-cover rounded-xl shadow-2xl"
+                    priority
+                  />
                     <div className="flex-1">
                       <span className="text-white/80 text-lg font-medium mb-2">
                         PLAYLIST
@@ -844,14 +845,14 @@ const DesktopLayout = ({
                                     transition-colors duration-200"
                       >
                         <div className="flex items-center space-x-4">
-                          <img
-                            src={
-                              track.album.cover_small ||
-                              "assets/default-album.jpg"
-                            }
-                            alt={track.title}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
+                        <Image
+                          src={track.album.cover_small || "/assets/default-album.jpg"}
+                          alt={track.title}
+                          width={48}
+                          height={48}
+                          className="rounded-lg object-cover"
+                        />
+
                           <div>
                             <p className="font-medium text-white">
                               {track.title}
@@ -1070,10 +1071,12 @@ const DesktopLayout = ({
                     onClick={() => openPlaylist(pl)}
                   >
                     <div className="flex items-center">
-                    <img
-                      src={pl.image || "images/defaultPlaylistImage.png"}
+                    <Image
+                      src={pl.image || "/images/defaultPlaylistImage.png"}
                       alt={pl.name || "Playlist Image"}
-                      className="w-16 h-16 rounded mr-4 object-cover"
+                      width={64}
+                      height={64}
+                      className="rounded mr-4 object-cover"
                     />
                     <span className="font-medium text-white">{pl.name}</span>
                     </div>
@@ -1103,18 +1106,16 @@ const DesktopLayout = ({
                 {jumpBackIn.map((track, i) => (
                   <div key={i} className="group relative flex flex-col">
                     <div className="relative aspect-square w-full overflow-hidden rounded-xl">
-                      <img
-                        src={
-                          track.album.cover_medium ||
-                          "images/defaultSongImage.png"
-                        }
-                        alt={track.title || "No Track Found"}
-                        className={cn(
-                          "w-full h-full object-cover",
-                          "transform transition-transform duration-300",
-                          "group-hover:scale-105"
-                        )}
-                      />
+                    <Image
+                      src={track.album.cover_medium || "/images/defaultSongImage.png"}
+                      alt={track.title || "No Track Found"}
+                      fill
+                      className={cn(
+                        "object-cover",
+                        "transform transition-transform duration-300",
+                        "group-hover:scale-105"
+                      )}
+                    />
                       <div
                         className={cn(
                           "absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100",

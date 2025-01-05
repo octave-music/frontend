@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
@@ -32,8 +31,6 @@ import React, {
   SetStateAction,
 } from "react";
 import {
-  Search,
-  Plus,
   X,
   ChevronRight,
   Music,
@@ -43,7 +40,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { SpotifyToDeezer } from "./onboarding/SpotifyToDeezer";
-import TrackItem from "./common/TrackItem";
+import Image from "next/image";
 
 import debounce from "lodash/debounce";
 import ReactDOM from "react-dom";
@@ -795,7 +792,7 @@ export function SpotifyClone() {
    */
   const loadImage = useCallback((src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
-      const img = new Image();
+      const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
       img.onerror = reject;
@@ -1883,10 +1880,13 @@ export function SpotifyClone() {
                   >
                     {newPlaylistImage ? (
                       <div className="relative w-full h-full">
-                        <img
+                        <Image
                           src={newPlaylistImage}
+                          fill
                           alt="Playlist Cover"
                           className="w-full h-full object-cover"
+                          priority
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                         <div
                           className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 

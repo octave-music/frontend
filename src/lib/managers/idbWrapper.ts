@@ -1,371 +1,253 @@
 // lib/idbWrapper.ts
 
-// =======================
-// Type Declarations
-// =======================
-
 import { Track, Playlist } from "../types/types";
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
+const DB_NAME = "OctaveDB";
+const DB_VERSION = 6;
 
 interface RecentlyPlayedEntry {
   timestamp: number;
   track: Track;
 }
 
-// A helper to safely clone track data:
-function safeTrackData(track: Track): Track {
-  return JSON.parse(JSON.stringify(track));
+// Utility functions for safe data handling
+function safeClone<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
 }
 
-// For your pointerEvent errors, we do the same for arrays of tracks:
-function safeTracksArray(tracks: Track[]): Track[] {
-  return tracks.map((t) => JSON.parse(JSON.stringify(t)));
-}
-
-const DB_VERSION = 6; // Bump the version if needed to trigger onupgradeneeded
-const DB_NAME = "OctaveDB";
-
-export async function openIDB(): Promise<IDBDatabase> {
+// Database connection handling
+async function openIDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
-      if (!db.objectStoreNames.contains("tracks")) {
-        db.createObjectStore("tracks", { keyPath: "id" });
-      }
-      if (!db.objectStoreNames.contains("playlists")) {
-        db.createObjectStore("playlists", { keyPath: "name" });
-      }
-      if (!db.objectStoreNames.contains("settings")) {
-        db.createObjectStore("settings", { keyPath: "key" });
-      }
-      if (!db.objectStoreNames.contains("listenCounts")) {
-        db.createObjectStore("listenCounts", { keyPath: "id" });
-      }
-      if (!db.objectStoreNames.contains("recentlyPlayed")) {
-        const store = db.createObjectStore("recentlyPlayed", {
-          autoIncrement: true,
-        });
-        store.createIndex("by_timestamp", "timestamp", { unique: false });
-      }
-      if (!db.objectStoreNames.contains("queue")) {
-        db.createObjectStore("queue", { keyPath: "id" }); // You can use 'id' or any other identifier
-      }
+      // Create stores if they don't exist
+      const stores = {
+        tracks: { keyPath: "id" },
+        playlists: { keyPath: "name" },
+        settings: { keyPath: "key" },
+        listenCounts: { keyPath: "id" },
+        queue: { keyPath: "id" },
+        recentlyPlayed: { autoIncrement: true }
+      };
+
+      Object.entries(stores).forEach(([name, config]) => {
+        if (!db.objectStoreNames.contains(name)) {
+          const store = db.createObjectStore(name, config);
+          if (name === "recentlyPlayed") {
+            store.createIndex("by_timestamp", "timestamp", { unique: false });
+          }
+        }
+      });
     };
 
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
-}
-
-// ================================
-// 1) TRACK BLOB (Offline Audio)
-// ================================
-export async function storeTrackBlob(
-  trackId: string,
-  blob: Blob
-): Promise<void> {
-  const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("tracks", "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-
-    const store = tx.objectStore("tracks");
-    store.put({ id: trackId, blob });
-  });
-}
-
-export async function getOfflineBlob(
-  trackId: string
-): Promise<Blob | undefined> {
-  const db = await openIDB();
-  return new Promise<Blob | undefined>((resolve, reject) => {
-    const tx = db.transaction("tracks", "readonly");
-    const store = tx.objectStore("tracks");
-    const req = store.get(trackId);
-
-    req.onsuccess = () => {
-      const result = req.result;
-      if (result) {
-        resolve(result.blob as Blob);
-      } else {
-        resolve(undefined);
-      }
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-// ================================
-// 2) PLAYLISTS
-// ================================
-export async function storePlaylist(pl: Playlist): Promise<void> {
-  // Make sure to store safe data:
-  const safePL: Playlist = {
-    ...pl,
-    tracks: safeTracksArray(pl.tracks),
-  };
-
-  const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("playlists", "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-
-    const store = tx.objectStore("playlists");
-    store.put(safePL);
-  });
-}
-
-export async function getAllPlaylists(): Promise<Playlist[]> {
-  const db = await openIDB();
-  return new Promise<Playlist[]>((resolve, reject) => {
-    const tx = db.transaction("playlists", "readonly");
-    const store = tx.objectStore("playlists");
-    const request = store.getAll();
-
-    request.onsuccess = () => {
-      const result = request.result as Playlist[] | undefined;
-      resolve(result ?? []);
-    };
+    request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-export async function deletePlaylistByName(name: string): Promise<Playlist[]> {
+// Generic database operation wrapper
+async function dbOperation<T>(
+  storeName: string,
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest
+): Promise<T> {
   const db = await openIDB();
-  return new Promise<Playlist[]>((resolve, reject) => {
-    const tx = db.transaction("playlists", "readwrite");
-    tx.oncomplete = async () => {
-      const all = await getAllPlaylists();
-      resolve(all);
-    };
-    tx.onerror = () => reject(tx.error);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, mode);
+    const store = tx.objectStore(storeName);
+    const request = operation(store);
 
-    const store = tx.objectStore("playlists");
-    store.delete(name);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
 }
 
-// ================================
-// 3) RECENTLY PLAYED
-// ================================
+// Track blob storage operations
+export async function storeTrackBlob(trackId: string, blob: Blob): Promise<void> {
+  await dbOperation("tracks", "readwrite", (store) => 
+    store.put({ id: trackId, blob, timestamp: Date.now() })
+  );
+}
+
+export async function getOfflineBlob(trackId: string): Promise<Blob | undefined> {
+  const result = await dbOperation<{ blob: Blob } | undefined>(
+    "tracks",
+    "readonly",
+    (store) => store.get(trackId)
+  );
+  return result?.blob;
+}
+
+// Playlist operations
+export async function storePlaylist(playlist: Playlist): Promise<void> {
+  const safePL = safeClone(playlist);
+  await dbOperation("playlists", "readwrite", (store) => store.put(safePL));
+}
+
+export async function getAllPlaylists(): Promise<Playlist[]> {
+  return dbOperation<Playlist[]>("playlists", "readonly", (store) => 
+    store.getAll()
+  ) || [];
+}
+
+export async function deletePlaylistByName(name: string): Promise<Playlist[]> {
+  await dbOperation("playlists", "readwrite", (store) => store.delete(name));
+  return getAllPlaylists();
+}
+
+// Recently played tracks
 export async function storeRecentlyPlayed(
   track: Track,
   limit = 4
 ): Promise<Track[]> {
-  const db = await openIDB();
-  return new Promise<Track[]>((resolve, reject) => {
-    const tx = db.transaction("recentlyPlayed", "readwrite");
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = async () => {
-      const all = await getRecentlyPlayed();
-      // filter duplicates
-      const unique: Track[] = [];
-      for (const t of all) {
-        if (!unique.find((u) => u.id === t.id)) {
-          unique.push(t);
-        }
-      }
-      resolve(unique.slice(0, limit));
-    };
+  const entry: RecentlyPlayedEntry = {
+    timestamp: Date.now(),
+    track: safeClone(track)
+  };
 
-    const store = tx.objectStore("recentlyPlayed");
-    // store a safe copy
-    store.add({
-      timestamp: Date.now(),
-      track: safeTrackData(track),
-    } as RecentlyPlayedEntry);
-  });
+  await dbOperation("recentlyPlayed", "readwrite", (store) => 
+    store.add(entry)
+  );
+
+  return getRecentlyPlayed(limit);
 }
 
-export async function getRecentlyPlayed(): Promise<Track[]> {
+export async function getRecentlyPlayed(limit = 4): Promise<Track[]> {
   const db = await openIDB();
-  return new Promise<Track[]>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction("recentlyPlayed", "readonly");
-    tx.onerror = () => reject(tx.error);
-
     const store = tx.objectStore("recentlyPlayed");
-    const idx = store.index("by_timestamp");
-
+    const index = store.index("by_timestamp");
+    
     const results: Track[] = [];
-    const req = idx.openCursor(null, "prev");
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (cursor) {
+    let count = 0;
+
+    const request = index.openCursor(null, "prev");
+    
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor && count < limit) {
         const entry = cursor.value as RecentlyPlayedEntry;
-        results.push(entry.track);
+        if (!results.find(t => t.id === entry.track.id)) {
+          results.push(entry.track);
+          count++;
+        }
         cursor.continue();
       } else {
         resolve(results);
       }
     };
-    req.onerror = () => reject(req.error);
+    
+    request.onerror = () => reject(request.error);
   });
 }
 
-// ================================
-// 4) LISTEN COUNTS
-// ================================
+// Listen count operations
 export async function storeListenCount(
   trackId: string,
   count: number
 ): Promise<void> {
-  const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("listenCounts", "readwrite");
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => resolve();
-
-    const store = tx.objectStore("listenCounts");
-    store.put({ id: trackId, count });
-  });
+  await dbOperation("listenCounts", "readwrite", (store) => 
+    store.put({ id: trackId, count })
+  );
 }
 
 export async function getListenCounts(): Promise<Record<string, number>> {
-  const db = await openIDB();
-  return new Promise<Record<string, number>>((resolve, reject) => {
-    const tx = db.transaction("listenCounts", "readonly");
-    tx.onerror = () => reject(tx.error);
-
-    const store = tx.objectStore("listenCounts");
-    const req = store.getAll();
-
-    req.onsuccess = () => {
-      const data = req.result || [];
-      const map: Record<string, number> = {};
-      data.forEach((item: { id: string; count: number }) => {
-        map[item.id] = item.count;
-      });
-      resolve(map);
-    };
-    req.onerror = () => reject(req.error);
-  });
+  const data = await dbOperation<Array<{ id: string; count: number }>>(
+    "listenCounts",
+    "readonly",
+    (store) => store.getAll()
+  );
+  
+  return (data || []).reduce((acc, item) => {
+    acc[item.id] = item.count;
+    return acc;
+  }, {} as Record<string, number>);
 }
 
-// ================================
-// 5) SETTINGS
-// ================================
+// Settings operations
 export async function storeSetting(key: string, value: string): Promise<void> {
-  const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("settings", "readwrite");
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => resolve();
-
-    const store = tx.objectStore("settings");
-    store.put({ key, value });
-  });
+  await dbOperation("settings", "readwrite", (store) => 
+    store.put({ key, value })
+  );
 }
 
 export async function getSetting(key: string): Promise<string | null> {
-  const db = await openIDB();
-  return new Promise<string | null>((resolve, reject) => {
-    const tx = db.transaction("settings", "readonly");
-    tx.onerror = () => reject(tx.error);
-
-    const store = tx.objectStore("settings");
-    const req = store.get(key);
-
-    req.onsuccess = () => {
-      if (req.result) {
-        resolve(req.result.value as string);
-      } else {
-        resolve(null);
-      }
-    };
-    req.onerror = () => reject(req.error);
-  });
+  const result = await dbOperation<{ value: string } | undefined>(
+    "settings",
+    "readonly",
+    (store) => store.get(key)
+  );
+  return result?.value || null;
 }
 
-// Store the entire queue
+// Queue operations
 export async function storeQueue(queue: Track[]): Promise<void> {
   const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction("queue", "readwrite");
-    tx.onerror = () => reject(tx.error);
+    const store = tx.objectStore("queue");
+    
     tx.oncomplete = () => resolve();
-
-    const store = tx.objectStore("queue");
-    store.clear(); // Clear old queue
-    queue.forEach((track) => store.put(safeTrackData(track))); // Add all tracks to queue
-  });
-}
-
-// Retrieve the stored queue
-export async function getQueue(): Promise<Track[]> {
-  const db = await openIDB();
-  return new Promise<Track[]>((resolve, reject) => {
-    const tx = db.transaction("queue", "readonly");
-    const store = tx.objectStore("queue");
-    const req = store.getAll();
-
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-// Clear the queue
-export async function clearQueue(): Promise<void> {
-  const db = await openIDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("queue", "readwrite");
     tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => resolve();
 
-    const store = tx.objectStore("queue");
     store.clear();
+    queue.forEach((track, index) => {
+      store.put({ ...safeClone(track), queueIndex: index });
+    });
   });
 }
 
-// Recommended Tracks:
+export async function getQueue(): Promise<Track[]> {
+  const tracks = await dbOperation<Array<Track & { queueIndex: number }>>(
+    "queue",
+    "readonly",
+    (store) => store.getAll()
+  );
+  
+  return (tracks || [])
+    .sort((a, b) => a.queueIndex - b.queueIndex)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .map(({ queueIndex, ...track }) => track);
+}
 
-export async function storeRecommendedTracks(tracks: Track[]) {
+export async function clearQueue(): Promise<void> {
+  await dbOperation("queue", "readwrite", (store) => store.clear());
+}
+
+// Recommended tracks
+export async function storeRecommendedTracks(tracks: Track[]): Promise<void> {
   await storeSetting("recommendedTracks", JSON.stringify(tracks));
 }
 
 export async function getRecommendedTracks(): Promise<Track[] | null> {
   const data = await getSetting("recommendedTracks");
-  return data ? (JSON.parse(data) as Track[]) : null;
+  return data ? JSON.parse(data) : null;
 }
 
-
+// Blob validation and refresh
 export async function validateBlob(trackId: string): Promise<boolean> {
   try {
     const blob = await getOfflineBlob(trackId);
     if (!blob) return false;
 
-    // Try to create an object URL from the blob
     const url = URL.createObjectURL(blob);
-    
-    // Immediately revoke it to free memory
     URL.revokeObjectURL(url);
-    
     return true;
-  } catch (error) {
-    console.error(`Blob validation failed for track ${trackId}:`, error);
+  } catch {
     return false;
   }
 }
 
 export async function refreshTrackBlob(trackId: string): Promise<Blob> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
-    if (!response.ok) throw new Error("Failed to fetch track");
+  const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+  if (!response.ok) throw new Error("Failed to fetch track");
 
-    const newBlob = await response.blob();
-    await storeTrackBlob(trackId, newBlob);
-    return newBlob; // Return the Blob here
-  } catch (error) {
-    console.error(`Failed to refresh blob for track ${trackId}:`, error);
-    throw error; // Rethrow the error for the caller to handle
-  }
+  const blob = await response.blob();
+  await storeTrackBlob(trackId, blob);
+  return blob;
 }

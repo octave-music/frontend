@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 // Onboarding.tsx
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
@@ -6,6 +5,7 @@ import { Music, Search } from "lucide-react";
 import debounce from "lodash/debounce";
 import { getSetting } from "@/lib/managers/idbWrapper";
 import { Artist, Track } from "@/lib/types/types";
+import Image from "next/image";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -204,9 +204,11 @@ function ArtistSelection({
                     transform transition-all duration-300 hover:scale-95"
                   onClick={() => handleArtistUnselect(artist)}
                 >
-                  <img
+                  <Image
                     src={artist.picture_medium || "/images/placeholder-image.png"}
                     alt={artist.name}
+                    width={200}
+                    height={200}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 
@@ -234,9 +236,11 @@ function ArtistSelection({
                     transform transition-all duration-300 hover:scale-105"
                   onClick={() => handleArtistSelect(artist)}
                 >
-                  <img
+                  <Image
                     src={artist.picture_medium || "/images/placeholder-image.png"}
                     alt={artist.name}
+                    width={200}  // Adjust based on your actual medium image size
+                    height={200}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 

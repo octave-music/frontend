@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import React, {
   useRef,
   useEffect,
@@ -7,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 import {
   Heart,
@@ -363,10 +363,12 @@ export default function DesktopPlayer({
               {currentTrack && (
                 <>
                   <div className="relative group">
-                    <img
+                  <Image
                       src={currentTrack.album.cover_medium || ""}
                       alt={currentTrack.title}
-                      className="w-14 h-14 rounded-md object-cover"
+                      width={56}
+                      height={56}
+                      className="rounded-md object-cover"
                     />
                     <button
                       onClick={() => {
@@ -592,10 +594,12 @@ export default function DesktopPlayer({
                                   : "hover:bg-white/5"
                               }`}
                             >
-                              <img
+                              <Image
                                 src={track.album.cover_small || ""}
                                 alt={track.title}
-                                className="w-10 h-10 rounded object-cover"
+                                width={40}
+                                height={40}
+                                className="rounded object-cover"
                               />
                               <div className="flex-1 min-w-0">
                                 <p className="text-white truncate">
@@ -686,11 +690,13 @@ export default function DesktopPlayer({
                     {tab === "details" && currentTrack && (
                       <div className="p-4 space-y-6">
                         <div>
-                          <img
-                            src={currentTrack.album.cover_xl || ""}
-                            alt={currentTrack.title}
-                            className="w-full aspect-square rounded-lg object-cover"
-                          />
+                        <Image
+                          src={currentTrack.album.cover_xl || ""}
+                          alt={currentTrack.title}
+                          width={500}
+                          height={500}
+                          className="w-full rounded-lg object-cover"
+                        />
                         </div>
                         <div className="space-y-4">
                           <div>
