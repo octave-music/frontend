@@ -1,5 +1,4 @@
 // lib/idbWrapper.ts
-
 import { Track, Playlist } from "../types/types";
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
@@ -162,7 +161,7 @@ export async function getListenCounts(): Promise<Record<string, number>> {
     "readonly",
     (store) => store.getAll()
   );
-  
+
   return (data || []).reduce((acc, item) => {
     acc[item.id] = item.count;
     return acc;
@@ -208,7 +207,7 @@ export async function getQueue(): Promise<Track[]> {
     "readonly",
     (store) => store.getAll()
   );
-  
+
   return (tracks || [])
     .sort((a, b) => a.queueIndex - b.queueIndex)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

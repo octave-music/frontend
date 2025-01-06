@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // useAudio.ts
 import { useCallback, useRef, useState, useEffect } from "react";
 import {
@@ -10,6 +11,12 @@ import { Track } from "../types/types";
 
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
 
+/**
+ * A simpler audio hook that:
+ * 1. Never forces playback if user has paused.
+ * 2. Checks if the track is already loaded before re-fetching.
+ * 3. Avoids auto-restarts or re-seeks unless explicitly asked by the user.
+ */
 export function useAudio() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -17,232 +24,232 @@ export function useAudio() {
   const [currentTime, setCurrentTime] = useState(0);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
 
-  const audioSourceRef = useRef<string | null>(null);
   const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
-  const isSafari = typeof window !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const isiOS = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  // iOS or Safari detection for direct streaming
+  const isSafari =
+    typeof window !== "undefined" &&
+    /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isiOS =
+    typeof window !== "undefined" &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  // Attach main audio listeners
   useEffect(() => {
     if (!audioElement) return;
 
     const handleTimeUpdate = () => {
-      if (!audioElement) return;
-      setCurrentTime(audioElement.currentTime);
+      setCurrentTime(audioElement!.currentTime);
     };
-
     const handleLoadedMetadata = () => {
-      if (!audioElement) return;
-      setDuration(audioElement.duration);
+      setDuration(audioElement!.duration);
     };
-
     const handleEnded = () => {
+      // When a track ends, call the callback if available
       if (onTrackEndCallbackRef.current) {
         onTrackEndCallbackRef.current();
       }
       setIsPlaying(false);
     };
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
 
     audioElement.addEventListener("timeupdate", handleTimeUpdate);
     audioElement.addEventListener("loadedmetadata", handleLoadedMetadata);
     audioElement.addEventListener("ended", handleEnded);
-    audioElement.addEventListener("play", () => setIsPlaying(true));
-    audioElement.addEventListener("pause", () => setIsPlaying(false));
+    audioElement.addEventListener("play", handlePlay);
+    audioElement.addEventListener("pause", handlePause);
 
     return () => {
       if (!audioElement) return;
       audioElement.removeEventListener("timeupdate", handleTimeUpdate);
       audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audioElement.removeEventListener("ended", handleEnded);
-      audioElement.removeEventListener("play", () => setIsPlaying(true));
-      audioElement.removeEventListener("pause", () => setIsPlaying(false));
+      audioElement.removeEventListener("play", handlePlay);
+      audioElement.removeEventListener("pause", handlePause);
     };
   }, []);
 
-  const cleanup = useCallback(() => {
+  /**
+   * Hard stop all audio:
+   * - Abort any pending fetch
+   * - Clear the src
+   * - Pause
+   */
+  const stop = useCallback(() => {
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+      currentAbortControllerRef.current = null;
+    }
     if (audioElement) {
       audioElement.pause();
-      audioElement.removeAttribute('src');
+      audioElement.removeAttribute("src");
       audioElement.load();
     }
-    
-    if (cleanupRef.current) {
-      cleanupRef.current();
-      cleanupRef.current = null;
-    }
-    
-    if (audioSourceRef.current) {
-      URL.revokeObjectURL(audioSourceRef.current);
-      audioSourceRef.current = null;
-    }
+    setIsPlaying(false);
+    setCurrentTrack(null);
   }, []);
 
-  const getCurrentPlaybackTime = useCallback(() => {
-    return audioElement?.currentTime || 0;
-  }, []);
+  /**
+   * Load & optionally play the track from timeOffset.
+   * If track is the same as currentTrack, we re-check to avoid re-fetching.
+   * This DOES NOT forcibly play if user has paused or if 'autoPlay' is false.
+   */
+  const playTrackFromSource = useCallback(
+    async (
+      track: Track,
+      timeOffset = 0,
+      autoPlay = false
+    ): Promise<void> => {
+      if (!audioElement) return;
 
-  const loadAudioBuffer = useCallback(async (trackId: string): Promise<Blob | null> => {
-    try {
-      const offlineData = await getOfflineBlob(trackId);
-      if (offlineData) return offlineData;
-
-      const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch track ${trackId}`);
-      }
-      const blob = await response.blob();
-      await storeTrackBlob(trackId, blob);
-      return blob;
-    } catch (error) {
-      console.error("Error loading audio buffer:", error);
-      return null;
-    }
-  }, []);
-
-  const playTrackFromSource = useCallback(async (track: Track, timeOffset = 0): Promise<(() => void) | undefined> => {
-    if (!audioElement) return;
-
-    try {
-      // Cleanup previous playback
-      cleanup();
-      
-      // Important: Reset audio element state
-      audioElement.removeAttribute('src');
-      audioElement.load();
-      
-      // Create a new AbortController for this playback attempt
-      const abortController = new AbortController();
-      
-      // For Safari/iOS, use direct streaming
-      if (isSafari || isiOS) {
-        try {
-          const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
-          
-          // Test the URL first
-          const response = await fetch(streamUrl, { 
-            signal: abortController.signal 
-          });
-          
-          if (!response.ok) throw new Error("Failed to fetch track");
-          
-          audioElement.src = streamUrl;
+      // If the same track is already set, skip re-fetch unless user wants re-seek
+      if (currentTrack && currentTrack.id === track.id) {
+        // If user wants to re-seek from the beginning or a certain offset:
+        if (Math.abs(audioElement.currentTime - timeOffset) > 0.05) {
           audioElement.currentTime = timeOffset;
-          await audioElement.play();
-          setCurrentTrack(track);
+        }
+        // If user explicitly asked to auto-play and it's currently paused, play it
+        if (autoPlay && audioElement.paused) {
+          await audioElement.play().catch((err) =>
+            console.error("play() error:", err)
+          );
           setIsPlaying(true);
-          
-          return () => {
-            abortController.abort();
-            cleanup();
-          };
-        } catch (error) {
-          console.error("Error streaming track:", error);
         }
+        return;
       }
 
-      // For other browsers or if streaming failed, try offline blob first
-      let blob = await getOfflineBlob(track.id);
-      
-      if (!blob) {
-        // Fetch and store if not available offline
-        const response = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`, {
-          signal: abortController.signal
-        });
-        
-        if (!response.ok) throw new Error("Failed to fetch track");
-        blob = await response.blob();
-        await storeTrackBlob(track.id, blob);
-      }
+      // Different track => full stop and re-load
+      stop();
 
-      // Verify the blob is valid
-      if (!(blob instanceof Blob) || blob.size === 0) {
-        throw new Error("Invalid blob data");
-      }
+      const abortController = new AbortController();
+      currentAbortControllerRef.current = abortController;
 
-      // Create and set blob URL
-      const blobUrl = URL.createObjectURL(blob);
-      audioSourceRef.current = blobUrl;
-
-      // Set up audio element
-      return new Promise((resolve, reject) => {
-        if (!audioElement) {
-          reject(new Error("Audio element not available"));
-          return;
-        }
-
-        const onCanPlay = async () => {
-          try {
-            audioElement!.currentTime = timeOffset;
-            await audioElement!.play();
-            setCurrentTrack(track);
-            setIsPlaying(true);
-            
-            // Clean up this listener
-            audioElement!.removeEventListener('canplay', onCanPlay);
-            audioElement!.removeEventListener('error', onError);
-            
-            resolve(() => {
-              abortController.abort();
-              cleanup();
-            });
-          } catch (error) {
-            reject(error);
+      try {
+        // iOS or Safari => direct streaming
+        if (isSafari || isiOS) {
+          const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
+          const headResp = await fetch(streamUrl, {
+            method: "HEAD",
+            signal: abortController.signal,
+          });
+          if (!headResp.ok) {
+            throw new Error(`Safari direct stream check failed for ${track.id}`);
           }
-        };
+          audioElement.src = streamUrl;
+        } else {
+          // Non-Safari => check offline
+          let blob = await getOfflineBlob(track.id);
+          if (!blob) {
+            const resp = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`, {
+              signal: abortController.signal,
+            });
+            if (!resp.ok) {
+              throw new Error("Failed to fetch track data");
+            }
+            blob = await resp.blob();
+            await storeTrackBlob(track.id, blob);
+          }
+          if (!blob || blob.size === 0) {
+            throw new Error("Empty blob for track");
+          }
+          const blobUrl = URL.createObjectURL(blob);
+          audioElement.src = blobUrl;
+        }
 
-        const onError = (e: Event) => {
-          audioElement!.removeEventListener('canplay', onCanPlay);
-          audioElement!.removeEventListener('error', onError);
-          reject(new Error(`Audio loading failed: ${(e as ErrorEvent).message}`));
-        };
-
-        audioElement.addEventListener('canplay', onCanPlay);
-        audioElement.addEventListener('error', onError);
-        
-        // Set the source
-        audioElement.src = blobUrl;
         audioElement.load();
-      });
+        audioElement.currentTime = timeOffset;
 
-    } catch (error) {
-      console.error("Playback error:", error);
-      cleanup();
-      setIsPlaying(false);
-      throw error;
-    }
-  }, [cleanup, isSafari, isiOS]);
+        if (autoPlay) {
+          await audioElement.play().catch((err) =>
+            console.error("play() error after load:", err)
+          );
+          setIsPlaying(true);
+        }
+        setCurrentTrack(track);
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          // Normal if user switched quickly
+        } else {
+          console.error("Playback error:", err);
+          stop();
+        }
+      } finally {
+        if (currentAbortControllerRef.current === abortController) {
+          currentAbortControllerRef.current = null;
+        }
+      }
+    },
+    [currentTrack, stop, isSafari, isiOS]
+  );
 
+  /**
+   * Pause without discarding the current track or blob
+   */
   const pauseAudio = useCallback(() => {
     if (!audioElement) return;
     audioElement.pause();
     setIsPlaying(false);
   }, []);
 
+  /**
+   * Manually seek to a position
+   */
   const handleSeek = useCallback((time: number) => {
     if (!audioElement) return;
     audioElement.currentTime = time;
   }, []);
 
+  /**
+   * Change volume from 0..1
+   */
   const onVolumeChange = useCallback((newVolume: number) => {
     if (!audioElement) return;
-    const clampedVolume = Math.min(Math.max(newVolume, 0), 1);
-    setVolume(clampedVolume);
-    audioElement.volume = clampedVolume;
-    void storeSetting("volume", String(clampedVolume));
+    const clamped = Math.min(Math.max(newVolume, 0), 1);
+    audioElement.volume = clamped;
+    setVolume(clamped);
+    void storeSetting("volume", String(clamped));
   }, []);
 
-  const setOnTrackEndCallback = useCallback((callback: () => void) => {
-    onTrackEndCallbackRef.current = callback;
+  /**
+   * Callback for track end
+   */
+  const setOnTrackEndCallback = useCallback((cb: () => void) => {
+    onTrackEndCallbackRef.current = cb;
   }, []);
 
-  useEffect(() => {
-    return () => {
-      cleanup();
-    };
-  }, [cleanup]);
+  /**
+   * If you need the current playback time for a progress bar
+   */
+  const getCurrentPlaybackTime = useCallback(() => {
+    if (!audioElement) return 0;
+    return audioElement.currentTime;
+  }, []);
+
+  /**
+   * Pre-fetch or store track data for offline
+   */
+  const loadAudioBuffer = useCallback(async (trackId: string): Promise<Blob | null> => {
+    try {
+      const existing = await getOfflineBlob(trackId);
+      if (existing) return existing;
+
+      const resp = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+      if (!resp.ok) {
+        throw new Error("Failed to fetch track for loadAudioBuffer");
+      }
+      const newBlob = await resp.blob();
+      await storeTrackBlob(trackId, newBlob);
+      return newBlob;
+    } catch (err) {
+      console.error("Error loading audio buffer:", err);
+      return null;
+    }
+  }, []);
 
   return {
+    // Exposed states
     isPlaying,
     setIsPlaying,
     duration,
@@ -250,11 +257,14 @@ export function useAudio() {
     setVolume,
     currentTime,
     currentTrack,
-    getCurrentPlaybackTime,
+
+    // Exposed methods
     playTrackFromSource,
     pauseAudio,
+    stop,
     handleSeek,
     onVolumeChange,
+    getCurrentPlaybackTime,
     loadAudioBuffer,
     setOnTrackEndCallback,
     audioElement,

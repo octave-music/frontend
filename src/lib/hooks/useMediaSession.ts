@@ -3,7 +3,7 @@ import { Track } from "../types/types";
 interface MediaSessionHandlers {
   getCurrentPlaybackTime: () => number;
   handleSeek: (time: number) => void;
-  playTrackFromSource: (track: Track, startTime?: number) => Promise<(() => void) | undefined>;
+  playTrackFromSource: (track: Track, startTime?: number) => Promise<void>;
   pauseAudio: () => void;
   previousTrackFunc: () => void;
   skipTrack: () => void;
@@ -109,18 +109,22 @@ export function setupMediaSession(
           details.seekTime,
           handlers.audioRef.current.duration || 0
         );
-
-        // Only seek if the target time is different from the current time
         if (
-          Math.abs(handlers.audioRef.current.currentTime - clampedSeekTime) >
-          0.1
+          Math.abs(handlers.audioRef.current.currentTime - clampedSeekTime) > 0.1
         ) {
           handlers.handleSeek(clampedSeekTime);
         }
-        void handlers.audioRef.current.play(); // Ensure playback continues
+        
+        // Only force playback if we *aren’t* manually paused:
+        // e.g., if isPlaying is true or some "wasUserPaused" flag is false:
+        if (handlers.audioRef.current.paused === false) {
+          void handlers.audioRef.current.play();
+        }
+    
         setPositionStateIfValid();
       }
     });
+    
 
     const updatePositionState = () => {
       setPositionStateIfValid();
