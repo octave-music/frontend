@@ -21,7 +21,7 @@ interface LastFmArtist {
     };
   }
   
-  export async function getTopArtists(limit = 5): Promise<string[]> {
+  export async function getTopArtists(limit = 6): Promise<string[]> {
     try {
       const response = await fetch(
         `${LASTFM_API_BASE}?method=chart.gettopartists&api_key=${LASTFM_API_KEY}&format=json&limit=${limit}`

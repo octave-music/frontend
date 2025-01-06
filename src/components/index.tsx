@@ -411,20 +411,32 @@ export function SpotifyClone() {
    */
   const fetchNewRecommendations = useCallback(async () => {
     try {
-      let liked = playlists.find((p) => p.name === "Liked Songs");
+      setPlaylists((prevPlaylists) => {
+        const liked = prevPlaylists.find((p) => p.name === "Liked Songs");
+        if (!liked) {
+          const newPL: Playlist = {
+            name: "Liked Songs",
+            image: "/images/liked-songs.webp",
+            tracks: [],
+          };
+          // Store the new playlist
+          storePlaylist(newPL).catch((err) =>
+            console.error("Error storing new playlist:", err)
+          );
+          return [...prevPlaylists, newPL];
+        }
+        return prevPlaylists;
+      });
+  
+      // Retrieve the updated playlists
+      const updatedPlaylists = await getAllPlaylists();
+      const liked = updatedPlaylists.find((p) => p.name === "Liked Songs");
+  
       if (!liked) {
-        const newPL: Playlist = {
-          name: "Liked Songs",
-          image: "/images/liked-songs.webp",
-          tracks: [],
-        };
-        const updated = [...playlists, newPL];
-        setPlaylists(updated);
-        await storePlaylist(newPL);
-        liked = newPL;
+        throw new Error("Failed to create 'Liked Songs' playlist.");
       }
-
-      const topArtists: string[] = await getTopArtists(5);
+  
+      const topArtists: string[] = await getTopArtists(6);
       const trackPromises = topArtists.map(async (artistName: string) => {
         const response = await fetch(
           `${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(artistName)}`
@@ -440,18 +452,20 @@ export function SpotifyClone() {
           )}`
         );
         const data = await response.json();
-        return data.results?.slice(0, 5) || [];
+        return data.results?.slice(0, 6) || [];
       });
       const tracksByArtist = await Promise.all(tracksByArtistPromises);
       const allTracks = tracksByArtist.flat();
       const shuffledTracks = allTracks.sort(() => Math.random() - 0.5);
-
+  
       setQueue((prevQueue) => [...prevQueue, ...shuffledTracks]);
       setRecommendedTracks(shuffledTracks);
     } catch (error) {
       console.error("Error fetching new recommendations:", error);
     }
-  }, [playlists, setPlaylists, setQueue, setRecommendedTracks]);
+  }, [setPlaylists, setQueue, setRecommendedTracks]);
+  
+  
 
   const handleTrackEnd = useCallback((): void => {
     if (!currentTrack || !audioElement) return;
@@ -481,7 +495,6 @@ export function SpotifyClone() {
         } else {
           setIsPlaying(false);
           audioElement.pause();
-          // fetchNewRecommendations();
         }
         break;
     }
@@ -1010,53 +1023,54 @@ export function SpotifyClone() {
   }, [currentTrack]);
 
   // Main init: load from IDB
-  useEffect(() => {
-    async function init() {
-      try {
-        const savedRecommended = await getRecommendedTracks();
-        if (savedRecommended && savedRecommended.length > 0) {
-          setRecommendedTracks(savedRecommended);
-        }
-
-        const savedQueue = await getQueue();
-        const [vol, sOn, qual, pls, rec, onboard, savedTrack] = await Promise.all([
-          getSetting("volume"),
-          getSetting("shuffleOn"),
-          getSetting("audioQuality"),
-          getAllPlaylists(),
-          getRecentlyPlayed(),
-          getSetting("onboardingDone"),
-          getSetting("currentTrack"),
-        ]);
-
-        if (vol) setVolume(parseFloat(vol));
-        if (sOn) setShuffleOn(JSON.parse(sOn));
-        if (qual) setAudioQuality(qual as any);
-        if (pls) setPlaylists(pls);
-        if (rec) setJumpBackIn(rec);
-        if (!onboard) setShowOnboarding(true);
-
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue);
-        } else if (savedRecommended && savedRecommended.length > 0) {
-          setQueue(savedRecommended);
-        } else {
-          // If you want to load recommendations automatically
-          // await fetchNewRecommendations();
-        }
-
-        // If there's a saved track from the last session, we load it but do NOT auto-play
-        if (savedTrack) {
-          const track: Track = JSON.parse(savedTrack);
-          setCurrentTrack(track);
-          await playTrackFromSource(track, 0, true);
-        }
-      } catch (error) {
-        console.error("Initialization error:", error);
+useEffect(() => {
+  async function init() {
+    try {
+      const savedRecommended = await getRecommendedTracks();
+      if (savedRecommended && savedRecommended.length > 0) {
+        setRecommendedTracks(savedRecommended);
       }
+
+      const savedQueue = await getQueue();
+      const [vol, sOn, qual, pls, rec, onboard, savedTrack] = await Promise.all([
+        getSetting("volume"),
+        getSetting("shuffleOn"),
+        getSetting("audioQuality"),
+        getAllPlaylists(),
+        getRecentlyPlayed(),
+        getSetting("onboardingDone"),
+        getSetting("currentTrack"),
+      ]);
+
+      if (vol) setVolume(parseFloat(vol));
+      if (sOn) setShuffleOn(JSON.parse(sOn));
+      if (qual) setAudioQuality(qual as any);
+      if (pls) setPlaylists(pls);
+      if (rec) setJumpBackIn(rec);
+      if (!onboard) setShowOnboarding(true);
+
+      if (savedQueue && savedQueue.length > 0) {
+        setQueue(savedQueue);
+      } else if (savedRecommended && savedRecommended.length > 0) {
+        setQueue(savedRecommended);
+      } else {
+        // Fetch new recommendations if no queue or recommended tracks
+        await fetchNewRecommendations();
+      }
+
+      // If there's a saved track from the last session, load it but do NOT auto-play
+      if (savedTrack) {
+        const track: Track = JSON.parse(savedTrack);
+        setCurrentTrack(track);
+        await playTrackFromSource(track, 0, true);
+      }
+    } catch (error) {
+      console.error("Initialization error:", error);
     }
-    void init();
-  }, [setIsPlaying, setVolume, playTrackFromSource]);
+  }
+  void init();
+}, [setIsPlaying, setVolume, playTrackFromSource, fetchNewRecommendations]);
+
 
   useEffect(() => {
     if (queue.length > 0) {
