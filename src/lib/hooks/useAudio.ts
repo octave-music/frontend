@@ -104,85 +104,126 @@ export function useAudio() {
     ): Promise<void> => {
       if (!audioElement) return;
 
-      // If the same track is already set, skip re-fetch unless user wants re-seek
-      if (currentTrack && currentTrack.id === track.id) {
-        // If user wants to re-seek from the beginning or a certain offset:
-        if (Math.abs(audioElement.currentTime - timeOffset) > 0.05) {
-          audioElement.currentTime = timeOffset;
-        }
-        // If user explicitly asked to auto-play and it's currently paused, play it
-        if (autoPlay && audioElement.paused) {
-          await audioElement.play().catch((err) =>
-            console.error("play() error:", err)
-          );
-          setIsPlaying(true);
-        }
-        return;
+      // Create a new abort controller for this request
+      if (currentAbortControllerRef.current) {
+        currentAbortControllerRef.current.abort();
       }
-
-      // Different track => full stop and re-load
-      stop();
-
       const abortController = new AbortController();
       currentAbortControllerRef.current = abortController;
 
       try {
-        // iOS or Safari => direct streaming
-        if (isSafari || isiOS) {
-          const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
-          const headResp = await fetch(streamUrl, {
-            method: "HEAD",
-            signal: abortController.signal,
-          });
-          if (!headResp.ok) {
-            throw new Error(`Safari direct stream check failed for ${track.id}`);
+        // If the same track is already loaded, just handle seeking and playback
+        if (currentTrack && currentTrack.id === track.id) {
+          if (Math.abs(audioElement.currentTime - timeOffset) > 0.05) {
+            audioElement.currentTime = timeOffset;
           }
-          audioElement.src = streamUrl;
-        } else {
-          // Non-Safari => check offline
-          let blob = await getOfflineBlob(track.id);
-          if (!blob) {
-            const resp = await fetch(`${API_BASE_URL}/api/track/${track.id}.mp3`, {
+          if (autoPlay && audioElement.paused) {
+            // Use a flag to prevent multiple concurrent play attempts
+            const playPromise = audioElement.play();
+            if (playPromise !== undefined) {
+              await playPromise.catch(err => {
+                if (err.name !== 'AbortError') {
+                  console.error("play() error:", err);
+                }
+              });
+            }
+            setIsPlaying(true);
+          }
+          return;
+        }
+
+        // For a new track, ensure clean state first
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        setIsPlaying(false);
+
+        try {
+          // iOS or Safari => direct streaming
+          if (isSafari || isiOS) {
+            const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
+            const headResp = await fetch(streamUrl, {
+              method: "HEAD",
               signal: abortController.signal,
             });
-            if (!resp.ok) {
-              throw new Error("Failed to fetch track data");
+            if (!headResp.ok) throw new Error("Stream check failed");
+            audioElement.src = streamUrl;
+          } else {
+            // Try offline first
+            let blob = await getOfflineBlob(track.id);
+            if (!blob) {
+              const resp = await fetch(
+                `${API_BASE_URL}/api/track/${track.id}.mp3`,
+                { signal: abortController.signal }
+              );
+              if (!resp.ok) throw new Error("Fetch failed");
+              blob = await resp.blob();
+              if (!blob || blob.size === 0) throw new Error("Empty blob");
+              await storeTrackBlob(track.id, blob);
             }
-            blob = await resp.blob();
-            await storeTrackBlob(track.id, blob);
+            const blobUrl = URL.createObjectURL(blob);
+            audioElement.src = blobUrl;
           }
-          if (!blob || blob.size === 0) {
-            throw new Error("Empty blob for track");
+
+          // Set currentTrack before loading to prevent race conditions
+          setCurrentTrack(track);
+          
+          // Wait for audio to be ready before attempting playback
+          await new Promise((resolve, reject) => {
+            const loadedHandler = () => {
+              if (!audioElement) return
+              audioElement.removeEventListener('loadeddata', loadedHandler);
+              audioElement.removeEventListener('error', errorHandler);
+              resolve(null);
+            };
+            const errorHandler = () => {
+              if (!audioElement) return
+              audioElement.removeEventListener('loadeddata', loadedHandler);
+              audioElement.removeEventListener('error', errorHandler);
+              reject(new Error('Audio loading failed'));
+            };
+            if (!audioElement) return
+            audioElement.addEventListener('loadeddata', loadedHandler);
+            audioElement.addEventListener('error', errorHandler);
+            audioElement.load();
+          });
+
+          audioElement.currentTime = timeOffset;
+
+          if (autoPlay && !abortController.signal.aborted) {
+            const playPromise = audioElement.play();
+            if (playPromise !== undefined) {
+              await playPromise.catch(err => {
+                if (err.name !== 'AbortError') {
+                  console.error("play() error after load:", err);
+                }
+              });
+              if (!abortController.signal.aborted) {
+                setIsPlaying(true);
+              }
+            }
           }
-          const blobUrl = URL.createObjectURL(blob);
-          audioElement.src = blobUrl;
+        } catch (err: any) {
+          if (err.name === "AbortError") {
+            // Normal abort, ignore
+            return;
+          }
+          throw err; // Re-throw other errors
         }
-
-        audioElement.load();
-        audioElement.currentTime = timeOffset;
-
-        if (autoPlay) {
-          await audioElement.play().catch((err) =>
-            console.error("play() error after load:", err)
-          );
-          setIsPlaying(true);
-        }
-        setCurrentTrack(track);
       } catch (err: any) {
-        if (err.name === "AbortError") {
-          // Normal if user switched quickly
-        } else {
-          console.error("Playback error:", err);
-          stop();
-        }
+        console.error("Playback error:", err);
+        // Clean up on error
+        audioElement.pause();
+        audioElement.removeAttribute("src");
+        audioElement.load();
+        setIsPlaying(false);
       } finally {
         if (currentAbortControllerRef.current === abortController) {
           currentAbortControllerRef.current = null;
         }
       }
     },
-    [currentTrack, stop, isSafari, isiOS]
-  );
+    [currentTrack, isSafari, isiOS, setIsPlaying]
+);
 
   /**
    * Pause without discarding the current track or blob

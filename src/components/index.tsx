@@ -33,7 +33,6 @@ import React, {
 import {
   X,
   ChevronRight,
-  Music,
   FolderPlus,
   ChevronDown,
   ArrowRight,
@@ -41,7 +40,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import debounce from "lodash/debounce";
-import ReactDOM from "react-dom";
 
 // Hooks & Libraries
 import { useAudio } from "@/lib/hooks/useAudio";
@@ -52,9 +50,7 @@ import {
   storePlaylist,
   getAllPlaylists,
   deletePlaylistByName,
-  storeRecentlyPlayed,
   getRecentlyPlayed,
-  getListenCounts,
   storeSetting,
   getSetting,
   getQueue,
@@ -149,7 +145,6 @@ export function SpotifyClone() {
     onVolumeChange,
     loadAudioBuffer,
     setOnTrackEndCallback,
-    stop,
   } = useAudio();
 
   // ----------------------------------------------------------
@@ -329,6 +324,12 @@ export function SpotifyClone() {
     }
   }, []);
 
+  useEffect(() => {
+    if (showLyrics && currentTrack) {
+      void fetchLyrics(currentTrack);
+    }
+  }, [showLyrics, currentTrack, fetchLyrics]);
+
   /**
    * “Play Track” => set it to front of queue, optionally auto-play
    */
@@ -480,18 +481,11 @@ export function SpotifyClone() {
         } else {
           setIsPlaying(false);
           audioElement.pause();
-          // Optionally, do: fetchNewRecommendations();
+          // fetchNewRecommendations();
         }
         break;
     }
-  }, [
-    currentTrack,
-    repeatMode,
-    playTrackFromSource,
-    queue,
-    skipTrack,
-    setIsPlaying,
-  ]);
+  }, [currentTrack, repeatMode, playTrackFromSource, setIsPlaying, queue, skipTrack]);
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
     const updatedPlaylists = playlists.map((pl) =>
@@ -652,7 +646,7 @@ export function SpotifyClone() {
           {
             label: "Delete Playlist",
             action: () => {
-              void deletePlaylistByName(item.name).then((nl) => setPlaylists(nl));
+              confirmDeletePlaylist(item);
             },
           },
         ];
@@ -662,7 +656,7 @@ export function SpotifyClone() {
       setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
       setShowContextMenu(true);
     },
-    [addToQueue, openAddToPlaylistModal, isTrackLiked, toggleLike, playlists]
+    [isTrackLiked, addToQueue, openAddToPlaylistModal, toggleLike, playlists, confirmDeletePlaylist]
   );
 
   const addToPlaylist = useCallback(
@@ -1048,7 +1042,7 @@ export function SpotifyClone() {
           setQueue(savedRecommended);
         } else {
           // If you want to load recommendations automatically
-          await fetchNewRecommendations();
+          // await fetchNewRecommendations();
         }
 
         // If there's a saved track from the last session, we load it but do NOT auto-play
@@ -1062,7 +1056,7 @@ export function SpotifyClone() {
       }
     }
     void init();
-  }, [setIsPlaying, setVolume, playTrackFromSource, fetchNewRecommendations]);
+  }, [setIsPlaying, setVolume, playTrackFromSource]);
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1624,6 +1618,61 @@ export function SpotifyClone() {
               </div>
             </div>
           )}
+
+            {showDeleteConfirmation && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
+                              animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
+                                backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
+                                border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
+                                animate-[slideUp_0.3s_ease-out]
+                                hover:border-white/20 transition-all duration-500">
+                  <div className="flex items-start space-x-5 mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
+                                  shadow-lg shadow-red-500/5 border border-red-500/20
+                                  animate-[pulse_2s_ease-in-out_infinite]">
+                      <Trash2 className="w-7 h-7 text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
+                        Delete Playlist
+                      </h3>
+                      <p className="text-gray-300/90 text-[15px] leading-relaxed">
+                        Are you sure you want to delete "<span className="text-white font-medium">
+                        {selectedPlaylist?.name}</span>"?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-8">
+                    <button
+                      onClick={() => setShowDeleteConfirmation(false)}
+                      className="flex-1 py-3 px-4 rounded-xl border border-gray-700/75 text-gray-200 font-semibold
+                                hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
+                                transition-all duration-300 ease-out"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={deleteConfirmedPlaylist}
+                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-500 to-red-600
+                                hover:from-red-600 hover:to-red-700 text-white font-semibold
+                                shadow-lg shadow-red-500/20 hover:shadow-red-500/30
+                                transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
+                                group"
+                    >
+                      <span className="flex items-center justify-center">
+                        Delete
+                        <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 
+                                            group-hover:translate-x-1" />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+
+
 
           {showCreatePlaylist && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
