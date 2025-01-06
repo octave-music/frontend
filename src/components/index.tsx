@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
@@ -32,22 +31,17 @@ import React, {
   SetStateAction,
 } from "react";
 import {
-  Search,
-  Plus,
   X,
   ChevronRight,
-  Music,
   FolderPlus,
   ChevronDown,
   ArrowRight,
   Trash2,
-} from 'lucide-react';
-import { SpotifyToDeezer } from "./onboarding/SpotifyToDeezer";
-import TrackItem from "./common/TrackItem";
-
+} from "lucide-react";
+import Image from "next/image";
 import debounce from "lodash/debounce";
-import ReactDOM from "react-dom";
-// ----- HOOKS & LIBRARIES -----
+
+// Hooks & Libraries
 import { useAudio } from "@/lib/hooks/useAudio";
 import { setupMediaSession } from "@/lib/hooks/useMediaSession";
 import {
@@ -56,9 +50,7 @@ import {
   storePlaylist,
   getAllPlaylists,
   deletePlaylistByName,
-  storeRecentlyPlayed,
   getRecentlyPlayed,
-  getListenCounts,
   storeSetting,
   getSetting,
   getQueue,
@@ -68,18 +60,24 @@ import {
 } from "../lib/managers/idbWrapper";
 import { handleFetchLyrics } from "@/lib/api/lyrics";
 import audioElement from "@/lib/managers/audioManager";
+import { getTopArtists } from "@/lib/api/lastfm";
 
-// ----- COMPONENTS -----
+// Components
 import MobilePlayer from "./players/mobilePlayer";
 import DesktopPlayer from "./players/DesktopPlayer";
 import Onboarding from "./onboarding/Onboarding";
-import MobileLayout from "./layout/MobileLayout"; // Ensure you import MobilePlayer
+import MobileLayout from "./layout/MobileLayout";
 import DesktopLayout from "./layout/DesktopLayout";
 
-// ----- UTILITIES & HELPERS -----
+// Utilities & Helpers
 import { saveAs } from "file-saver";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { motion } from "framer-motion";
+import { Portal } from "@radix-ui/react-portal";
+import { SpotifyToDeezer } from "./onboarding/SpotifyToDeezer";
 
-// ----- TYPES -----
+// Types
 import {
   Track,
   Playlist,
@@ -90,26 +88,13 @@ import {
   BeforeInstallPromptEvent,
 } from "@/lib/types/types";
 
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
-/**
- * Extend the global Window interface to store PWA prompt event
- * used for "Add to Home Screen" or PWA installs.
- */
 declare global {
   interface Window {
     deferredPrompt?: BeforeInstallPromptEvent;
   }
 }
 
-// ----- CONSTANTS -----
 const API_BASE_URL = "https://mbck.cloudgen.xyz";
-
-// Utility Functions
-async function setupDiscordRPC(trackTitle: string, artistName: string) {
-  console.log("[Discord RPC] Setting presence:", { trackTitle, artistName });
-}
 
 /**
  * Checks if the user is on a data-saver connection (slow or metered).
@@ -134,8 +119,6 @@ function getDynamicGreeting(): string {
   return "Good Night!";
 }
 
-import { motion } from "framer-motion";
-import { Portal } from "@radix-ui/react-portal";
 /**
  * The main entry component for our entire app, handling both
  * Mobile and Desktop experiences. Includes:
@@ -144,10 +127,11 @@ import { Portal } from "@radix-ui/react-portal";
  * - Searching, playback, queue, context menu, etc.
  */
 export function SpotifyClone() {
-  // Mounted Ref Top Declaration
+  // ----------------------------------------------------------
+  //                  References & Audio Setup
+  // ----------------------------------------------------------
   const isMounted = useRef(false);
 
-  // Audio hook usage: typed for strictness
   const {
     isPlaying,
     setIsPlaying,
@@ -163,11 +147,9 @@ export function SpotifyClone() {
     setOnTrackEndCallback,
   } = useAudio();
 
-  // ---------------------------------------------------------------------------
-  //                                STATE
-  // ---------------------------------------------------------------------------
-
-  // View & UI State
+  // ----------------------------------------------------------
+  //                  Core App State
+  // ----------------------------------------------------------
   const [view, setView] = useState<
     "home" | "search" | "playlist" | "settings" | "library"
   >("home");
@@ -182,9 +164,7 @@ export function SpotifyClone() {
   // Playlist & Track Management
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(
-    null
-  );
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [previousTracks, setPreviousTracks] = useState<Track[]>([]);
@@ -197,9 +177,7 @@ export function SpotifyClone() {
   const [searchType, setSearchType] = useState("tracks");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [playlistSearchQuery, setPlaylistSearchQuery] = useState("");
-  const [playlistSearchResults, setPlaylistSearchResults] = useState<Track[]>(
-    []
-  );
+  const [playlistSearchResults, setPlaylistSearchResults] = useState<Track[]>([]);
 
   // Playback Controls
   const [shuffleOn, setShuffleOn] = useState(false);
@@ -219,9 +197,7 @@ export function SpotifyClone() {
     y: 0,
   });
   const [contextMenuTrack, setContextMenuTrack] = useState<Track | null>(null);
-  const [contextMenuOptions, setContextMenuOptions] = useState<
-    ContextMenuOption[]
-  >([]);
+  const [contextMenuOptions, setContextMenuOptions] = useState<ContextMenuOption[]>([]);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
@@ -231,13 +207,13 @@ export function SpotifyClone() {
   // Playlist Creation
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [newPlaylistImage, setNewPlaylistImage] = useState<string | null>(null);
-  const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<
-    string | null
-  >(null);
-  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] =
-    useState(false);
-  const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] =
-    useState<Track[]>([]);
+  const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<string | null>(
+    null
+  );
+  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] = useState(false);
+  const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<
+    Track[]
+  >([]);
 
   // Downloads & Progress
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -252,38 +228,25 @@ export function SpotifyClone() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showArtistSelection, setShowArtistSelection] = useState(false);
 
-  // ---------------------------------------------------------------------------
-  //                           HANDLERS & UTIL FUNCTIONS
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  //                  Handlers & Utility Functions
+  // ----------------------------------------------------------
 
-  /**
-   * Confirms the user wants to delete a playlist. We store the selected
-   * playlist in 'selectedPlaylist' to finalize the action in a modal.
-   */
   const confirmDeletePlaylist = useCallback((playlist: Playlist) => {
     setSelectedPlaylist(playlist);
     setShowDeleteConfirmation(true);
   }, []);
 
-  /**
-   * Completes the delete action for a selected playlist after user confirmation.
-   */
   const deleteConfirmedPlaylist = useCallback(() => {
     if (selectedPlaylist) {
-      void deletePlaylistByName(selectedPlaylist.name).then(
-        (updatedPlaylists) => {
-          setPlaylists(updatedPlaylists);
-          setSelectedPlaylist(null);
-          setShowDeleteConfirmation(false);
-        }
-      );
+      void deletePlaylistByName(selectedPlaylist.name).then((updatedPlaylists) => {
+        setPlaylists(updatedPlaylists);
+        setSelectedPlaylist(null);
+        setShowDeleteConfirmation(false);
+      });
     }
   }, [selectedPlaylist]);
 
-  /**
-   * Searches for tracks (specifically for adding to a playlist) given a query.
-   * Results are stored in 'playlistSearchResults'.
-   */
   const handlePlaylistSearch = useCallback(async (query: string) => {
     try {
       const response = await fetch(
@@ -298,9 +261,6 @@ export function SpotifyClone() {
     }
   }, []);
 
-  /**
-   * Adds a track to the currently opened playlist in state if it's not already present.
-   */
   const addTrackToPlaylist = useCallback(
     async (track: Track) => {
       if (!currentPlaylist) return;
@@ -336,18 +296,12 @@ export function SpotifyClone() {
     [currentPlaylist]
   );
 
-  /**
-   * Debounced fetch for search results. Triggered after a slight delay
-   * so we don't spam the search endpoint on every keystroke.
-   */
   const fetchSearchResults = useMemo(
     () =>
       debounce(async (query: string) => {
         try {
           const resp = await fetch(
-            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
-              query
-            )}`
+            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
           );
           const data = await resp.json();
           if (data && data.results) {
@@ -360,10 +314,6 @@ export function SpotifyClone() {
     []
   );
 
-  /**
-   * Fetches lyrics for a given track using an external lyrics API,
-   * storing them locally in 'lyrics' state.
-   */
   const fetchLyrics = useCallback(async (track: Track) => {
     try {
       const fetchedLyrics = await handleFetchLyrics(track);
@@ -374,40 +324,40 @@ export function SpotifyClone() {
     }
   }, []);
 
+  useEffect(() => {
+    if (showLyrics && currentTrack) {
+      void fetchLyrics(currentTrack);
+    }
+  }, [showLyrics, currentTrack, fetchLyrics]);
+
   /**
-   * Sets up the main playback functionality by placing the new track
-   * at the top of the queue and starting playback.
+   * “Play Track” => set it to front of queue, optionally auto-play
    */
   const playTrack = useCallback(
-    (track: Track) => {
-      // Prevent rapid changes
+    (track: Track, autoPlay = true) => {
+      // Insert the track at front of queue
       setQueue((prev) => {
-        // If we're already processing this track, do nothing
-        if (prev[0]?.id === track.id) return prev;
-
+        if (prev[0]?.id === track.id) return prev; // Already playing at front
         const filtered = prev.filter((t) => t.id !== track.id);
         return [track, ...filtered];
       });
 
-      ReactDOM.unstable_batchedUpdates(() => {
-        setPreviousTracks((prev) =>
-          currentTrack ? [currentTrack, ...prev] : prev
-        );
-        setCurrentTrack(track);
-        setIsPlaying(true);
-      });
+      // Move the current track to previousTracks
+      setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+      setCurrentTrack(track);
 
-      void playTrackFromSource(track, 0);
+      // Actually load & possibly play
+      void playTrackFromSource(track, 0, autoPlay);
+      if (autoPlay) setIsPlaying(true);
     },
     [currentTrack, playTrackFromSource, setIsPlaying]
   );
 
   /**
-   * Toggles the current track's play state. If no track is loaded, does nothing.
+   * Toggle the current track’s play state. If no track is loaded, do nothing.
    */
   const togglePlay = useCallback(async () => {
     if (!currentTrack || !audioElement) return;
-
     try {
       if (isPlaying) {
         audioElement.pause();
@@ -418,43 +368,30 @@ export function SpotifyClone() {
       }
     } catch (error) {
       console.error("Playback error:", error);
-      // Reset state if playback fails
       setIsPlaying(false);
       audioElement.currentTime = 0;
     }
   }, [currentTrack, isPlaying, setIsPlaying]);
 
-  /**
-   * Moves playback to the previous track if one exists in 'previousTracks'.
-   */
   const previousTrackFunc = useCallback(() => {
     if (!previousTracks.length || !audioElement) {
       toast.warning("Cannot go to the previous track: no track in history.");
       return;
     }
-
     const lastTrack = previousTracks[0];
     setPreviousTracks((prev) => prev.slice(1));
     setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
     setCurrentTrack(lastTrack);
+    void playTrackFromSource(lastTrack, 0, true);
+    setIsPlaying(true);
+  }, [previousTracks, playTrackFromSource, setIsPlaying]);
 
-    void playTrackFromSource(lastTrack, 0);
-  }, [previousTracks, playTrackFromSource]);
-
-  /**
-   * Skips to the next track in the queue. If it’s the last track
-   * (or no more are available), stops playback.
-   */
   const skipTrack = useCallback(() => {
     if (!currentTrack || queue.length <= 1 || !audioElement) {
       toast.warning("Cannot skip track: no next track available.");
       return;
     }
-
-    setPreviousTracks((prev) =>
-      currentTrack ? [currentTrack, ...prev] : prev
-    );
-
+    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
     setQueue((q) => {
       const [, ...rest] = q;
       if (rest.length === 0) {
@@ -462,56 +399,95 @@ export function SpotifyClone() {
         setIsPlaying(false);
       } else {
         setCurrentTrack(rest[0]);
-        void playTrackFromSource(rest[0], 0);
+        void playTrackFromSource(rest[0], 0, true);
+        setIsPlaying(true);
       }
       return rest;
     });
   }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
 
-  // Fetch new recommendations and add them to the queue
+  /**
+   * If queue ends, we can fetch new recommendations or do nothing.
+   */
   const fetchNewRecommendations = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/search/tracks?query=recommended`
-      );
-      const data = await response.json();
-      if (data && data.results) {
-        const newRecommendations = data.results as Track[];
-        setQueue((prevQueue) => [...prevQueue, ...newRecommendations]);
-        setRecommendedTracks(newRecommendations);
+      setPlaylists((prevPlaylists) => {
+        const liked = prevPlaylists.find((p) => p.name === "Liked Songs");
+        if (!liked) {
+          const newPL: Playlist = {
+            name: "Liked Songs",
+            image: "/images/liked-songs.webp",
+            tracks: [],
+          };
+          // Store the new playlist
+          storePlaylist(newPL).catch((err) =>
+            console.error("Error storing new playlist:", err)
+          );
+          return [...prevPlaylists, newPL];
+        }
+        return prevPlaylists;
+      });
+  
+      // Retrieve the updated playlists
+      const updatedPlaylists = await getAllPlaylists();
+      const liked = updatedPlaylists.find((p) => p.name === "Liked Songs");
+  
+      if (!liked) {
+        throw new Error("Failed to create 'Liked Songs' playlist.");
       }
+  
+      const topArtists: string[] = await getTopArtists(6);
+      const trackPromises = topArtists.map(async (artistName: string) => {
+        const response = await fetch(
+          `${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(artistName)}`
+        );
+        const data = await response.json();
+        return data.results?.[0] || null;
+      });
+      const artists = (await Promise.all(trackPromises)).filter(Boolean);
+      const tracksByArtistPromises = artists.map(async (artist) => {
+        const response = await fetch(
+          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
+            artist.name
+          )}`
+        );
+        const data = await response.json();
+        return data.results?.slice(0, 6) || [];
+      });
+      const tracksByArtist = await Promise.all(tracksByArtistPromises);
+      const allTracks = tracksByArtist.flat();
+      const shuffledTracks = allTracks.sort(() => Math.random() - 0.5);
+  
+      setQueue((prevQueue) => [...prevQueue, ...shuffledTracks]);
+      setRecommendedTracks(shuffledTracks);
     } catch (error) {
       console.error("Error fetching new recommendations:", error);
     }
-  }, []);
+  }, [setPlaylists, setQueue, setRecommendedTracks]);
+  
+  
 
-  /**
-   * Event fired when a track finishes playing. Based on repeatMode, we decide
-   * whether to restart the track, move to next track, or stop playback.
-   */
   const handleTrackEnd = useCallback((): void => {
     if (!currentTrack || !audioElement) return;
 
     switch (repeatMode) {
       case "one":
-        // Restart the same track
-        void playTrackFromSource(currentTrack, 0);
+        void playTrackFromSource(currentTrack, 0, true);
+        setIsPlaying(true);
         break;
-
       case "all": {
         const isLastTrack =
           queue.findIndex((t) => t.id === currentTrack.id) === queue.length - 1;
         if (isLastTrack) {
           if (queue.length === 0) return;
           setCurrentTrack(queue[0]);
-          setQueue(queue);
-          void playTrackFromSource(queue[0], 0);
+          void playTrackFromSource(queue[0], 0, true);
+          setIsPlaying(true);
         } else {
           skipTrack();
         }
         break;
       }
-
       case "off":
       default:
         if (queue.length > 1) {
@@ -519,33 +495,19 @@ export function SpotifyClone() {
         } else {
           setIsPlaying(false);
           audioElement.pause();
-          // Fetch new recommendations when the queue is exhausted
-          void fetchNewRecommendations();
         }
         break;
     }
-  }, [
-    currentTrack,
-    repeatMode,
-    playTrackFromSource,
-    queue,
-    skipTrack,
-    setIsPlaying,
-    fetchNewRecommendations,
-  ]);
+  }, [currentTrack, repeatMode, playTrackFromSource, setIsPlaying, queue, skipTrack]);
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
     const updatedPlaylists = playlists.map((pl) =>
       pl.name === playlistToUnpin.name ? { ...pl, pinned: false } : pl
     );
     setPlaylists(updatedPlaylists);
-    // Persist the updated playlists if necessary
     updatedPlaylists.forEach((pl) => storePlaylist(pl));
   };
 
-  /**
-   * Cycles through audio quality levels in a fixed array order.
-   */
   const onCycleAudioQuality = useCallback(() => {
     const arr: Array<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"> = [
       "MAX",
@@ -559,9 +521,6 @@ export function SpotifyClone() {
     void storeSetting("audioQuality", next);
   }, [audioQuality]);
 
-  /**
-   * Checks if a given track is in the "Liked Songs" playlist.
-   */
   const isTrackLiked = useCallback(
     (track: Track): boolean => {
       const liked = playlists.find((p) => p.name === "Liked Songs");
@@ -571,10 +530,6 @@ export function SpotifyClone() {
     [playlists]
   );
 
-  /**
-   * Sanitizes a track by ensuring the presence of essential fields
-   * to avoid any undefined errors or missing data.
-   */
   const sanitizeTrack = (track: Track): Track => {
     return {
       id: track.id || "unknown-id",
@@ -585,94 +540,64 @@ export function SpotifyClone() {
       album: {
         title: track.album?.title || "Unknown Album",
         cover_medium:
-          track.album?.cover_medium || "images/defaultPlaylistImage.png",
+          track.album?.cover_medium || "/images/defaultPlaylistImage.png",
         cover_small:
-          track.album?.cover_small || "images/defaultPlaylistImage.png",
-        cover_big: track.album?.cover_big || "images/defaultPlaylistImage.png",
-        cover_xl: track.album?.cover_xl || "images/defaultPlaylistImage.png",
+          track.album?.cover_small || "/images/defaultPlaylistImage.png",
+        cover_big:
+          track.album?.cover_big || "/images/defaultPlaylistImage.png",
+        cover_xl:
+          track.album?.cover_xl || "/images/defaultPlaylistImage.png",
       },
     };
   };
 
-  /**
-   * Toggles a track's "liked" status by adding/removing it from the
-   * "Liked Songs" playlist.
-   */
   const toggleLike = useCallback(
     (rawTrack: Track) => {
       if (!rawTrack) return;
       const track = sanitizeTrack(rawTrack);
-  
+
       const likedPlaylist = playlists.find((p) => p.name === "Liked Songs");
       if (!likedPlaylist) return;
-  
+
       const isAlreadyLiked = likedPlaylist.tracks.some((t) => t.id === track.id);
-  
-      // Avoid creating new objects for other playlists to prevent unnecessary re-renders
       const updatedLikedTracks = isAlreadyLiked
         ? likedPlaylist.tracks.filter((t) => t.id !== track.id)
         : [...likedPlaylist.tracks, track];
-  
-      // Only update the specific playlist that changed
+
       const updatedLikedPlaylist = { ...likedPlaylist, tracks: updatedLikedTracks };
-  
-      // Replace only the modified playlist in the `playlists` array
       const updatedPlaylists = playlists.map((playlist) =>
         playlist.name === "Liked Songs" ? updatedLikedPlaylist : playlist
       );
-  
+
       setPlaylists(updatedPlaylists);
-  
-      // Persist changes asynchronously
-      storePlaylist(updatedLikedPlaylist).catch((err) =>
+      void storePlaylist(updatedLikedPlaylist).catch((err) =>
         console.error("Error storing updated playlist:", err)
       );
     },
     [playlists]
   );
-  
 
-  
-  /**
-   * Toggles "liked" status for the currently playing track from Desktop player UI.
-   */
   const toggleLikeDesktop = useCallback(() => {
     if (currentTrack) toggleLike(currentTrack);
   }, [currentTrack, toggleLike]);
 
-  /**
-   * Toggles "liked" status for the currently playing track from Mobile player UI.
-   */
   const toggleLikeMobile = useCallback(() => {
     if (currentTrack) toggleLike(currentTrack);
   }, [currentTrack, toggleLike]);
 
-  /**
-   * Adds one or more tracks to the playback queue if they are not already present.
-   */
   const addToQueue = useCallback((tr: Track | Track[]) => {
     setQueue((prev) => {
       const arr = Array.isArray(tr) ? tr : [tr];
-      const filtered = arr.filter(
-        (item) => !prev.some((pk) => pk.id === item.id)
-      );
+      const filtered = arr.filter((item) => !prev.some((pk) => pk.id === item.id));
       return [...prev, ...filtered];
     });
     toast.success("Added track to queue!");
   }, []);
 
-  /**
-   * Removes a track from the queue at the specified index.
-   */
   const removeFromQueue = useCallback((idx: number) => {
     setQueue((q) => q.filter((_, i) => i !== idx));
   }, []);
 
-  /**
-   * Handles clicking on a queue item, either from the main queue or from
-   * previousTracks. We transfer the track to the "currentTrack" position
-   * in the queue and start playback.
-   */
   const onQueueItemClick = useCallback(
     (track: Track, idx: number) => {
       if (idx < 0) {
@@ -691,18 +616,11 @@ export function SpotifyClone() {
     [currentTrack]
   );
 
-  /**
-   * Opens the "Add to Playlist" modal, storing which track we want to add.
-   */
   const openAddToPlaylistModal = useCallback((tr: Track) => {
     setContextMenuTrack(tr);
     setShowAddToPlaylistModal(true);
   }, []);
 
-  /**
-   * Handles right-click context menu for both tracks and playlists.
-   * Populates contextMenuOptions and sets position.
-   */
   const handleContextMenu = useCallback(
     (
       evt: MouseEvent<HTMLButtonElement | HTMLDivElement>,
@@ -716,14 +634,9 @@ export function SpotifyClone() {
       if ("id" in item) {
         options = [
           { label: "Add to Queue", action: () => addToQueue(item) },
+          { label: "Add to Playlist", action: () => openAddToPlaylistModal(item) },
           {
-            label: "Add to Playlist",
-            action: () => openAddToPlaylistModal(item),
-          },
-          {
-            label: isTrackLiked(item)
-              ? "Remove from Liked Songs"
-              : "Add to Liked Songs",
+            label: isTrackLiked(item) ? "Remove from Liked Songs" : "Add to Liked Songs",
             action: () => toggleLike(item),
           },
         ];
@@ -732,6 +645,7 @@ export function SpotifyClone() {
       // If item is a playlist
       if ("tracks" in item) {
         options = [
+          ...options,
           {
             label: item.pinned ? "Unpin Playlist" : "Pin Playlist",
             action: () => {
@@ -745,9 +659,7 @@ export function SpotifyClone() {
           {
             label: "Delete Playlist",
             action: () => {
-              void deletePlaylistByName(item.name).then((nl) =>
-                setPlaylists(nl)
-              );
+              confirmDeletePlaylist(item);
             },
           },
         ];
@@ -757,18 +669,14 @@ export function SpotifyClone() {
       setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
       setShowContextMenu(true);
     },
-    [addToQueue, openAddToPlaylistModal, isTrackLiked, toggleLike, playlists]
+    [isTrackLiked, addToQueue, openAddToPlaylistModal, toggleLike, playlists, confirmDeletePlaylist]
   );
 
-  /**
-   * Actually adds a track to a chosen playlist from the context menu modal.
-   */
   const addToPlaylist = useCallback(
     async (t: Track, name: string) => {
       const updatedPlaylists = playlists.map((pl) => {
         if (pl.name === name) {
-          const merged = [...pl.tracks, t];
-          return { ...pl, tracks: merged };
+          return { ...pl, tracks: [...pl.tracks, t] };
         }
         return pl;
       });
@@ -778,10 +686,6 @@ export function SpotifyClone() {
     [playlists]
   );
 
-  /**
-   * Finalizes the "Add to Playlist" context menu process by adding the
-   * contextMenuTrack to the user-selected playlist in the UI.
-   */
   const handleAddToPlaylist = useCallback(() => {
     if (!selectedPlaylistForAdd || !contextMenuTrack) return;
     void addToPlaylist(contextMenuTrack, selectedPlaylistForAdd);
@@ -789,13 +693,9 @@ export function SpotifyClone() {
     setSelectedPlaylistForAdd(null);
   }, [selectedPlaylistForAdd, contextMenuTrack, addToPlaylist]);
 
-  /**
-   * Preloads images for the "createCompositeImage" function to generate
-   * an aggregated cover image if a user adds multiple tracks to a new playlist.
-   */
   const loadImage = useCallback((src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
-      const img = new Image();
+      const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
       img.onerror = reject;
@@ -803,10 +703,6 @@ export function SpotifyClone() {
     });
   }, []);
 
-  /**
-   * Creates a composite image (2x2 grid) if a user’s new playlist has multiple tracks,
-   * by merging up to 4 album covers into a single 'cover' for the playlist.
-   */
   const createCompositeImage = useCallback(
     async (urls: string[]): Promise<string> => {
       const canvas = document.createElement("canvas");
@@ -828,11 +724,6 @@ export function SpotifyClone() {
     [loadImage]
   );
 
-  /**
-   * Creates a new playlist and saves it to the local store. If the user
-   * didn't supply a cover image but did select tracks, we generate a
-   * composite image from their covers.
-   */
   const createPlaylist = useCallback(async (): Promise<void> => {
     if (!newPlaylistName) return;
     const pl: Playlist = {
@@ -848,13 +739,11 @@ export function SpotifyClone() {
     setShowCreatePlaylist(false);
     setShowSearchInPlaylistCreation(false);
 
-    // If no custom image was provided and we have some tracks
     if (!newPlaylistImage && pl.tracks.length > 0) {
       const covers = pl.tracks.slice(0, 4).map((t) => t.album.cover_medium);
       pl.image = await createCompositeImage(covers);
     }
 
-    // Then store in IDB
     await storePlaylist(pl);
   }, [
     newPlaylistName,
@@ -864,26 +753,11 @@ export function SpotifyClone() {
     createCompositeImage,
   ]);
 
-  const toggleTrackSelection = useCallback((tr: Track) => {
-    setSelectedTracksForNewPlaylist((prev) =>
-      prev.find((x) => x.id === tr.id)
-        ? prev.filter((x) => x.id !== tr.id)
-        : [...prev, tr]
-    );
-  }, []);
-
-  /**
-   * Opens a playlist and navigates the user to the 'playlist' view.
-   */
   const openPlaylist = useCallback((pl: Playlist) => {
     setCurrentPlaylist(pl);
     setView("playlist");
   }, []);
 
-  /**
-   * Forces a track to be downloaded as a Blob and also stored
-   * for offline playback in the app.
-   */
   const downloadTrack = useCallback(
     async (track: Track) => {
       try {
@@ -893,10 +767,10 @@ export function SpotifyClone() {
           return;
         }
 
-        // Store in IndexedDB for offline usage
+        // Store in IndexedDB
         await storeTrackBlob(track.id, blob);
 
-        // Also allow the user to save to local disk
+        // Allow user to save
         saveAs(blob, `${track.title} - ${track.artist.name}.mp3`);
         toast.warning(
           "Track downloaded and available for offline playback within the app."
@@ -909,9 +783,6 @@ export function SpotifyClone() {
     [loadAudioBuffer]
   );
 
-  /**
-   * Downloads an entire playlist track by track, showing progress.
-   */
   const downloadPlaylist = useCallback(
     async (p: Playlist) => {
       setIsDownloading(true);
@@ -930,9 +801,6 @@ export function SpotifyClone() {
     [downloadTrack]
   );
 
-  /**
-   * Toggles the queue shuffle state, shuffling the entire queue if turning on.
-   */
   const shuffleQueue = useCallback(() => {
     const copyQueue = [...queue];
     for (let i = copyQueue.length - 1; i > 0; i--) {
@@ -944,16 +812,10 @@ export function SpotifyClone() {
     void storeSetting("shuffleOn", JSON.stringify(!shuffleOn));
   }, [queue, shuffleOn]);
 
-  /**
-   * Toggles the lyrics panel on or off.
-   */
   const toggleLyricsView = useCallback(() => {
-    setShowLyrics(!showLyrics);
-  }, [showLyrics]);
+    setShowLyrics((prev) => !prev);
+  }, []);
 
-  /**
-   * Closes the onboarding steps, sets up final states, and moves user to home.
-   */
   const handleOnboardingComplete = useCallback(() => {
     void storeSetting("onboardingDone", "true");
     setShowOnboarding(false);
@@ -961,17 +823,12 @@ export function SpotifyClone() {
     setView("home");
   }, []);
 
-  /**
-   * After a user selects their favorite artists, we fetch recommended tracks
-   * and store them. Also sets up the user environment (e.g., "Liked Songs" playlist).
-   */
   const handleArtistSelectionComplete = useCallback(
     async (artists: Artist[]) => {
       try {
         await storeSetting("favoriteArtists", JSON.stringify(artists));
         setShowArtistSelection(false);
 
-        // Fetch multiple top tracks from these artists
         const fetchPromises = artists.map(async (artist) => {
           const response = await fetch(
             `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
@@ -984,30 +841,25 @@ export function SpotifyClone() {
 
         const artistTracks = await Promise.all(fetchPromises);
         const allTracks = artistTracks.flat();
-
-        // Shuffle them to avoid monotony
         const shuffled = allTracks.sort(() => Math.random() - 0.5);
         setRecommendedTracks(shuffled);
-
-        // Also store them for future reference
         await storeRecommendedTracks(shuffled);
 
-        // Optionally auto-populate queue and start playing
         setQueue(shuffled);
         await storeQueue(shuffled);
 
         setSearchResults(shuffled);
 
+        // If you want auto-play on first load:
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
           setIsPlaying(true);
+          void playTrackFromSource(shuffled[0], 0, true);
         }
 
-        // "Jump Back In" might just be the first 4 recommended tracks
         const firstFour = shuffled.slice(0, 4);
         setJumpBackIn(firstFour);
 
-        // Ensure "Liked Songs" playlist is present
         if (!playlists.some((p) => p.name === "Liked Songs")) {
           const newPL: Playlist = {
             name: "Liked Songs",
@@ -1024,13 +876,9 @@ export function SpotifyClone() {
         console.log("Artist selection error:", err);
       }
     },
-    [playlists, handleOnboardingComplete, setIsPlaying]
+    [playlists, handleOnboardingComplete, setIsPlaying, playTrackFromSource]
   );
 
-  /**
-   * Primary search handler used by mobile and desktop search UIs.
-   * Also adds the query to 'recentSearches' if it’s not a duplicate.
-   */
   function handleSearch(newQ: string): void {
     if (newQ.trim().length > 3) {
       if (!recentSearches.includes(newQ)) {
@@ -1040,9 +888,9 @@ export function SpotifyClone() {
     fetchSearchResults(newQ);
   }
 
-  // ---------------------------------------------------------------------------
-  //                            EFFECTS & LIFECYCLE
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  //                  Effects & Lifecycle
+  // ----------------------------------------------------------
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1058,14 +906,14 @@ export function SpotifyClone() {
         animFrame = requestAnimationFrame(updateLyric);
         return;
       }
-      const currentTime = audioElement.currentTime;
-      const activeIndex = lyrics.findIndex((ly, i) => {
+      const t = audioElement.currentTime;
+      const idx = lyrics.findIndex((ly, i) => {
         const isLast = i === lyrics.length - 1;
         const nextTime = isLast ? Infinity : lyrics[i + 1].time;
-        return currentTime >= ly.time && currentTime < nextTime;
+        return t >= ly.time && t < nextTime;
       });
-      if (activeIndex !== -1 && activeIndex !== currentLyricIndex) {
-        setCurrentLyricIndex(activeIndex);
+      if (idx !== -1 && idx !== currentLyricIndex) {
+        setCurrentLyricIndex(idx);
       }
       animFrame = requestAnimationFrame(updateLyric);
     }
@@ -1094,12 +942,10 @@ export function SpotifyClone() {
     if (audioElement) {
       audioElement.volume = volume;
       audioElement.addEventListener("timeupdate", () => {
-        if (audioElement) {
-          setCurrentTime(audioElement.currentTime);
-          setSeekPosition(audioElement.currentTime);
-        }
+        if (!audioElement) return;
+        setCurrentTime(audioElement.currentTime);
+        setSeekPosition(audioElement.currentTime);
       });
-
       audioElement.addEventListener("ended", handleTrackEnd);
     }
 
@@ -1113,11 +959,9 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (!audioElement) return;
-
     const handleEnded = () => {
       handleTrackEnd();
     };
-
     audioElement.addEventListener("ended", handleEnded);
 
     return () => {
@@ -1134,6 +978,7 @@ export function SpotifyClone() {
     };
   }, []);
 
+  // MediaSession integration
   useEffect(() => {
     setOnTrackEndCallback(handleTrackEnd);
   }, [handleTrackEnd, setOnTrackEndCallback]);
@@ -1143,7 +988,6 @@ export function SpotifyClone() {
       console.warn("Audio element is null during setup");
       return;
     }
-
     const cleanup = setupMediaSession(currentTrack, isPlaying, {
       getCurrentPlaybackTime: () => audioElement?.currentTime || 0,
       handleSeek: (time) => {
@@ -1178,53 +1022,55 @@ export function SpotifyClone() {
     }
   }, [currentTrack]);
 
-  useEffect(() => {
-    async function init() {
-      try {
-        const savedRecommendedTracks = await getRecommendedTracks();
-        if (savedRecommendedTracks && savedRecommendedTracks.length > 0) {
-          setRecommendedTracks(savedRecommendedTracks);
-        }
-
-        const savedQueue = await getQueue();
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue);
-        } else {
-          // Fetch new recommendations if the queue is empty
-          await fetchNewRecommendations();
-        }
-
-        const [vol, sOn, qual, pls, rec, onboard, savedTrack] =
-          await Promise.all([
-            getSetting("volume"),
-            getSetting("shuffleOn"),
-            getSetting("audioQuality"),
-            getAllPlaylists(),
-            getRecentlyPlayed(),
-            getSetting("onboardingDone"),
-            getSetting("currentTrack"),
-          ]);
-
-        if (vol) setVolume(parseFloat(vol));
-        if (sOn) setShuffleOn(JSON.parse(sOn));
-        if (qual)
-          setAudioQuality(qual as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
-        if (pls) setPlaylists(pls);
-        if (rec) setJumpBackIn(rec);
-        if (!onboard) setShowOnboarding(true);
-
-        if (savedTrack) {
-          const track: Track = JSON.parse(savedTrack);
-          setCurrentTrack(track);
-          setIsPlaying(true);
-        }
-      } catch (error) {
-        console.error("Initialization error:", error);
+  // Main init: load from IDB
+useEffect(() => {
+  async function init() {
+    try {
+      const savedRecommended = await getRecommendedTracks();
+      if (savedRecommended && savedRecommended.length > 0) {
+        setRecommendedTracks(savedRecommended);
       }
-    }
 
-    void init();
-  }, [setIsPlaying, setVolume, fetchNewRecommendations]);
+      const savedQueue = await getQueue();
+      const [vol, sOn, qual, pls, rec, onboard, savedTrack] = await Promise.all([
+        getSetting("volume"),
+        getSetting("shuffleOn"),
+        getSetting("audioQuality"),
+        getAllPlaylists(),
+        getRecentlyPlayed(),
+        getSetting("onboardingDone"),
+        getSetting("currentTrack"),
+      ]);
+
+      if (vol) setVolume(parseFloat(vol));
+      if (sOn) setShuffleOn(JSON.parse(sOn));
+      if (qual) setAudioQuality(qual as any);
+      if (pls) setPlaylists(pls);
+      if (rec) setJumpBackIn(rec);
+      if (!onboard) setShowOnboarding(true);
+
+      if (savedQueue && savedQueue.length > 0) {
+        setQueue(savedQueue);
+      } else if (savedRecommended && savedRecommended.length > 0) {
+        setQueue(savedRecommended);
+      } else {
+        // Fetch new recommendations if no queue or recommended tracks
+        await fetchNewRecommendations();
+      }
+
+      // If there's a saved track from the last session, load it but do NOT auto-play
+      if (savedTrack) {
+        const track: Track = JSON.parse(savedTrack);
+        setCurrentTrack(track);
+        await playTrackFromSource(track, 0, true);
+      }
+    } catch (error) {
+      console.error("Initialization error:", error);
+    }
+  }
+  void init();
+}, [setIsPlaying, setVolume, playTrackFromSource, fetchNewRecommendations]);
+
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1239,45 +1085,6 @@ export function SpotifyClone() {
   }, [queue]);
 
   useEffect(() => {
-    if (currentTrack) {
-      void playTrackFromSource(currentTrack, 0)
-        .then(() => {
-          setIsPlaying(true);
-          void fetchLyrics(currentTrack);
-          return storeRecentlyPlayed(currentTrack);
-        })
-        .then((recent) => setJumpBackIn(recent))
-        .then(() => getListenCounts())
-        .then((counts) => setListenCount(counts[currentTrack.id] || 0))
-        .then(() =>
-          setupDiscordRPC(currentTrack.title, currentTrack.artist.name)
-        )
-        .catch((err) => {
-          console.error("Error during playback setup:", err);
-          toast.error("An error occurred while setting up the track.");
-        });
-    }
-  }, [currentTrack, playTrackFromSource, fetchLyrics, setIsPlaying]);  
-
-  useEffect(() => {
-    const handleLoadedData = () => {
-      if (audioElement) {
-        URL.revokeObjectURL(audioElement.src);
-      }
-    };
-
-    if (audioElement) {
-      audioElement.addEventListener("loadeddata", handleLoadedData);
-    }
-
-    return () => {
-      if (audioElement) {
-        audioElement.removeEventListener("loadeddata", handleLoadedData);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     let t: ReturnType<typeof setInterval>;
     if (isPlaying) {
       t = setInterval(() => {
@@ -1289,7 +1096,7 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (playlistSearchQuery.trim().length > 2) {
-      handlePlaylistSearch(playlistSearchQuery);
+      void handlePlaylistSearch(playlistSearchQuery);
     } else {
       setPlaylistSearchResults([]);
     }
@@ -1297,8 +1104,8 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (previousTracks.length > 0) {
-      void storeSetting("previousTracks", JSON.stringify(previousTracks)).catch(
-        (err) => console.error("Failed to store previous tracks:", err)
+      void storeSetting("previousTracks", JSON.stringify(previousTracks)).catch((err) =>
+        console.error("Failed to store previous tracks:", err)
       );
     }
   }, [previousTracks]);
@@ -1331,10 +1138,12 @@ export function SpotifyClone() {
         console.error("Error loading recommended tracks:", err);
       }
     }
-
-    loadRecommendedTracks();
+    void loadRecommendedTracks();
   }, []);
 
+  // ----------------------------------------------------------
+  //                      Render
+  // ----------------------------------------------------------
   return (
     <>
       {/* Toast Notifications */}
@@ -1350,8 +1159,8 @@ export function SpotifyClone() {
         pauseOnHover
         theme="dark"
       />
-  
-      {/* Conditional Rendering for Onboarding */}
+
+      {/* Onboarding */}
       {showOnboarding ? (
         <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black custom-scrollbar overflow-y-auto">
           <Onboarding
@@ -1406,9 +1215,9 @@ export function SpotifyClone() {
             audioQuality={audioQuality}
             setAudioQuality={setAudioQuality}
             isPlayerOpen={isPlayerOpen}
-            setView={(view: string) => {
+            setView={(v: string) => {
               setView(
-                view as SetStateAction<
+                v as SetStateAction<
                   "home" | "search" | "playlist" | "settings" | "library"
                 >
               );
@@ -1457,15 +1266,13 @@ export function SpotifyClone() {
             handleSeek={handleSeek}
             shuffleOn={shuffleOn}
           />
-  
+
           {/* Mobile Player */}
           <div className="md:hidden flex flex-col h-[100dvh]">
             {mounted && currentTrack && (
               <MobilePlayer
                 currentTrack={currentTrack}
-                currentTrackIndex={queue.findIndex(
-                  (t) => t.id === currentTrack?.id
-                )}
+                currentTrackIndex={queue.findIndex((t) => t.id === currentTrack?.id)}
                 isPlaying={isPlaying}
                 removeFromQueue={removeFromQueue}
                 setQueue={setQueue}
@@ -1493,7 +1300,7 @@ export function SpotifyClone() {
               />
             )}
           </div>
-  
+
           {/* Desktop Layout */}
           <DesktopLayout
             showContextMenu={showContextMenu}
@@ -1563,7 +1370,7 @@ export function SpotifyClone() {
             jumpBackIn={jumpBackIn}
             recommendedTracks={recommendedTracks}
           />
-  
+
           {/* Desktop Footer */}
           {mounted && (
             <footer className="fixed bottom-0 left-0 right-0">
@@ -1590,9 +1397,7 @@ export function SpotifyClone() {
                   shuffleOn={shuffleOn}
                   shuffleQueue={shuffleQueue}
                   queue={queue}
-                  currentTrackIndex={queue.findIndex(
-                    (x) => x.id === currentTrack.id
-                  )}
+                  currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
                   removeFromQueue={removeFromQueue}
                   onQueueItemClick={onQueueItemClick}
                   setIsPlayerOpen={setIsPlayerOpen}
@@ -1611,7 +1416,7 @@ export function SpotifyClone() {
             </footer>
           )}
 
-        {showContextMenu && contextMenuOptions && (
+          {showContextMenu && contextMenuOptions && (
             <Portal>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -1648,8 +1453,8 @@ export function SpotifyClone() {
                           option.action();
                           setShowContextMenu(false);
                         }}
-                        whileHover={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
-                        whileTap={{ backgroundColor: 'rgba(255,255,255,0.09)' }}
+                        whileHover={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+                        whileTap={{ backgroundColor: "rgba(255,255,255,0.09)" }}
                       >
                         {option.icon && (
                           <span className="mr-3 text-gray-400 group-hover:text-white">
@@ -1675,280 +1480,328 @@ export function SpotifyClone() {
             </Portal>
           )}
 
-        {showSpotifyToDeezerModal && (
-          <div
-            className="fixed inset-0 z-[99999] overflow-y-auto"
-            onClick={() => setShowSpotifyToDeezerModal(false)}
-          >
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
+          {showSpotifyToDeezerModal && (
+            <div
+              className="fixed inset-0 z-[99999] overflow-y-auto"
+              onClick={() => setShowSpotifyToDeezerModal(false)}
+            >
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300" />
+              <div className="flex min-h-screen items-center justify-center p-4">
+                <div
+                  className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Decorative elements */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
 
-            <div className="flex min-h-screen items-center justify-center p-4">
-              <div
-                className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Decorative elements */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
+                  {/* Header */}
+                  <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+                      Import Spotify Playlist
+                    </h2>
+                    <button
+                      className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
+                      onClick={() => setShowSpotifyToDeezerModal(false)}
+                    >
+                      <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                    </button>
+                  </div>
 
-                {/* Header */}
-                <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
-                  <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
-                    Import Spotify Playlist
-                  </h2>
-                  <button
-                    className="group p-2 rounded-full hover:bg-gray-700/50 transition-all duration-200"
-                    onClick={() => setShowSpotifyToDeezerModal(false)}
-                  >
-                    <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar p-6">
-                  <SpotifyToDeezer
-                    onClose={() => setShowSpotifyToDeezerModal(false)}
-                    onPlaylistImported={async () => {
-                      const updatedPlaylists = await getAllPlaylists();
-                      setPlaylists(updatedPlaylists);
-                      toast.success("Playlist imported successfully!");
-                      setShowSpotifyToDeezerModal(false);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      {showAddToPlaylistModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 w-full max-w-md border border-gray-800 shadow-2xl">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-full bg-[#1a237e]/10 flex items-center justify-center flex-shrink-0">
-                <FolderPlus className="w-6 h-6 text-green-500" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
-                  Add to Playlist
-                </h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  Choose a playlist to add your song
-                </p>
-              </div>
-            </div>
-            <div className="relative mb-6">
-              <select
-                value={selectedPlaylistForAdd || "Unkown Value"}
-                onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 rounded-xl bg-gray-800 text-white border border-gray-700
-                            focusborder-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none
-                            transition-all duration-300 cursor-pointer hover:border-gray-600
-                            appearance-none text-base"
-              >
-                <option value="" disabled className="text-gray-400">
-                  Select a playlist
-                </option>
-                {playlists.map((pl) => (
-                  <option
-                    key={pl.name}
-                    value={pl.name}
-                    className="bg-gray-800 py-2"
-                  >
-                    {pl.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronRight className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowAddToPlaylistModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-300 font-medium
-                            hover:bg-gray-800/50 transition-all duration-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddToPlaylist}
-                disabled={!selectedPlaylistForAdd}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-blue-500
-                            hover:from-green-600 hover:to-blue-600 text-white font-medium
-                            transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
-                            disabled:hover:scale-100 disabled:cursor-not-allowed group"
-              >
-                <span className="flex items-center justify-center">
-                  Add to Playlist
-                  <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 group-hover:translate-x-0.5" />
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirmation && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black rounded-xl p-6 w-full max-w-sm border border-gray-800 shadow-2xl">
-            <div className="flex items-center space-x-4 mb-4">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
-                <Trash2 className="w-6 h-6 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white mb-1">
-                  Delete Playlist
-                </h3>
-                <p className="text-gray-400 text-sm">
-                  Are you sure you want to delete "
-                  <span className="text-white font-medium">
-                    {selectedPlaylist?.name}
-                  </span>
-                  "?
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowDeleteConfirmation(false)}
-                className="flex-1 py-2.5 px-4 rounded-lg border border-gray-700 text-gray-300 font-medium
-                            hover:bg-gray-800/50 transition-all duration-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={deleteConfirmedPlaylist}
-                className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-red-500 to-red-600
-                            hover:from-red-600 hover:to-red-700 text-white font-medium
-                            transition-all duration-300 hover:scale-[1.02] group"
-              >
-                <span className="flex items-center justify-center">
-                  Delete
-                  <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 group-hover:translate-x-0.5" />
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Playlist Modal */}
-      {showCreatePlaylist && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 sm:p-8 w-full max-w-[420px] border border-gray-800 shadow-2xl">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-5 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
-              Create Your Playlist
-            </h2>
-            <div className="space-y-5">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Give your playlist a name"
-                  value={newPlaylistName}
-                  onChange={(e) => setNewPlaylistName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-800/50 text-white placeholder-gray-400
-                            border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
-                            transition-all duration-300 text-base"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Cover Image
-                </label>
-                <div className="relative group">
-                  <label
-                    htmlFor="playlist-image"
-                    className="relative flex flex-col items-center justify-center w-full h-[200px] sm:h-[240px]
-                                rounded-lg cursor-pointer overflow-hidden transition-all duration-300
-                                bg-gradient-to-br from-gray-800/50 to-gray-900/50
-                                group-hover:from-gray-700/50 group-hover:to-gray-800/50
-                                border-2 border-dashed border-gray-600 group-hover:border-green-500"
-                  >
-                    {newPlaylistImage ? (
-                      <div className="relative w-full h-full">
-                        <img
-                          src={newPlaylistImage}
-                          alt="Playlist Cover"
-                          className="w-full h-full object-cover"
-                        />
-                        <div
-                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 
-                                    transition-opacity duration-300 flex items-center justify-center"
-                        >
-                          <p className="text-sm text-white font-medium">
-                            Change Image
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-4 text-center">
-                        <div className="w-12 h-12 mb-3 rounded-full bg-gray-700/50 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                            />
-                          </svg>
-                        </div>
-                        <p className="text-sm font-medium text-gray-300">
-                          Drop your image here
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          or click to browse
-                        </p>
-                      </div>
-                    )}
-                    <input
-                      id="playlist-image"
-                      type="file"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const r = new FileReader();
-                        r.onloadend = () => {
-                          setNewPlaylistImage(r.result as string);
-                        };
-                        r.readAsDataURL(file);
+                  {/* Content */}
+                  <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar p-6">
+                    <SpotifyToDeezer
+                      onClose={() => setShowSpotifyToDeezerModal(false)}
+                      onPlaylistImported={async () => {
+                        const updatedPlaylists = await getAllPlaylists();
+                        setPlaylists(updatedPlaylists);
+                        toast.success("Playlist imported successfully!");
+                        setShowSpotifyToDeezerModal(false);
                       }}
                     />
-                  </label>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowCreatePlaylist(false)}
-                  className="flex-1 py-2.5 rounded-lg border border-gray-600 text-gray-300 font-medium
-                            hover:bg-gray-800/50 transition-all duration-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => void createPlaylist()}
-                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600
-                            hover:from-blue-600 hover:to-blue-700 text-white font-medium
-                            transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
-                            disabled:hover:scale-100 disabled:cursor-not-allowed"
-                  disabled={!newPlaylistName.trim()}
-                >
-                  Create
-                </button>
+            </div>
+          )}
+
+          {showAddToPlaylistModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+              <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 w-full max-w-md border border-gray-800 shadow-2xl">
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="w-12 h-12 rounded-full bg-[#1a237e]/10 flex items-center justify-center flex-shrink-0">
+                    <FolderPlus className="w-6 h-6 text-green-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
+                      Add to Playlist
+                    </h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Choose a playlist to add your song
+                    </p>
+                  </div>
+                </div>
+                <div className="relative mb-6">
+                  <select
+                    value={selectedPlaylistForAdd || "Unkown Value"}
+                    onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
+                    className="w-full pl-10 pr-10 py-3 rounded-xl bg-gray-800 text-white border border-gray-700
+                            focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none
+                            transition-all duration-300 cursor-pointer hover:border-gray-600
+                            appearance-none text-base"
+                  >
+                    <option value="" disabled className="text-gray-400">
+                      Select a playlist
+                    </option>
+                    {playlists.map((pl) => (
+                      <option key={pl.name} value={pl.name} className="bg-gray-800 py-2">
+                        {pl.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronRight className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowAddToPlaylistModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-300 font-medium
+                              hover:bg-gray-800/50 transition-all duration-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddToPlaylist}
+                    disabled={!selectedPlaylistForAdd}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-blue-500
+                              hover:from-green-600 hover:to-blue-600 text-white font-medium
+                              transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
+                              disabled:hover:scale-100 disabled:cursor-not-allowed group"
+                  >
+                    <span className="flex items-center justify-center">
+                      Add to Playlist
+                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 group-hover:translate-x-0.5" />
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+
+          {showDeleteConfirmation && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+              <div className="bg-gradient-to-b from-gray-900 to-black rounded-xl p-6 w-full max-w-sm border border-gray-800 shadow-2xl">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-1">
+                      Delete Playlist
+                    </h3>
+                    <p className="text-gray-400 text-sm">
+                      Are you sure you want to delete "
+                      <span className="text-white font-medium">
+                        {selectedPlaylist?.name}
+                      </span>
+                      "?
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setShowDeleteConfirmation(false)}
+                    className="flex-1 py-2.5 px-4 rounded-lg border border-gray-700 text-gray-300 font-medium
+                              hover:bg-gray-800/50 transition-all duration-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={deleteConfirmedPlaylist}
+                    className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-red-500 to-red-600
+                              hover:from-red-600 hover:to-red-700 text-white font-medium
+                              transition-all duration-300 hover:scale-[1.02] group"
+                  >
+                    <span className="flex items-center justify-center">
+                      Delete
+                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 group-hover:translate-x-0.5" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+            {showDeleteConfirmation && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
+                              animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
+                                backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
+                                border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
+                                animate-[slideUp_0.3s_ease-out]
+                                hover:border-white/20 transition-all duration-500">
+                  <div className="flex items-start space-x-5 mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
+                                  shadow-lg shadow-red-500/5 border border-red-500/20
+                                  animate-[pulse_2s_ease-in-out_infinite]">
+                      <Trash2 className="w-7 h-7 text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
+                        Delete Playlist
+                      </h3>
+                      <p className="text-gray-300/90 text-[15px] leading-relaxed">
+                        Are you sure you want to delete "<span className="text-white font-medium">
+                        {selectedPlaylist?.name}</span>"?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-8">
+                    <button
+                      onClick={() => setShowDeleteConfirmation(false)}
+                      className="flex-1 py-3 px-4 rounded-xl border border-gray-700/75 text-gray-200 font-semibold
+                                hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
+                                transition-all duration-300 ease-out"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={deleteConfirmedPlaylist}
+                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-500 to-red-600
+                                hover:from-red-600 hover:to-red-700 text-white font-semibold
+                                shadow-lg shadow-red-500/20 hover:shadow-red-500/30
+                                transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
+                                group"
+                    >
+                      <span className="flex items-center justify-center">
+                        Delete
+                        <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 
+                                            group-hover:translate-x-1" />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+
+
+
+          {showCreatePlaylist && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+              <div className="bg-gradient-to-b from-gray-900 to-black rounded-2xl p-6 sm:p-8 w-full max-w-[420px] border border-gray-800 shadow-2xl">
+                <h2 className="text-2xl sm:text-3xl font-bold mb-5 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">
+                  Create Your Playlist
+                </h2>
+                <div className="space-y-5">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Give your playlist a name"
+                      value={newPlaylistName}
+                      onChange={(e) => setNewPlaylistName(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg bg-gray-800/50 text-white placeholder-gray-400
+                                border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
+                                transition-all duration-300 text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Cover Image
+                    </label>
+                    <div className="relative group">
+                      <label
+                        htmlFor="playlist-image"
+                        className="relative flex flex-col items-center justify-center w-full h-[200px] sm:h-[240px]
+                                    rounded-lg cursor-pointer overflow-hidden transition-all duration-300
+                                    bg-gradient-to-br from-gray-800/50 to-gray-900/50
+                                    group-hover:from-gray-700/50 group-hover:to-gray-800/50
+                                    border-2 border-dashed border-gray-600 group-hover:border-green-500"
+                      >
+                        {newPlaylistImage ? (
+                          <div className="relative w-full h-full">
+                            <Image
+                              src={newPlaylistImage}
+                              fill
+                              alt="Playlist Cover"
+                              className="w-full h-full object-cover"
+                              priority
+                              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                            />
+                            <div
+                              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100
+                                        transition-opacity duration-300 flex items-center justify-center"
+                            >
+                              <p className="text-sm text-white font-medium">Change Image</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-4 text-center">
+                            <div className="w-12 h-12 mb-3 rounded-full bg-gray-700/50 flex items-center justify-center">
+                              <svg
+                                className="w-6 h-6 text-gray-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                />
+                              </svg>
+                            </div>
+                            <p className="text-sm font-medium text-gray-300">
+                              Drop your image here
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">or click to browse</p>
+                          </div>
+                        )}
+                        <input
+                          id="playlist-image"
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const r = new FileReader();
+                            r.onloadend = () => {
+                              setNewPlaylistImage(r.result as string);
+                            };
+                            r.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setShowCreatePlaylist(false)}
+                      className="flex-1 py-2.5 rounded-lg border border-gray-600 text-gray-300 font-medium
+                                hover:bg-gray-800/50 transition-all duration-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => void createPlaylist()}
+                      className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600
+                                hover:from-blue-600 hover:to-blue-700 text-white font-medium
+                                transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
+                                disabled:hover:scale-100 disabled:cursor-not-allowed"
+                      disabled={!newPlaylistName.trim()}
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>
-  );  
+  );
 }

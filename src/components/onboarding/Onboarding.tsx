@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 // Onboarding.tsx
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
@@ -6,6 +5,7 @@ import { Music, Search } from "lucide-react";
 import debounce from "lodash/debounce";
 import { getSetting } from "@/lib/managers/idbWrapper";
 import { Artist, Track } from "@/lib/types/types";
+import Image from "next/image";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -14,31 +14,43 @@ interface OnboardingProps {
   setRecommendedTracks?: (tracks: Track[]) => void;
 }
 
-function OnboardingStep1({ onComplete }: { onComplete: () => void }) {
+function OnboardingStep1({ onComplete, onSkip }: { onComplete: () => void; onSkip: () => void }) {
   return (
-    <div className="flex items-center justify-center h-screen bg-gradient-to-bl from-[#0A0E18] via-[#131926] to-[#0A0E18] text-white">
-      <div className="relative text-center p-8 bg-gradient-to-br from-black/50 to-black/70 backdrop-blur-xl rounded-3xl shadow-2xl max-w-lg">
-        <div className="flex justify-center mb-8">
+    <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-bl from-[#0A0E18] via-[#131926] to-[#0A0E18] text-white">
+      <div className="w-full max-w-md mx-auto text-center p-6 bg-gradient-to-br from-black/50 to-black/70 backdrop-blur-xl rounded-3xl shadow-2xl">
+        <div className="flex justify-center mb-6">
           <div className="bg-gradient-to-r from-emerald-600 to-green-500 rounded-full p-4 shadow-md">
             <Music className="w-12 h-12 text-white" />
           </div>
         </div>
-        <h1 className="text-5xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400">
+        
+        <h1 className="text-3xl md:text-5xl font-extrabold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400">
           Welcome to Octave
         </h1>
-        <p className="text-lg text-gray-300 mb-8 leading-relaxed">
-          Your gateway to a world of music tailored just for you. Let's craft
-          your ultimate soundtrack together.
+        
+        <p className="text-base md:text-lg text-gray-300 mb-6 leading-relaxed">
+          Your gateway to a world of music tailored just for you. Let's craft your ultimate soundtrack together.
         </p>
-        <button
-          onClick={onComplete}
-          className="px-10 py-4 text-lg font-bold bg-gradient-to-r from-emerald-500 to-green-500 hover:from-green-500 hover:to-emerald-500 text-white rounded-full shadow-xl transform transition-transform hover:translate-y-[-2px]"
-        >
-          Get Started
-        </button>
-        <div className="mt-10 flex items-center justify-center space-x-2">
+        
+        <div className="space-y-4">
+          <button
+            onClick={onComplete}
+            className="w-full px-6 py-3 text-base md:text-lg font-bold bg-gradient-to-r from-emerald-500 to-green-500 hover:from-green-500 hover:to-emerald-500 text-white rounded-full shadow-xl transform transition-transform hover:translate-y-[-2px]"
+          >
+            Get Started
+          </button>
+          
+          <button
+            onClick={onSkip}
+            className="w-full px-6 py-3 text-base md:text-lg font-semibold text-gray-400 hover:text-white transition-colors"
+          >
+            Skip for now
+          </button>
+        </div>
+        
+        <div className="mt-6 flex items-center justify-center space-x-2">
           <div className="h-[2px] w-10 bg-gradient-to-r from-emerald-500 to-green-500" />
-          <p className="text-sm text-gray-400">
+          <p className="text-xs md:text-sm text-gray-400">
             A personalized music experience awaits
           </p>
           <div className="h-[2px] w-10 bg-gradient-to-r from-green-500 to-emerald-500" />
@@ -204,9 +216,11 @@ function ArtistSelection({
                     transform transition-all duration-300 hover:scale-95"
                   onClick={() => handleArtistUnselect(artist)}
                 >
-                  <img
+                  <Image
                     src={artist.picture_medium || "/images/placeholder-image.png"}
                     alt={artist.name}
+                    width={200}
+                    height={200}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 
@@ -234,9 +248,11 @@ function ArtistSelection({
                     transform transition-all duration-300 hover:scale-105"
                   onClick={() => handleArtistSelect(artist)}
                 >
-                  <img
+                  <Image
                     src={artist.picture_medium || "/images/placeholder-image.png"}
                     alt={artist.name}
+                    width={200}  // Adjust based on your actual medium image size
+                    height={200}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 
@@ -293,8 +309,12 @@ export default function Onboarding({
     setStep(2);
   }, []);
 
+  const handleSkip = useCallback(() => {
+    onComplete();
+  }, [onComplete]);
+
   if (step === 1) {
-    return <OnboardingStep1 onComplete={handleStep1Complete} />;
+    return <OnboardingStep1 onComplete={handleStep1Complete} onSkip={handleSkip} />;
   }
 
   if (step === 2) {

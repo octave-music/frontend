@@ -33,6 +33,7 @@ export default function SplashScreen() {
           src="/images/OctaveBanner.png" // Replace with your banner image
           alt="Background Overlay"
           fill
+          sizes="(max-width: 768px) 100vw, 50vw"
           priority
           className="object-cover blur-md opacity-50"
         />
@@ -51,9 +52,11 @@ export default function SplashScreen() {
             alt="Octave"
             fill
             priority
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-contain animate-bounce-slow"
           />
         </div>
+
 
         {/* Made with love text */}
         <div className="flex items-center space-x-2 text-gray-400">

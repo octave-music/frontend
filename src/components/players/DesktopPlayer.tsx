@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import React, {
   useRef,
   useEffect,
@@ -7,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 import {
   Heart,
@@ -46,6 +46,8 @@ import {
   Disc,
   User,
   Guitar,
+  ChevronUp,
+  ChevronDown, // <-- new imports for chevron icons
 } from "lucide-react";
 
 import SimpleBar from "simplebar-react";
@@ -55,7 +57,6 @@ import { Track, Lyric } from "@/lib/types/types";
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
 
-// Props for DesktopPlayer
 interface DesktopPlayerProps {
   currentTrack: Track;
   isPlaying: boolean;
@@ -82,19 +83,16 @@ interface DesktopPlayerProps {
   removeFromQueue: (_index: number) => void;
   onQueueItemClick: (track: Track, index: number) => void;
   setIsPlayerOpen: (_isOpen: boolean) => void;
-
   volume: number;
   onVolumeChange: (newVolume: number) => void;
   audioQuality: AudioQuality;
   onCycleAudioQuality: () => void;
-
   listenCount: number;
-
   downloadTrack: (track: Track) => void;
 }
 
 // ----------------------
-//  U T I L S
+//   U T I L S
 // ----------------------
 function formatTimeDesktop(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
@@ -103,7 +101,6 @@ function formatTimeDesktop(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-// Desktop Seekbar
 const DesktopSeekbar: React.FC<{
   progress: number;
   handleSeek: (time: number) => void;
@@ -197,7 +194,7 @@ const DesktopSeekbar: React.FC<{
 };
 
 // ----------------------
-//  M A I N   C O M P
+//   M A I N   C O M P
 // ----------------------
 export default function DesktopPlayer({
   currentTrack,
@@ -233,11 +230,13 @@ export default function DesktopPlayer({
   const [showSidebar, setShowSidebar] = useState(false);
   const [tab, setTab] = useState<"queue" | "lyrics" | "details">("queue");
   const [userScrolling, setUserScrolling] = useState(false);
-    const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null
-    );
+  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const isAutoScrollingRef = useRef(false);
-  const lyricsRef = useRef<HTMLDivElement>(null);
+
+  // NEW: Track whether the player is collapsed
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const isMuted = volume === 0;
 
@@ -298,49 +297,50 @@ export default function DesktopPlayer({
       setUserScrolling(false);
     }, 3000);
   };
-  
 
   const processedLyrics = useMemo(() => {
-      return lyrics.map((lyric, i) => ({
-        ...lyric,
-        endTime: lyrics[i + 1]?.time || duration,
-      }));
-    }, [lyrics, duration]);
-  
-    const getLyricProgress = () => {
-      if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex])
-        return 0;
-      const currentL = processedLyrics[currentLyricIndex];
-      const start = currentL.time;
-      const end = currentL.endTime || duration;
-      const segmentDuration = end - start;
-      const elapsed = seekPosition - start;
-      return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
-    };
-  
-    const lyricProgress = getLyricProgress();
-  
-    useEffect(() => {
-      if (!showLyrics || !lyricsRef.current) return;
-      if (!userScrolling) {
-        const container = lyricsRef.current;
-        const currentLyricEl = container.children[currentLyricIndex] as HTMLElement;
-        if (currentLyricEl) {
-          isAutoScrollingRef.current = true;
-          const offsetTop = currentLyricEl.offsetTop;
-          const offsetHeight = currentLyricEl.offsetHeight;
-          const containerHeight = container.clientHeight;
-          const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
-          container.scrollTo({ top: scrollPos, behavior: "smooth" });
-          setTimeout(() => {
-            isAutoScrollingRef.current = false;
-          }, 1000);
-        }
-      }
-    }, [currentLyricIndex, showLyrics, userScrolling]);
-    
-    
+    return lyrics.map((lyric, i) => ({
+      ...lyric,
+      endTime: lyrics[i + 1]?.time || duration,
+    }));
+  }, [lyrics, duration]);
 
+  const getLyricProgress = () => {
+    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex])
+      return 0;
+    const currentL = processedLyrics[currentLyricIndex];
+    const start = currentL.time;
+    const end = currentL.endTime || duration;
+    const segmentDuration = end - start;
+    const elapsed = seekPosition - start;
+    return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
+  };
+
+  const lyricProgress = getLyricProgress();
+
+  useEffect(() => {
+    if (!showLyrics || !lyricsRef.current) return;
+    if (!userScrolling) {
+      const container = lyricsRef.current;
+      const currentLyricEl = container.children[
+        currentLyricIndex
+      ] as HTMLElement;
+      if (currentLyricEl) {
+        isAutoScrollingRef.current = true;
+        const offsetTop = currentLyricEl.offsetTop;
+        const offsetHeight = currentLyricEl.offsetHeight;
+        const containerHeight = container.clientHeight;
+        const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
+        container.scrollTo({ top: scrollPos, behavior: "smooth" });
+        setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, 1000);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLyricIndex, showLyrics, userScrolling]);
+
+  const lyricsRef = useRef<HTMLDivElement>(null);
 
   const TABS = [
     { id: "queue", label: "Queue", icon: ListMusic },
@@ -350,83 +350,30 @@ export default function DesktopPlayer({
 
   return (
     <>
+      {/* 
+          COLLAPSIBLE MAIN WRAPPER 
+          We use a small conditional block to swap between 
+          the 'collapsed mini-player' and the 'expanded full player' 
+      */}
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-b from-black/60 to-black/90 backdrop-blur-lg border-t border-white/10">
         <div className="max-w-screen-2xl mx-auto px-4">
-          <DesktopSeekbar
-            progress={duration > 0 ? seekPosition / duration : 0}
-            handleSeek={handleSeek}
-            duration={duration}
-          />
-          <div className="h-20 flex items-center justify-between gap-4">
-            {/* Left side: track & actions */}
-            <div className="flex items-center gap-4 min-w-0 flex-1">
-              {currentTrack && (
-                <>
-                  <div className="relative group">
-                    <img
-                      src={currentTrack.album.cover_medium || ""}
-                      alt={currentTrack.title}
-                      className="w-14 h-14 rounded-md object-cover"
-                    />
-                    <button
-                      onClick={() => {
-                        setShowSidebar(true);
-                        setTab("details");
-                      }}
-                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                    >
-                      <Info className="w-6 h-6 text-white" />
-                    </button>
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-white font-medium truncate">
-                      {currentTrack.title}
-                    </h3>
-                    <p className="text-neutral-400 text-sm truncate">
-                      {currentTrack.artist.name}
-                    </p>
-                    <p className="text-[#FFD700] text-xs mt-1 flex items-center space-x-1">
-                      <Guitar className="w-4 h-4 inline-block" />
-                      <span>{listenCount}</span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleLike();
-                      }}
-                      className={`p-2 rounded-full hover:bg-white/10 ${
-                        isLiked ? "text-green-400" : "text-neutral-400"
-                      }`}
-                    >
-                      <Heart className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={enterFullScreen}
-                      className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
-                    >
-                      <Maximize2 className="w-5 h-5" />
-                    </button>
-                    <button className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
-                      <Share className="w-5 h-5 text-white" />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Center: main controls */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={shuffleQueue}
-                  className={`p-2 rounded-full hover:bg-white/10 ${
-                    shuffleOn ? "text-green-400" : "text-neutral-400"
-                  }`}
-                >
-                  <Shuffle className="w-5 h-5" />
-                </button>
+          {/*
+            If collapsed: Show the “mini player”:
+            - Seekbar
+            - Previous / Play-Pause / Next
+            - Chevron UP (to expand)
+          */}
+          {isCollapsed ? (
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2 flex-1">
+                {/* Seekbar */}
+                <DesktopSeekbar
+                  progress={duration > 0 ? seekPosition / duration : 0}
+                  handleSeek={handleSeek}
+                  duration={duration}
+                />
+              </div>
+              <div className="flex items-center gap-3 pl-2">
                 <button
                   onClick={previousTrack}
                   className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
@@ -440,7 +387,7 @@ export default function DesktopPlayer({
                   {isPlaying ? (
                     <Pause className="w-5 h-5 text-black" />
                   ) : (
-                    <Play className="w-5 h-5 text-black translate-x-0.5" />
+                    <Play className="w-5 h-5 text-black" />
                   )}
                 </button>
                 <button
@@ -449,79 +396,207 @@ export default function DesktopPlayer({
                 >
                   <SkipForward className="w-5 h-5" />
                 </button>
+                {/* Expand button */}
                 <button
-                  onClick={() => {
-                    const modes: RepeatMode[] = ["off", "all", "one"];
-                    const idx = modes.indexOf(repeatMode);
-                    setRepeatMode(modes[(idx + 1) % modes.length]);
-                  }}
-                  className={`p-2 rounded-full hover:bg-white/10 ${
-                    repeatMode !== "off" ? "text-green-400" : "text-neutral-400"
-                  }`}
-                >
-                  {repeatMode === "one" ? (
-                    <Repeat1 className="w-5 h-5" />
-                  ) : (
-                    <Repeat className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Right side: lyrics, queue, volume, etc. */}
-            <div className="flex items-center gap-3 flex-1 justify-end">
-              <button
-                onClick={() => {
-                  toggleLyricsView();
-                  setShowSidebar(true);
-                  setTab("lyrics");
-                }}
-                className={`p-2 rounded-full hover:bg-white/10 ${
-                  showLyrics ? "text-green-400" : "text-neutral-400"
-                }`}
-              >
-                <Music2 className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => {
-                  setShowSidebar(true);
-                  setTab("queue");
-                }}
-                className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
-              >
-                <ListMusic className="w-5 h-5" />
-              </button>
-              <button
-                onClick={onCycleAudioQuality}
-                className="p-2 rounded-full hover:bg-white/10 text-white flex items-center justify-center"
-              >
-                {React.createElement(audioQualityIcons[audioQuality].icon, {
-                  className: "w-5 h-5",
-                })}
-              </button>
-              {/* Volume */}
-              <div className="flex items-center gap-2 min-w-[140px]">
-                <button
-                  onClick={toggleMute}
+                  onClick={() => setIsCollapsed(false)}
                   className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                 >
-                  <VolumeIcon />
+                  <ChevronUp className="w-5 h-5" />
                 </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                  className="w-full accent-white"
-                />
               </div>
             </div>
-          </div>
+          ) : (
+            // FULL PLAYER (expanded)
+            <>
+              {/* Seekbar */}
+              <DesktopSeekbar
+                progress={duration > 0 ? seekPosition / duration : 0}
+                handleSeek={handleSeek}
+                duration={duration}
+              />
+
+              <div className="h-20 flex items-center justify-between gap-4">
+                {/* Left side: track & actions */}
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  {currentTrack && (
+                    <>
+                      <div className="relative group">
+                        <Image
+                          src={currentTrack.album.cover_medium || ""}
+                          alt={currentTrack.title}
+                          width={56}
+                          height={56}
+                          className="rounded-md object-cover"
+                        />
+                        <button
+                          onClick={() => {
+                            setShowSidebar(true);
+                            setTab("details");
+                          }}
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        >
+                          <Info className="w-6 h-6 text-white" />
+                        </button>
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-white font-medium truncate">
+                          {currentTrack.title}
+                        </h3>
+                        <p className="text-neutral-400 text-sm truncate">
+                          {currentTrack.artist.name}
+                        </p>
+                        <p className="text-[#FFD700] text-xs mt-1 flex items-center space-x-1">
+                          <Guitar className="w-4 h-4 inline-block" />
+                          <span>{listenCount}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLike();
+                          }}
+                          className={`p-2 rounded-full hover:bg-white/10 ${
+                            isLiked ? "text-green-400" : "text-neutral-400"
+                          }`}
+                        >
+                          <Heart className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={enterFullScreen}
+                          className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                        >
+                          <Maximize2 className="w-5 h-5" />
+                        </button>
+                        <button className="p-2 rounded-full hover:bg-white/10 text-neutral-400">
+                          <Share className="w-5 h-5 text-white" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Center: main controls */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={shuffleQueue}
+                      className={`p-2 rounded-full hover:bg-white/10 ${
+                        shuffleOn ? "text-green-400" : "text-neutral-400"
+                      }`}
+                    >
+                      <Shuffle className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={previousTrack}
+                      className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                    >
+                      <SkipBack className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={togglePlay}
+                      className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform"
+                    >
+                      {isPlaying ? (
+                        <Pause className="w-5 h-5 text-black" />
+                      ) : (
+                        <Play className="w-5 h-5 text-black translate-x-0.5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={skipTrack}
+                      className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                    >
+                      <SkipForward className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const modes: RepeatMode[] = ["off", "all", "one"];
+                        const idx = modes.indexOf(repeatMode);
+                        setRepeatMode(modes[(idx + 1) % modes.length]);
+                      }}
+                      className={`p-2 rounded-full hover:bg-white/10 ${
+                        repeatMode !== "off"
+                          ? "text-green-400"
+                          : "text-neutral-400"
+                      }`}
+                    >
+                      {repeatMode === "one" ? (
+                        <Repeat1 className="w-5 h-5" />
+                      ) : (
+                        <Repeat className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right side: lyrics, queue, volume, etc. */}
+                <div className="flex items-center gap-3 flex-1 justify-end">
+                  <button
+                    onClick={() => {
+                      toggleLyricsView();
+                      setShowSidebar(true);
+                      setTab("lyrics");
+                    }}
+                    className={`p-2 rounded-full hover:bg-white/10 ${
+                      showLyrics ? "text-green-400" : "text-neutral-400"
+                    }`}
+                  >
+                    <Music2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSidebar(true);
+                      setTab("queue");
+                    }}
+                    className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                  >
+                    <ListMusic className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={onCycleAudioQuality}
+                    className="p-2 rounded-full hover:bg-white/10 text-white flex items-center justify-center"
+                  >
+                    {React.createElement(audioQualityIcons[audioQuality].icon, {
+                      className: "w-5 h-5",
+                    })}
+                  </button>
+                  {/* Volume */}
+                  <div className="flex items-center gap-2 min-w-[140px]">
+                    <button
+                      onClick={toggleMute}
+                      className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                    >
+                      <VolumeIcon />
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      onChange={(e) =>
+                        onVolumeChange(parseFloat(e.target.value))
+                      }
+                      className="w-full accent-white"
+                    />
+                  </div>
+
+                  {/* Collapse button */}
+                  <button
+                    onClick={() => setIsCollapsed(true)}
+                    className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
+                  >
+                    <ChevronDown className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
+      {/* SIDEBAR / OVERLAY */}
       <AnimatePresence>
         {showSidebar && (
           <motion.div
@@ -592,10 +667,12 @@ export default function DesktopPlayer({
                                   : "hover:bg-white/5"
                               }`}
                             >
-                              <img
+                              <Image
                                 src={track.album.cover_small || ""}
                                 alt={track.title}
-                                className="w-10 h-10 rounded object-cover"
+                                width={40}
+                                height={40}
+                                className="rounded object-cover"
                               />
                               <div className="flex-1 min-w-0">
                                 <p className="text-white truncate">
@@ -626,7 +703,7 @@ export default function DesktopPlayer({
                         className="p-4 h-full overflow-y-auto"
                         ref={lyricsRef}
                         onScroll={handleUserScroll}
-                        >
+                      >
                         {processedLyrics.length > 0 ? (
                           <div className="space-y-4">
                             {processedLyrics.map((lyric, index) => {
@@ -686,10 +763,12 @@ export default function DesktopPlayer({
                     {tab === "details" && currentTrack && (
                       <div className="p-4 space-y-6">
                         <div>
-                          <img
+                          <Image
                             src={currentTrack.album.cover_xl || ""}
                             alt={currentTrack.title}
-                            className="w-full aspect-square rounded-lg object-cover"
+                            width={500}
+                            height={500}
+                            className="w-full rounded-lg object-cover"
                           />
                         </div>
                         <div className="space-y-4">

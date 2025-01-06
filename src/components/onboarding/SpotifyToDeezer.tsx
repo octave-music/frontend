@@ -145,12 +145,14 @@ export const SpotifyToDeezer: React.FC<SpotifyToDeezerProps> = ({ onClose, onPla
         ) : (
           <div className="space-y-6">
             <div className="relative aspect-video rounded-lg overflow-hidden">
-              <Image
-                src={convertedPlaylist.tracks[0]?.album.cover_xl || "/images/defaultPlaylistImage.png"}
-                alt={convertedPlaylist.playlist_name}
-                fill
-                className="object-cover"
-              />
+            <Image
+              src={convertedPlaylist.tracks[0]?.album.cover_xl || "/images/defaultPlaylistImage.png"}
+              alt={convertedPlaylist.playlist_name}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-cover"
+            />
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
               <div className="absolute bottom-4 left-4">
                 <h3 className="text-xl font-bold text-white">{convertedPlaylist.playlist_name}</h3>

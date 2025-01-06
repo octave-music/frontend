@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @next/next/no-img-element */
 import React from "react";
 import { motion } from "framer-motion";
 import {
@@ -34,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar"
 
 // Components
 import TrackItem from ".././common/TrackItem";
+import Image from 'next/image';
 
 // Utilities
 import { cn } from "@/lib/utils/utils";
@@ -299,7 +299,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
       </header>
 
       {view === "settings" && (
-        <section className="w-full min-h-screen overflow-y-auto bg-gray-900 px-4 py-6" style={{ paddingBottom: "15rem" }} >
+        <section className="w-full min-h-screen overflow-y-auto px-4 py-6" style={{ paddingBottom: "15rem" }} >
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2">Settings</h2>
             <div className="inline-flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-3 py-1.5 rounded-full">
@@ -474,12 +474,13 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
             {/* Hero Section */}
             <div className="relative h-[40vh] overflow-hidden">
               <div className="absolute inset-0">
-                <img
-                  src={
-                    currentPlaylist.image || "images/defaultPlaylistImage.png"
-                  }
+              <Image
+                  src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
                   alt={currentPlaylist.name || "default playlist error alt"}
                   className="w-full h-full object-cover"
+                  fill
+                  sizes="100vw"
+                  priority
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-gray-900 backdrop-blur-sm"></div>
               </div>
@@ -583,14 +584,13 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                                 transition-colors duration-200"
                       >
                         <div className="flex items-center space-x-4">
-                          <img
-                            src={
-                              track.album.cover_small ||
-                              "assets/default-album.jpg"
-                            }
-                            alt={track.title}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
+                        <Image
+                          src={track.album.cover_small || "/assets/default-album.jpg"}
+                          alt={track.title}
+                          className="w-12 h-12 rounded-lg object-cover"
+                          width={48}
+                          height={48}
+                        />
                           <div>
                             <p className="font-medium text-white">
                               {track.title}
@@ -692,14 +692,16 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                   onContextMenu={(e) => handleContextMenu(e, playlist)}
                   style={{ userSelect: "none" }}
                 >
-                  <img
-                    src={playlist.image || "images/defaultPlaylistImage.png"}
-                    alt={playlist.name || "Playlist Cover"}
-                    className={cn(
-                      "rounded",
-                      sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
-                    )}
-                  />
+                  <Image
+                      src={playlist.image || "/images/defaultPlaylistImage.png"}
+                      alt={playlist.name || "Playlist Cover"}
+                      className={cn(
+                        "rounded",
+                        sidebarCollapsed ? "w-10 h-10" : "w-12 h-12 mr-3"
+                      )}
+                      width={sidebarCollapsed ? 40 : 48}
+                      height={sidebarCollapsed ? 40 : 48}
+                    />
                   {!sidebarCollapsed && (
                     <>
                       <span className="font-medium text-sm flex-1">
@@ -774,10 +776,12 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                       key={pl.name}
                       className="flex items-center space-x-3 bg-gray-800 bg-opacity-40 rounded-md p-2 cursor-pointer hover:bg-gray-600 transition-colors duration-200"
                     >
-                      <img
-                        src={pl.image || "images/defaultPlaylistImage.png"}
+                      <Image
+                        src={pl.image || "/images/defaultPlaylistImage.png"}
                         alt={pl.name || "Playlist Cover"}
                         className="w-10 h-10 rounded-md"
+                        width={40}
+                        height={40}
                       />
                       <span className="font-medium text-sm">{pl.name}</span>
                       <button
@@ -835,22 +839,21 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
                       )}
                     >
                       <div className="relative aspect-square mb-3">
-                        <img
-                          src={
-                            track.album.cover_medium ||
-                            "images/defaultPlaylistImage.png"
-                          }
-                          alt={track.title || "Album Cover"}
-                          className={cn(
-                            "w-full h-full",
-                            "object-cover rounded-xl",
-                            "shadow-lg",
-                            "transition-opacity duration-200",
-                            "bg-gray-900"
-                          )}
-                          draggable={false}
-                          loading="lazy"
-                        />
+                      <Image
+                        src={track.album.cover_medium || "/images/defaultPlaylistImage.png"}
+                        alt={track.title || "Album Cover"}
+                        className={cn(
+                          "w-full h-full",
+                          "object-cover rounded-xl",
+                          "shadow-lg",
+                          "transition-opacity duration-200",
+                          "bg-gray-900"
+                        )}
+                        width={180}
+                        height={180}
+                        draggable={false}
+                        priority
+                      />
                         <div
                           className={cn(
                             "absolute inset-0",
