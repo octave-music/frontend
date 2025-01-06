@@ -1048,7 +1048,7 @@ export function SpotifyClone() {
           setQueue(savedRecommended);
         } else {
           // If you want to load recommendations automatically
-          // await fetchNewRecommendations();
+          await fetchNewRecommendations();
         }
 
         // If there's a saved track from the last session, we load it but do NOT auto-play
@@ -1062,7 +1062,7 @@ export function SpotifyClone() {
       }
     }
     void init();
-  }, [setIsPlaying, setVolume, playTrackFromSource]);
+  }, [setIsPlaying, setVolume, playTrackFromSource, fetchNewRecommendations]);
 
   useEffect(() => {
     if (queue.length > 0) {
