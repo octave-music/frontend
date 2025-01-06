@@ -1055,7 +1055,7 @@ export function SpotifyClone() {
         if (savedTrack) {
           const track: Track = JSON.parse(savedTrack);
           setCurrentTrack(track);
-          await playTrackFromSource(track, 0, false);
+          await playTrackFromSource(track, 0, true);
         }
       } catch (error) {
         console.error("Initialization error:", error);
