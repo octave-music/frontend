@@ -1400,7 +1400,6 @@ useEffect(() => {
                   currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
                   removeFromQueue={removeFromQueue}
                   onQueueItemClick={onQueueItemClick}
-                  setIsPlayerOpen={setIsPlayerOpen}
                   volume={volume}
                   onVolumeChange={onVolumeChange}
                   audioQuality={audioQuality}

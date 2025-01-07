@@ -1,5 +1,5 @@
 const LASTFM_API_KEY = "8e1e6d7765dcae40ff84dd4cbf601407";
-const LASTFM_API_BASE = 'http://ws.audioscrobbler.com/2.0/';
+const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/';
 
 interface LastFmArtist {
     name: string;

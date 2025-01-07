@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { ReactNode } from "react";
 import {
@@ -25,7 +26,6 @@ import {
   Wifi,
   UploadCloud,
 } from "lucide-react";
-
 import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/utils";
@@ -143,597 +143,342 @@ interface DesktopLayoutProps {
   children?: ReactNode;
 }
 
-const DesktopLayout = ({
-  // Context Menu
-  showContextMenu,
-  setShowContextMenu,
-  contextMenuPosition,
-  setContextMenuPosition,
-  contextMenuOptions,
-  setContextMenuOptions,
-
-  // Sidebar
+/* =================================
+   1. SIDEBAR COMPONENT
+   ================================= */
+const Sidebar: React.FC<{
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (v: boolean) => void;
+  view: ViewType;
+  setView: (v: ViewType) => void;
+  playlists: Playlist[];
+  setPlaylists: (pl: Playlist[]) => void;
+  openPlaylist: (p: Playlist) => void;
+  storePlaylist: (p: Playlist) => Promise<void>;
+  deletePlaylistByName: (name: string) => Promise<Playlist[]>;
+  setShowCreatePlaylist: (v: boolean) => void;
+  setContextMenuPosition: (pos: Position) => void;
+  setContextMenuOptions: (opts: ContextMenuOption[]) => void;
+  setShowContextMenu: (val: boolean) => void;
+}> = ({
   sidebarCollapsed,
   setSidebarCollapsed,
+  view,
+  setView,
   playlists,
   setPlaylists,
-  setView,
   openPlaylist,
   storePlaylist,
   deletePlaylistByName,
-
-  // Main Content
-  view,
-  greeting,
-  mounted,
-  setShowPwaModal,
-  showPwaModal,
-  showUserMenu,
-  setShowUserMenu,
-  setShowSpotifyToDeezerModal,
-
-  // Playlist View
-  currentPlaylist,
-  playlistSearchQuery,
-  setPlaylistSearchQuery,
-  handlePlaylistSearch,
-  playlistSearchResults,
-  setPlaylistSearchResults,
-  addTrackToPlaylist,
   setShowCreatePlaylist,
-  handleUnpinPlaylist,
-
-  // Track Management
-  setQueue,
-  setCurrentTrack,
-  setIsPlaying,
-  playTrack,
-  addToQueue,
-  openAddToPlaylistModal,
-  toggleLike,
-  isTrackLiked,
-  handleContextMenu,
-  shuffleQueue,
-
-  // Download Management
-  downloadPlaylist,
-  isDownloading,
-  downloadProgress,
-
-  // Search
-  searchQuery,
-  setSearchQuery,
-  searchType,
-  setSearchType,
-  handleSearch,
-  fetchSearchResults,
-  searchResults,
-  recentSearches,
-  setRecentSearches,
-
-  // Queue
-  showQueue,
-  queue,
-  previousTracks,
-  onQueueItemClick,
-
-  // Audio
-  volume,
-  onVolumeChange,
-  audioQuality,
-  setAudioQuality,
-  storeSetting,
-
-  // Recommendations
-  jumpBackIn,
-  recommendedTracks,
-}: DesktopLayoutProps) => {
+  setContextMenuPosition,
+  setContextMenuOptions,
+  setShowContextMenu,
+}) => {
   return (
-    <div
-      className="hidden md:flex flex-1 bg-[#0A0A0A] p-2 gap-2 relative overflow-hidden"
-      style={{
-        height: "100%", // Ensures the container takes up the full height of its parent
-        maxHeight: "100vh", // Prevents overflowing beyond the viewport
-        minHeight: "0", // Prevents unintended infinite height growth of child containers
-      }}
-    >
-      {/* Context Menu */}
-      {showContextMenu && (
-        <CustomContextMenu
-          x={contextMenuPosition.x}
-          y={contextMenuPosition.y}
-          onClose={() => setShowContextMenu(false)}
-          options={contextMenuOptions}
-        />
+    <aside
+      className={cn(
+        "relative h-full bg-gradient-to-b from-gray-900/95 to-black/95",
+        "transition-all duration-300 ease-in-out rounded-xl shadow-xl",
+        "border border-white/[0.02] backdrop-blur-xl",
+        sidebarCollapsed ? "w-[72px]" : "w-[280px]"
       )}
-
-      {/* Sidebar */}
-      <aside
+    >
+      {/* Collapse/Expand Toggle */}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         className={cn(
-          "relative h-full bg-gradient-to-b from-gray-900/95 to-black/95",
-          "transition-all duration-300 ease-in-out rounded-xl shadow-xl",
-          "border border-white/[0.02] backdrop-blur-xl",
-          sidebarCollapsed ? "w-[72px]" : "w-[280px]"
+          "absolute -right-2.5 top-6 w-5 h-10 flex items-center justify-center",
+          "bg-white/[0.03] rounded-full border border-white/[0.02]",
+          "hover:bg-white/[0.06] transition-all duration-200 backdrop-blur-xl"
         )}
       >
-        {/* Collapse/Expand Toggle */}
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className={cn(
-            "absolute -right-2.5 top-6 w-5 h-10 flex items-center justify-center",
-            "bg-white/[0.03] rounded-full border border-white/[0.02]",
-            "hover:bg-white/[0.06] transition-all duration-200 backdrop-blur-xl"
-          )}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-          ) : (
-            <ChevronLeft className="w-3.5 h-3.5 text-gray-400" />
-          )}
-        </button>
+        {sidebarCollapsed ? (
+          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+        ) : (
+          <ChevronLeft className="w-3.5 h-3.5 text-gray-400" />
+        )}
+      </button>
 
-        {/* Navigation */}
-        <nav className="flex flex-col h-full">
-          <div className="flex flex-col gap-1 p-3">
-            {[
-              { icon: Home, label: "Home", action: () => setView("home") },
-              { icon: Search, label: "Search", action: () => setView("search") },
-            ].map((item) => {
-              const isActive = view === item.label.toLowerCase();
-              return (
-                <button
-                  key={item.label}
-                  onClick={item.action}
-                  className={cn(
-                    "group relative flex items-center px-3 py-2.5 rounded-lg",
-                    "hover:bg-white/[0.06] transition-all duration-200",
-                    sidebarCollapsed ? "justify-center" : "justify-start",
-                    isActive && "bg-white/[0.08]"
-                  )}
-                >
-                  <item.icon
-                    className={cn(
-                      "w-5 h-5",
-                      isActive ? "text-white" : "text-gray-400",
-                      "transition-colors"
-                    )}
-                  />
-                  {!sidebarCollapsed && (
-                    <span
-                      className={cn(
-                        "ml-3 text-sm font-medium",
-                        isActive ? "text-white" : "text-gray-400"
-                      )}
-                    >
-                      {item.label}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="h-px bg-white/[0.04] mx-3" />
-
-          {/* Your Library */}
-          <div className="flex flex-col flex-1 min-h-0 p-3">
-            <div className="flex items-center justify-between mb-4">
-              <div
+      {/* Navigation */}
+      <nav className="flex flex-col h-full">
+        <div className="flex flex-col gap-1 p-3">
+          {[
+            { icon: Home, label: "Home", action: () => setView("home") },
+            { icon: Search, label: "Search", action: () => setView("search") },
+          ].map((item) => {
+            const isActive = view === item.label.toLowerCase();
+            return (
+              <button
+                key={item.label}
+                onClick={item.action}
                 className={cn(
-                  "flex items-center gap-3",
-                  sidebarCollapsed && "mx-auto"
+                  "group relative flex items-center px-3 py-2.5 rounded-lg",
+                  "hover:bg-white/[0.06] transition-all duration-200",
+                  sidebarCollapsed ? "justify-center" : "justify-start",
+                  isActive && "bg-white/[0.08]"
                 )}
               >
-                <Library className="w-5 h-5 text-gray-400" />
+                <item.icon
+                  className={cn(
+                    "w-5 h-5",
+                    isActive ? "text-white" : "text-gray-400",
+                    "transition-colors"
+                  )}
+                />
                 {!sidebarCollapsed && (
-                  <span className="text-sm font-medium text-gray-400">
-                    Your Library
+                  <span
+                    className={cn(
+                      "ml-3 text-sm font-medium",
+                      isActive ? "text-white" : "text-gray-400"
+                    )}
+                  >
+                    {item.label}
                   </span>
                 )}
-              </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="h-px bg-white/[0.04] mx-3" />
+
+        {/* Your Library */}
+        <div className="flex flex-col flex-1 min-h-0 p-3">
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className={cn(
+                "flex items-center gap-3",
+                sidebarCollapsed && "mx-auto"
+              )}
+            >
+              <Library className="w-5 h-5 text-gray-400" />
               {!sidebarCollapsed && (
-                <button
-                  onClick={() => setShowCreatePlaylist(true)}
-                  className="p-1.5 rounded-full hover:bg-white/[0.06] transition-colors"
-                >
-                  <Plus className="w-4 h-4 text-gray-400" />
-                </button>
+                <span className="text-sm font-medium text-gray-400">
+                  Your Library
+                </span>
               )}
             </div>
-
-            {/* Playlists */}
-            <div className="overflow-y-auto flex-1 pr-1 -mr-1 custom-scrollbar">
-              <div className="space-y-1">
-                {playlists.map((pl) => (
-                  <div
-                    key={pl.name}
-                    onClick={() => openPlaylist(pl)}
-                    className={cn(
-                      "group relative flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer",
-                      "hover:bg-white/[0.06] transition-colors duration-200",
-                      pl.pinned && "bg-white/[0.03]",
-                      sidebarCollapsed && "justify-center"
-                    )}
-                  >
-                    <div className="relative flex-shrink-0">
-                      <Image
-                        src={pl.image || "/images/defaultPlaylistImage.png"}
-                        alt={pl.name}
-                        width={sidebarCollapsed ? 40 : 44}
-                        height={sidebarCollapsed ? 40 : 44}
-                        className="rounded-md object-cover"
-                        priority
-                      />
-                      {pl.downloaded && (
-                        <div className="absolute -top-1 -right-1 bg-green-500/90 rounded-full p-0.5">
-                          <Download className="w-2.5 h-2.5 text-white" />
-                        </div>
-                      )}
-                    </div>
-
-                    {!sidebarCollapsed && (
-                      <>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-medium text-gray-200 truncate">
-                            {pl.name}
-                          </h3>
-                          <p className="text-xs text-gray-500 truncate">
-                            {pl.tracks.length} tracks
-                          </p>
-                        </div>
-
-                        <button
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-white/[0.08] transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const options: ContextMenuOption[] = [
-                              {
-                                label: pl.pinned
-                                  ? "Unpin Playlist"
-                                  : "Pin Playlist",
-                                action: () => {
-                                  const updated = playlists.map((p) =>
-                                    p.name === pl.name
-                                      ? { ...p, pinned: !p.pinned }
-                                      : p
-                                  );
-                                  setPlaylists(updated);
-                                  void Promise.all(
-                                    updated.map((item) => storePlaylist(item))
-                                  );
-                                },
-                              },
-                              {
-                                label: "Delete Playlist",
-                                action: () => {
-                                  void deletePlaylistByName(pl.name).then(
-                                    setPlaylists
-                                  );
-                                },
-                              },
-                            ];
-                            setContextMenuPosition({
-                              x: e.clientX,
-                              y: e.clientY,
-                            });
-                            setContextMenuOptions(options);
-                            setShowContextMenu(true);
-                          }}
-                        >
-                          <MoreVertical className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </nav>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <div
-          className={cn(
-            "flex-1 flex flex-col overflow-y-auto bg-gradient-to-b from-gray-900/95 to-black/95",
-            "rounded-xl border border-white/[0.02] p-6 backdrop-blur-xl"
-          )}
-        >
-          {/* HEADER */}
-          <header className="flex justify-between items-center mb-8">
-            <h1 className="text-xl md:text-2xl font-semibold text-white">
-              {greeting}
-            </h1>
-            <div className="relative flex items-center gap-2">
-              {/* Install PWA Button */}
-              {mounted &&
-                !(
-                  window.matchMedia &&
-                  window.matchMedia("(display-mode: standalone)").matches
-                ) && (
-                  <button
-                    onClick={() => {
-                      const dp = (window as any).deferredPrompt;
-                      if (dp) {
-                        dp.prompt();
-                        void dp.userChoice.then(() => {
-                          (window as any).deferredPrompt = undefined;
-                        });
-                      } else {
-                        setShowPwaModal(true);
-                      }
-                    }}
-                    className={cn(
-                      "flex items-center gap-2",
-                      "bg-indigo-600/90 text-white px-4 py-2 rounded-full",
-                      "text-sm font-medium transition-all duration-200",
-                      "hover:bg-indigo-700/90 active:scale-95"
-                    )}
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Install App</span>
-                  </button>
-                )}
-
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="w-9 h-9 rounded-full ring-2 ring-white/[0.06] overflow-hidden transition-transform active:scale-95"
-                >
-                  <Avatar className="w-full h-full">
-                    <AvatarImage
-                      src="https://i.pinimg.com/236x/fb/7a/17/fb7a17e227af3cf2e63c756120842209.jpg"
-                      alt="User"
-                    />
-                    <AvatarFallback>U</AvatarFallback>
-                  </Avatar>
-                </button>
-
-                {showUserMenu && (
-                  <div
-                    className={cn(
-                      "absolute right-0 mt-2 w-56 bg-gray-900/95",
-                      "backdrop-blur-xl rounded-xl border border-white/[0.02]",
-                      "shadow-xl divide-y divide-white/[0.04]",
-                      "animate-in fade-in slide-in-from-top-2 duration-200"
-                    )}
-                  >
-                    <button
-                      onClick={() => {
-                        setView("settings");
-                        setShowUserMenu(false);
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-                    >
-                      <Cog className="w-4 h-4" />
-                      <span>Settings</span>
-                    </button>
-
-                    <button
-                      onClick={() => setShowSpotifyToDeezerModal(true)}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      <span>Migrate Playlists</span>
-                    </button>
-
-                    <button
-                      onClick={() => setShowUserMenu(false)}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Log out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
-
-          {/* MAIN CONTENT SWITCHER */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {view === "settings" ? (
-              <SettingsView
-                volume={volume}
-                onVolumeChange={onVolumeChange}
-                audioQuality={audioQuality}
-                setAudioQuality={setAudioQuality}
-                storeSetting={storeSetting}
-              />
-            ) : view === "playlist" && currentPlaylist ? (
-              <PlaylistView
-                currentPlaylist={currentPlaylist}
-                setQueue={setQueue}
-                setCurrentTrack={setCurrentTrack}
-                setIsPlaying={setIsPlaying}
-                shuffleQueue={shuffleQueue}
-                downloadPlaylist={downloadPlaylist}
-                isDownloading={isDownloading}
-                downloadProgress={downloadProgress}
-                playlistSearchQuery={playlistSearchQuery}
-                setPlaylistSearchQuery={setPlaylistSearchQuery}
-                handlePlaylistSearch={handlePlaylistSearch}
-                playlistSearchResults={playlistSearchResults}
-                setPlaylistSearchResults={setPlaylistSearchResults}
-                addTrackToPlaylist={addTrackToPlaylist}
-                toggleLike={toggleLike}
-                isTrackLiked={isTrackLiked}
-                playTrack={playTrack}
-                addToQueue={addToQueue}
-                openAddToPlaylistModal={openAddToPlaylistModal}
-                handleContextMenu={handleContextMenu}
-              />
-            ) : view === "search" ? (
-              <SearchView
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                searchType={searchType}
-                setSearchType={setSearchType}
-                handleSearch={handleSearch}
-                fetchSearchResults={fetchSearchResults}
-                searchResults={searchResults}
-                recentSearches={recentSearches}
-                setRecentSearches={setRecentSearches}
-                playTrack={playTrack}
-                addToQueue={addToQueue}
-                openAddToPlaylistModal={openAddToPlaylistModal}
-                toggleLike={toggleLike}
-                isTrackLiked={isTrackLiked}
-                handleContextMenu={handleContextMenu}
-              />
-            ) : (
-              <HomeView
-                playlists={playlists}
-                openPlaylist={openPlaylist}
-                handleUnpinPlaylist={handleUnpinPlaylist}
-                jumpBackIn={jumpBackIn}
-                playTrack={playTrack}
-                recommendedTracks={recommendedTracks}
-                addToQueue={addToQueue}
-                openAddToPlaylistModal={openAddToPlaylistModal}
-                toggleLike={toggleLike}
-                isTrackLiked={isTrackLiked}
-                handleContextMenu={handleContextMenu}
-              />
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* PWA Modal */}
-      {showPwaModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[999999] transition-all duration-300 animate-fadeIn">
-          <div className="bg-[#0a1929] text-white rounded-xl p-8 w-[90%] max-w-md shadow-2xl border border-[#1e3a5f] animate-slideIn">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-[#90caf9]">Install App</h2>
+            {!sidebarCollapsed && (
               <button
-                onClick={() => setShowPwaModal(false)}
+                onClick={() => setShowCreatePlaylist(true)}
                 className="p-1.5 rounded-full hover:bg-white/[0.06] transition-colors"
               >
-                <X className="w-5 h-5 text-gray-400" />
+                <Plus className="w-4 h-4 text-gray-400" />
               </button>
+            )}
+          </div>
+
+          {/* Playlists */}
+          <div className="overflow-y-auto flex-1 pr-1 -mr-1 custom-scrollbar">
+            <div className="space-y-1">
+              {playlists.map((pl) => (
+                <div
+                  key={pl.name}
+                  onClick={() => openPlaylist(pl)}
+                  className={cn(
+                    "group relative flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer",
+                    "hover:bg-white/[0.06] transition-colors duration-200",
+                    pl.pinned && "bg-white/[0.03]",
+                    sidebarCollapsed && "justify-center"
+                  )}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Image
+                      src={pl.image || "/images/defaultPlaylistImage.png"}
+                      alt={pl.name}
+                      width={sidebarCollapsed ? 40 : 44}
+                      height={sidebarCollapsed ? 40 : 44}
+                      className="rounded-md object-cover"
+                      priority
+                    />
+                    {pl.downloaded && (
+                      <div className="absolute -top-1 -right-1 bg-green-500/90 rounded-full p-0.5">
+                        <Download className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    )}
+                  </div>
+
+                  {!sidebarCollapsed && (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-gray-200 truncate">
+                          {pl.name}
+                        </h3>
+                        <p className="text-xs text-gray-500 truncate">
+                          {pl.tracks.length} tracks
+                        </p>
+                      </div>
+
+                      <button
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-white/[0.08] transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const options: ContextMenuOption[] = [
+                            {
+                              label: pl.pinned
+                                ? "Unpin Playlist"
+                                : "Pin Playlist",
+                              action: () => {
+                                const updated = playlists.map((p) =>
+                                  p.name === pl.name
+                                    ? { ...p, pinned: !p.pinned }
+                                    : p
+                                );
+                                setPlaylists(updated);
+                                void Promise.all(
+                                  updated.map((item) => storePlaylist(item))
+                                );
+                              },
+                            },
+                            {
+                              label: "Delete Playlist",
+                              action: () => {
+                                void deletePlaylistByName(pl.name).then(
+                                  setPlaylists
+                                );
+                              },
+                            },
+                          ];
+                          setContextMenuPosition({
+                            x: e.clientX,
+                            y: e.clientY,
+                          });
+                          setContextMenuOptions(options);
+                          setShowContextMenu(true);
+                        }}
+                      >
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
-
-            <div className="space-y-4">
-              <p className="text-gray-300">
-                Install this app on your device for the best experience:
-              </p>
-
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
-                  Faster access to your music
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
-                  Offline playback support
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
-                  Native app-like experience
-                </li>
-              </ul>
-
-              <p className="text-sm text-gray-400">
-                Look for the install icon in your browser's address bar or use
-                the install button above.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowPwaModal(false)}
-              className="mt-6 w-full px-6 py-3 bg-[#1a237e] text-white rounded-lg transition-all duration-300 hover:bg-[#283593] active:scale-95"
-            >
-              Maybe Later
-            </button>
           </div>
         </div>
-      )}
-
-      {/* Queue Section */}
-      {showQueue && (
-        <aside
-          className={cn(
-            "w-80 h-full bg-gradient-to-b from-gray-900/95 to-black/95",
-            "rounded-xl border border-white/[0.02] backdrop-blur-xl p-4"
-          )}
-        >
-          <h2 className="text-xl font-bold mb-4 text-white">Queue</h2>
-          {queue.length === 0 && previousTracks.length === 0 ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-gray-400">Your queue is empty.</p>
-              <button
-                className={cn(
-                  "w-full px-4 py-2 bg-white/[0.03] text-white rounded-lg",
-                  "border border-white/[0.04] text-sm font-medium transition-colors",
-                  "hover:bg-white/[0.04]"
-                )}
-              >
-                Add Suggestions
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4 custom-scrollbar overflow-y-auto max-h-full pr-2">
-              {previousTracks.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
-                    Previous Tracks
-                  </h3>
-                  <div className="space-y-1">
-                    {previousTracks.map((track, idx) => (
-                      <TrackItem
-                        key={`prev-${track.id}`}
-                        track={track}
-                        index={idx}
-                        isPrevious
-                        onTrackClick={onQueueItemClick}
-                        addToQueue={addToQueue}
-                        openAddToPlaylistModal={openAddToPlaylistModal}
-                        toggleLike={toggleLike}
-                        isLiked={isTrackLiked(track)}
-                        onContextMenu={(e) => handleContextMenu(e, track)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {queue.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
-                    Up Next
-                  </h3>
-                  <div className="space-y-1">
-                    {queue.map((track, idx) => (
-                      <TrackItem
-                        key={`queue-${track.id}`}
-                        track={track}
-                        index={idx}
-                        onTrackClick={onQueueItemClick}
-                        addToQueue={addToQueue}
-                        openAddToPlaylistModal={openAddToPlaylistModal}
-                        toggleLike={toggleLike}
-                        isLiked={isTrackLiked(track)}
-                        onContextMenu={(e) => handleContextMenu(e, track)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </aside>
-      )}
-    </div>
+      </nav>
+    </aside>
   );
 };
 
-export default DesktopLayout;
+/* =================================
+   2. TOP HEADER COMPONENT
+   ================================= */
+const TopHeader: React.FC<{
+  greeting: string;
+  mounted: boolean;
+  showUserMenu: boolean;
+  setShowUserMenu: (v: boolean) => void;
+  showPwaModal: boolean;
+  setShowPwaModal: (v: boolean) => void;
+  setShowSpotifyToDeezerModal: (v: boolean) => void;
+  setView: (v: ViewType) => void;
+}> = ({
+  greeting,
+  mounted,
+  showUserMenu,
+  setShowUserMenu,
+  showPwaModal,
+  setShowPwaModal,
+  setShowSpotifyToDeezerModal,
+  setView,
+}) => {
+  return (
+    <header className="flex justify-between items-center p-6">
+      <h1 className="text-xl md:text-2xl font-semibold text-white">{greeting}</h1>
+      <div className="relative flex items-center gap-2">
+        {/* Install PWA Button */}
+        {mounted &&
+          !(
+            window.matchMedia &&
+            window.matchMedia("(display-mode: standalone)").matches
+          ) && (
+            <button
+              onClick={() => {
+                const dp = (window as any).deferredPrompt;
+                if (dp) {
+                  dp.prompt();
+                  void dp.userChoice.then(() => {
+                    (window as any).deferredPrompt = undefined;
+                  });
+                } else {
+                  setShowPwaModal(true);
+                }
+              }}
+              className={cn(
+                "flex items-center gap-2",
+                "bg-indigo-600/90 text-white px-4 py-2 rounded-full",
+                "text-sm font-medium transition-all duration-200",
+                "hover:bg-indigo-700/90 active:scale-95"
+              )}
+            >
+              <Download className="w-4 h-4" />
+              <span>Install App</span>
+            </button>
+          )}
 
+        {/* User Menu */}
+        <div className="relative z-[999]">
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="w-9 h-9 rounded-full ring-2 ring-white/[0.06] overflow-hidden transition-transform active:scale-95"
+          >
+            <Avatar className="w-full h-full">
+              <AvatarImage
+                src="https://i.pinimg.com/236x/fb/7a/17/fb7a17e227af3cf2e63c756120842209.jpg"
+                alt="User"
+              />
+              <AvatarFallback>U</AvatarFallback>
+            </Avatar>
+          </button>
 
-// SETTINGS VIEW
+          {showUserMenu && (
+            <div
+              className={cn(
+                "absolute right-0 mt-2 w-56 bg-gray-900/95",
+                "backdrop-blur-xl rounded-xl border border-white/[0.02]",
+                "shadow-xl divide-y divide-white/[0.04]",
+                "animate-in fade-in slide-in-from-top-2 duration-200"
+              )}
+            >
+              <button
+                onClick={() => {
+                  setView("settings");
+                  setShowUserMenu(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <Cog className="w-4 h-4" />
+                <span>Settings</span>
+              </button>
+
+              <button
+                onClick={() => setShowSpotifyToDeezerModal(true)}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>Migrate Playlists</span>
+              </button>
+
+              <button
+                onClick={() => setShowUserMenu(false)}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log out</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};
+
+/* =================================
+   3. SETTINGS VIEW (already separate)
+   ================================= */
 function SettingsView({
   volume,
   onVolumeChange,
@@ -748,12 +493,8 @@ function SettingsView({
   storeSetting: (key: string, value: any) => Promise<void>;
 }) {
   return (
-    <section
-      className="max-w-4xl mx-auto overflow-y-auto"
-      style={{
-        maxHeight: "calc(100vh - 100px)", // Adjust height for the header/footer
-      }}
-    >      <div className="flex items-center justify-between mb-8">
+    <section className="max-w-4xl mx-auto pb-32">
+      <div className="flex items-center justify-between mb-8">
         <h2 className="text-3xl font-bold text-white">Settings</h2>
         <div className="flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-4 py-2 rounded-full">
           <User className="w-4 h-4" />
@@ -930,7 +671,9 @@ function SettingsView({
   );
 }
 
-// PLAYLIST VIEW
+/* =================================
+   4. PLAYLIST VIEW (already separate)
+   ================================= */
 function PlaylistView({
   currentPlaylist,
   setQueue,
@@ -979,7 +722,7 @@ function PlaylistView({
 }) {
   return (
     <section className="min-h-screen">
-      <div className="h-[45vh] relative overflow-hidden rounded-xl mb-8">
+      <div className="h-[45vh] relative rounded-xl mb-8">
         <div className="absolute inset-0">
           <Image
             src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
@@ -995,9 +738,7 @@ function PlaylistView({
           <div className="max-w-7xl mx-auto">
             <div className="flex items-end gap-6">
               <Image
-                src={
-                  currentPlaylist.image || "/images/defaultPlaylistImage.png"
-                }
+                src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
                 alt={currentPlaylist.name}
                 width={180}
                 height={180}
@@ -1191,7 +932,9 @@ function PlaylistView({
   );
 }
 
-// SEARCH VIEW
+/* =================================
+   5. SEARCH VIEW (already separate)
+   ================================= */
 function SearchView({
   searchQuery,
   setSearchQuery,
@@ -1392,7 +1135,9 @@ function SearchView({
   );
 }
 
-// HOME VIEW
+/* =================================
+   6. HOME VIEW (already separate)
+   ================================= */
 function HomeView({
   playlists,
   openPlaylist,
@@ -1427,7 +1172,9 @@ function HomeView({
     <>
       {pinnedPlaylists.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4 text-white">Pinned Playlists</h2>
+          <h2 className="text-2xl font-bold mb-4 text-white">
+            Pinned Playlists
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {pinnedPlaylists.map((pl, i) => (
               <div
@@ -1512,34 +1259,405 @@ function HomeView({
       </section>
 
       {/* Recommended for You */}
-      <section className="flex flex-col h-[calc(100vh-200px)] overflow-hidden">
+      <section className="flex flex-col">
         <h2 className="text-2xl font-bold mb-4 text-white">
           Recommended for you
         </h2>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-32">
-            {recommendedTracks.length > 0 ? (
-              recommendedTracks.map((track, idx) => (
-                <TrackItem
-                  key={track.id}
-                  track={track}
-                  index={idx}
-                  onTrackClick={playTrack}
-                  addToQueue={addToQueue}
-                  openAddToPlaylistModal={openAddToPlaylistModal}
-                  toggleLike={toggleLike}
-                  isLiked={isTrackLiked(track)}
-                  onContextMenu={(e) => handleContextMenu(e, track)}
-                />
-              ))
-            ) : (
-              <p className="text-gray-400">
-                No recommendations available.
-              </p>
-            )}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-32">
+          {recommendedTracks.length > 0 ? (
+            recommendedTracks.map((track, idx) => (
+              <TrackItem
+                key={track.id}
+                track={track}
+                index={idx}
+                onTrackClick={playTrack}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                toggleLike={toggleLike}
+                isLiked={isTrackLiked(track)}
+                onContextMenu={(e) => handleContextMenu(e, track)}
+              />
+            ))
+          ) : (
+            <p className="text-gray-400">No recommendations available.</p>
+          )}
         </div>
       </section>
     </>
   );
 }
+
+/* =================================
+   7. QUEUE PANEL
+   ================================= */
+const QueuePanel: React.FC<{
+  showQueue: boolean;
+  queue: Track[];
+  previousTracks: Track[];
+  addToQueue: (t: Track) => void;
+  openAddToPlaylistModal: (t: Track) => void;
+  toggleLike: (t: Track) => void;
+  isTrackLiked: (t: Track) => boolean;
+  handleContextMenu: (
+    e: React.MouseEvent<HTMLDivElement | HTMLButtonElement>,
+    track: Track
+  ) => void;
+  onQueueItemClick: (track: Track, idx: number) => void;
+}> = ({
+  showQueue,
+  queue,
+  previousTracks,
+  addToQueue,
+  openAddToPlaylistModal,
+  toggleLike,
+  isTrackLiked,
+  handleContextMenu,
+  onQueueItemClick,
+}) => {
+  if (!showQueue) return null;
+
+  return (
+    <aside className="w-80 h-full bg-gradient-to-b from-gray-900/95 to-black/95 rounded-xl border border-white/[0.02] backdrop-blur-xl">
+      <div className="h-full flex flex-col p-4">
+        <h2 className="text-xl font-bold mb-4 text-white">Queue</h2>
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+          {queue.length === 0 && previousTracks.length === 0 ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-gray-400">Your queue is empty.</p>
+              <button
+                className={cn(
+                  "w-full px-4 py-2 bg-white/[0.03] text-white rounded-lg",
+                  "border border-white/[0.04] text-sm font-medium transition-colors",
+                  "hover:bg-white/[0.04]"
+                )}
+              >
+                Add Suggestions
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4 custom-scrollbar overflow-y-auto max-h-full pr-2">
+              {previousTracks.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
+                    Previous Tracks
+                  </h3>
+                  <div className="space-y-1">
+                    {previousTracks.map((track, idx) => (
+                      <TrackItem
+                        key={`prev-${track.id}`}
+                        track={track}
+                        index={idx}
+                        isPrevious
+                        onTrackClick={onQueueItemClick}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={openAddToPlaylistModal}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {queue.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
+                    Up Next
+                  </h3>
+                  <div className="space-y-1">
+                    {queue.map((track, idx) => (
+                      <TrackItem
+                        key={`queue-${track.id}`}
+                        track={track}
+                        index={idx}
+                        onTrackClick={onQueueItemClick}
+                        addToQueue={addToQueue}
+                        openAddToPlaylistModal={openAddToPlaylistModal}
+                        toggleLike={toggleLike}
+                        isLiked={isTrackLiked(track)}
+                        onContextMenu={(e) => handleContextMenu(e, track)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+/* =================================
+   8. DESKTOP LAYOUT
+   ================================= */
+const DesktopLayout = (props: DesktopLayoutProps) => {
+  const {
+    // Context Menu
+    showContextMenu,
+    setShowContextMenu,
+    contextMenuPosition,
+    setContextMenuPosition,
+    contextMenuOptions,
+    setContextMenuOptions,
+
+    // Sidebar
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    playlists,
+    setPlaylists,
+    setView,
+    openPlaylist,
+    storePlaylist,
+    deletePlaylistByName,
+
+    // Main Content
+    view,
+    greeting,
+    mounted,
+    setShowPwaModal,
+    showPwaModal,
+    showUserMenu,
+    setShowUserMenu,
+    setShowSpotifyToDeezerModal,
+
+    // Playlist View
+    currentPlaylist,
+    playlistSearchQuery,
+    setPlaylistSearchQuery,
+    handlePlaylistSearch,
+    playlistSearchResults,
+    setPlaylistSearchResults,
+    addTrackToPlaylist,
+    setShowCreatePlaylist,
+    handleUnpinPlaylist,
+
+    // Track Management
+    setQueue,
+    setCurrentTrack,
+    setIsPlaying,
+    playTrack,
+    addToQueue,
+    openAddToPlaylistModal,
+    toggleLike,
+    isTrackLiked,
+    handleContextMenu,
+    shuffleQueue,
+
+    // Download Management
+    downloadPlaylist,
+    isDownloading,
+    downloadProgress,
+
+    // Search
+    searchQuery,
+    setSearchQuery,
+    searchType,
+    setSearchType,
+    handleSearch,
+    fetchSearchResults,
+    searchResults,
+    recentSearches,
+    setRecentSearches,
+
+    // Queue
+    showQueue,
+    queue,
+    previousTracks,
+    onQueueItemClick,
+
+    // Audio
+    volume,
+    onVolumeChange,
+    audioQuality,
+    setAudioQuality,
+    storeSetting,
+
+    // Recommendations
+    jumpBackIn,
+    recommendedTracks,
+  } = props;
+
+  return (
+    <div className="hidden md:flex flex-1 bg-[#0A0A0A] p-2 gap-2 relative">
+      {/* Context Menu */}
+      {showContextMenu && (
+        <CustomContextMenu
+          x={contextMenuPosition.x}
+          y={contextMenuPosition.y}
+          onClose={() => setShowContextMenu(false)}
+          options={contextMenuOptions}
+        />
+      )}
+
+      {/* Sidebar */}
+      <Sidebar
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+        view={view}
+        setView={setView}
+        playlists={playlists}
+        setPlaylists={setPlaylists}
+        openPlaylist={openPlaylist}
+        storePlaylist={storePlaylist}
+        deletePlaylistByName={deletePlaylistByName}
+        setShowCreatePlaylist={setShowCreatePlaylist}
+        setContextMenuPosition={setContextMenuPosition}
+        setContextMenuOptions={setContextMenuOptions}
+        setShowContextMenu={setShowContextMenu}
+      />
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col">
+        <div className="flex-1 bg-gradient-to-b from-gray-900/95 to-black/95 rounded-xl border border-white/[0.02] backdrop-blur-xl">
+          {/* Header */}
+          <TopHeader
+            greeting={greeting}
+            mounted={mounted}
+            showUserMenu={showUserMenu}
+            setShowUserMenu={setShowUserMenu}
+            showPwaModal={showPwaModal}
+            setShowPwaModal={setShowPwaModal}
+            setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
+            setView={setView}
+          />
+
+          {/* Main Content Switcher */}
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar px-6 pb-6">
+            {view === "settings" ? (
+              <SettingsView
+                volume={volume}
+                onVolumeChange={onVolumeChange}
+                audioQuality={audioQuality}
+                setAudioQuality={setAudioQuality}
+                storeSetting={storeSetting}
+              />
+            ) : view === "playlist" && currentPlaylist ? (
+              <PlaylistView
+                currentPlaylist={currentPlaylist}
+                setQueue={setQueue}
+                setCurrentTrack={setCurrentTrack}
+                setIsPlaying={setIsPlaying}
+                shuffleQueue={shuffleQueue}
+                downloadPlaylist={downloadPlaylist}
+                isDownloading={isDownloading}
+                downloadProgress={downloadProgress}
+                playlistSearchQuery={playlistSearchQuery}
+                setPlaylistSearchQuery={setPlaylistSearchQuery}
+                handlePlaylistSearch={handlePlaylistSearch}
+                playlistSearchResults={playlistSearchResults}
+                setPlaylistSearchResults={setPlaylistSearchResults}
+                addTrackToPlaylist={addTrackToPlaylist}
+                toggleLike={toggleLike}
+                isTrackLiked={isTrackLiked}
+                playTrack={playTrack}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                handleContextMenu={handleContextMenu}
+              />
+            ) : view === "search" ? (
+              <SearchView
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                searchType={searchType}
+                setSearchType={setSearchType}
+                handleSearch={handleSearch}
+                fetchSearchResults={fetchSearchResults}
+                searchResults={searchResults}
+                recentSearches={recentSearches}
+                setRecentSearches={setRecentSearches}
+                playTrack={playTrack}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                toggleLike={toggleLike}
+                isTrackLiked={isTrackLiked}
+                handleContextMenu={handleContextMenu}
+              />
+            ) : (
+              <HomeView
+                playlists={playlists}
+                openPlaylist={openPlaylist}
+                handleUnpinPlaylist={handleUnpinPlaylist}
+                jumpBackIn={jumpBackIn}
+                playTrack={playTrack}
+                recommendedTracks={recommendedTracks}
+                addToQueue={addToQueue}
+                openAddToPlaylistModal={openAddToPlaylistModal}
+                toggleLike={toggleLike}
+                isTrackLiked={isTrackLiked}
+                handleContextMenu={handleContextMenu}
+              />
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* PWA Modal */}
+      {showPwaModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[999999] transition-all duration-300 animate-fadeIn">
+          <div className="bg-[#0a1929] text-white rounded-xl p-8 w-[90%] max-w-md shadow-2xl border border-[#1e3a5f] animate-slideIn">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-[#90caf9]">Install App</h2>
+              <button
+                onClick={() => setShowPwaModal(false)}
+                className="p-1.5 rounded-full hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-gray-300">
+                Install this app on your device for the best experience:
+              </p>
+
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
+                  Faster access to your music
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
+                  Offline playback support
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-[#90caf9] rounded-full" />
+                  Native app-like experience
+                </li>
+              </ul>
+
+              <p className="text-sm text-gray-400">
+                Look for the install icon in your browser’s address bar or use
+                the install button above.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowPwaModal(false)}
+              className="mt-6 w-full px-6 py-3 bg-[#1a237e] text-white rounded-lg transition-all duration-300 hover:bg-[#283593] active:scale-95"
+            >
+              Maybe Later
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Queue Section */}
+      <QueuePanel
+        showQueue={showQueue}
+        queue={queue}
+        previousTracks={previousTracks}
+        addToQueue={addToQueue}
+        openAddToPlaylistModal={openAddToPlaylistModal}
+        toggleLike={toggleLike}
+        isTrackLiked={isTrackLiked}
+        handleContextMenu={handleContextMenu}
+        onQueueItemClick={onQueueItemClick}
+      />
+    </div>
+  );
+};
+
+export default DesktopLayout;
