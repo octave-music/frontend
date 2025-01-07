@@ -229,14 +229,7 @@ const DesktopLayout = ({
   recommendedTracks,
 }: DesktopLayoutProps) => {
   return (
-    <div
-      className="hidden md:flex flex-1 bg-[#0A0A0A] p-2 gap-2 relative overflow-hidden"
-      style={{
-        height: "100%", // Ensures the container takes up the full height of its parent
-        maxHeight: "100vh", // Prevents overflowing beyond the viewport
-        minHeight: "0", // Prevents unintended infinite height growth of child containers
-      }}
-    >
+    <div className="hidden md:flex flex-1 bg-[#0A0A0A] p-2 gap-2 relative">
       {/* Context Menu */}
       {showContextMenu && (
         <CustomContextMenu
@@ -433,16 +426,11 @@ const DesktopLayout = ({
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <div
-          className={cn(
-            "flex-1 flex flex-col overflow-y-auto bg-gradient-to-b from-gray-900/95 to-black/95",
-            "rounded-xl border border-white/[0.02] p-6 backdrop-blur-xl"
-          )}
-        >
-          {/* HEADER */}
-          <header className="flex justify-between items-center mb-8">
-            <h1 className="text-xl md:text-2xl font-semibold text-white">
+      <main className="flex-1 flex flex-col">
+      <div className="flex-1 bg-gradient-to-b from-gray-900/95 to-black/95 rounded-xl border border-white/[0.02] backdrop-blur-xl">
+      {/* HEADER */}
+      <header className="flex justify-between items-center p-6">
+        <h1 className="text-xl md:text-2xl font-semibold text-white">
               {greeting}
             </h1>
             <div className="relative flex items-center gap-2">
@@ -533,8 +521,8 @@ const DesktopLayout = ({
           </header>
 
           {/* MAIN CONTENT SWITCHER */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {view === "settings" ? (
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar px-6 pb-6">
+          {view === "settings" ? (
               <SettingsView
                 volume={volume}
                 onVolumeChange={onVolumeChange}
@@ -654,13 +642,10 @@ const DesktopLayout = ({
 
       {/* Queue Section */}
       {showQueue && (
-        <aside
-          className={cn(
-            "w-80 h-full bg-gradient-to-b from-gray-900/95 to-black/95",
-            "rounded-xl border border-white/[0.02] backdrop-blur-xl p-4"
-          )}
-        >
-          <h2 className="text-xl font-bold mb-4 text-white">Queue</h2>
+          <aside className="w-80 h-full bg-gradient-to-b from-gray-900/95 to-black/95 rounded-xl border border-white/[0.02] backdrop-blur-xl">
+          <div className="h-full flex flex-col p-4">
+            <h2 className="text-xl font-bold mb-4 text-white">Queue</h2>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
           {queue.length === 0 && previousTracks.length === 0 ? (
             <div className="flex flex-col gap-4">
               <p className="text-gray-400">Your queue is empty.</p>
@@ -724,6 +709,8 @@ const DesktopLayout = ({
               )}
             </div>
           )}
+            </div>
+          </div>
         </aside>
       )}
     </div>
@@ -749,10 +736,7 @@ function SettingsView({
 }) {
   return (
     <section
-      className="max-w-4xl mx-auto overflow-y-auto"
-      style={{
-        maxHeight: "calc(100vh - 100px)", // Adjust height for the header/footer
-      }}
+      className="max-w-4xl mx-auto pb-32"
     >      <div className="flex items-center justify-between mb-8">
         <h2 className="text-3xl font-bold text-white">Settings</h2>
         <div className="flex items-center space-x-2 bg-purple-600/10 text-purple-400 px-4 py-2 rounded-full">
@@ -979,7 +963,7 @@ function PlaylistView({
 }) {
   return (
     <section className="min-h-screen">
-      <div className="h-[45vh] relative overflow-hidden rounded-xl mb-8">
+      <div className="h-[45vh] relative rounded-xl mb-8">
         <div className="absolute inset-0">
           <Image
             src={currentPlaylist.image || "/images/defaultPlaylistImage.png"}
@@ -1512,11 +1496,10 @@ function HomeView({
       </section>
 
       {/* Recommended for You */}
-      <section className="flex flex-col h-[calc(100vh-200px)] overflow-hidden">
-        <h2 className="text-2xl font-bold mb-4 text-white">
-          Recommended for you
+      <section className="flex flex-col">
+      <h2 className="text-2xl font-bold mb-4 text-white">
+      Recommended for you
         </h2>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-32">
             {recommendedTracks.length > 0 ? (
               recommendedTracks.map((track, idx) => (
@@ -1538,7 +1521,6 @@ function HomeView({
               </p>
             )}
           </div>
-        </div>
       </section>
     </>
   );
