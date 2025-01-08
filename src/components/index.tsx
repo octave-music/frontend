@@ -1275,6 +1275,7 @@ useEffect(() => {
                 currentTrackIndex={queue.findIndex((t) => t.id === currentTrack?.id)}
                 isPlaying={isPlaying}
                 removeFromQueue={removeFromQueue}
+                downloadTrack={downloadTrack} 
                 setQueue={setQueue}
                 togglePlay={togglePlay}
                 skipTrack={skipTrack}
