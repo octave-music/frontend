@@ -60,6 +60,7 @@ interface MobilePlayerProps {
   togglePlay: () => void;
   skipTrack: () => void | Promise<void>;
   previousTrack: () => void;
+  downloadTrack: (track: Track) => Promise<void>;
   seekPosition: number;
   duration: number;
   handleSeek: (time: number) => void;
@@ -293,6 +294,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   removeFromQueue,
   onQueueItemClick,
   setIsPlayerOpen,
+  downloadTrack,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [audioQuality, setAudioQuality] = useState<AudioQuality>("MAX");
@@ -384,7 +386,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     {
       icon: Download,
       label: "Download",
-      onClick: () => console.log("Downloaded track offline"),
+      onClick: () => downloadTrack(currentTrack),
     },
     {
       icon: Lock,
@@ -420,7 +422,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
       {
         icon: Download,
         label: "Download",
-        onClick: () => console.log("Download track offline"),
+        onClick: () => downloadTrack(currentTrack),
       },
     ];
   };
