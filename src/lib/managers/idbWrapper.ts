@@ -1,7 +1,7 @@
 // lib/idbWrapper.ts
 import { Track, Playlist } from "../types/types";
 
-const API_BASE_URL = "https://mbck.cloudgen.xyz";
+const API_BASE_URL = "https://api.octave.gold";
 const DB_NAME = "OctaveDB";
 const DB_VERSION = 6;
 

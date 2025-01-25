@@ -9,7 +9,7 @@ import {
 import audioElement from "../managers/audioManager";
 import { Track } from "../types/types";
 
-const API_BASE_URL = "https://mbck.cloudgen.xyz";
+const API_BASE_URL = "https://api.octave.gold";
 
 /**
  * A simpler audio hook that:

@@ -34,7 +34,7 @@ interface ConvertedPlaylist {
   tracks: DeezerTrack[];
 }
 
-const API_BASE_URL = "https://mbck.cloudgen.xyz/api/convertPlaylist";
+const API_BASE_URL = "https://api.octave.gold/api/convertPlaylist";
 
 async function convertSpotifyToOctave(playlistUrl: string): Promise<ConvertedPlaylist> {
   const response = await fetch(`${API_BASE_URL}?url=${encodeURIComponent(playlistUrl)}`);
