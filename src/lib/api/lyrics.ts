@@ -2,7 +2,7 @@
 
 import { Track, Lyric } from "../types/types";
 
-const API_BASE_URL = "https://mbck.cloudgen.xyz";
+const API_BASE_URL = "https://api.octave.gold";
 
 /**
  * Parses a raw lyrics string into a structured array of lyrics with time stamps.
