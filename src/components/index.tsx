@@ -94,7 +94,7 @@ declare global {
   }
 }
 
-const API_BASE_URL = "https://mbck.cloudgen.xyz";
+const API_BASE_URL = "https://api.octave.gold";
 
 /**
  * Checks if the user is on a data-saver connection (slow or metered).

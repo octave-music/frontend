@@ -7302,6 +7302,7 @@ snapshots:
       axios: 1.7.9
       class-variance-authority: 0.7.1
       clsx: 2.1.1
+      critters: 0.0.25
       discord-rich-presence: 0.0.8
       discord-rpc: 4.0.1
       fast-average-color: 9.4.0
