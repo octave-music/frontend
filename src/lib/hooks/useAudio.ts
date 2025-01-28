@@ -8,6 +8,7 @@ import {
 } from "../managers/idbWrapper";
 import audioElement from "../managers/audioManager";
 import { Track } from "../types/types";
+import { AudioStreamer } from "../utils/audioStreaming";
 
 const API_BASE_URL = "https://api.octave.gold";
 
@@ -97,134 +98,163 @@ export function useAudio() {
    * This DOES NOT forcibly play if user has paused or if 'autoPlay' is false.
    */
   const playTrackFromSource = useCallback(
-    async (
-      track: Track,
-      timeOffset = 0,
-      autoPlay = false
-    ): Promise<void> => {
+    async (track: Track, timeOffset = 0, autoPlay = false): Promise<void> => {
       if (!audioElement) return;
-
-      // Create a new abort controller for this request
-      if (currentAbortControllerRef.current) {
-        currentAbortControllerRef.current.abort();
-      }
-      const abortController = new AbortController();
-      currentAbortControllerRef.current = abortController;
-
-      try {
-        // If the same track is already loaded, just handle seeking and playback
-        if (currentTrack && currentTrack.id === track.id) {
-          if (Math.abs(audioElement.currentTime - timeOffset) > 0.05) {
-            audioElement.currentTime = timeOffset;
-          }
-          if (autoPlay && audioElement.paused) {
-            // Use a flag to prevent multiple concurrent play attempts
-            const playPromise = audioElement.play();
-            if (playPromise !== undefined) {
-              await playPromise.catch(err => {
-                if (err.name !== 'AbortError') {
-                  console.error("play() error:", err);
-                }
-              });
+      const audio = audioElement;
+  
+      // Track the current attempt's resources
+      let currentStreamer: AudioStreamer | null = null;
+      let currentObjectUrl: string | null = null;
+  
+      // Cleanup helper
+      const cleanup = () => {
+        if (currentStreamer) {
+          currentStreamer.destroy();
+          currentStreamer = null;
+        }
+        if (currentObjectUrl !== null) {
+          // Delay URL revocation to ensure playback has switched
+          setTimeout(() => {
+            if (currentObjectUrl !== null) {
+              URL.revokeObjectURL(currentObjectUrl);
             }
+          }, 1000);
+          currentObjectUrl = null;
+        }
+      };
+  
+      try {
+        // If it's the same track, just handle seeking and playing
+        if (currentTrack && currentTrack.id === track.id) {
+          if (Math.abs(audio.currentTime - timeOffset) > 0.05) {
+            audio.currentTime = timeOffset;
+          }
+          if (autoPlay && audio.paused) {
+            await audio.play();
             setIsPlaying(true);
           }
           return;
         }
-
-        // For a new track, ensure clean state first
-        audioElement.pause();
-        audioElement.currentTime = 0;
+  
+        // Reset state for new track
+        audio.pause();
+        
+        // Don't reset currentTime here to avoid race conditions
         setIsPlaying(false);
-
-        try {
-          // iOS or Safari => direct streaming
-          if (isSafari || isiOS) {
+  
+        let playbackSuccess = false;
+  
+        // For Safari/iOS, use direct streaming
+        if (isSafari || isiOS) {
+          try {
             const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
-            const headResp = await fetch(streamUrl, {
-              method: "HEAD",
-              signal: abortController.signal,
-            });
-            if (!headResp.ok) throw new Error("Stream check failed");
-            audioElement.src = streamUrl;
-          } else {
-            // Try offline first
-            let blob = await getOfflineBlob(track.id);
-            if (!blob) {
-              const resp = await fetch(
-                `${API_BASE_URL}/api/track/${track.id}.mp3`,
-                { signal: abortController.signal }
-              );
-              if (!resp.ok) throw new Error("Fetch failed");
-              blob = await resp.blob();
-              if (!blob || blob.size === 0) throw new Error("Empty blob");
-              await storeTrackBlob(track.id, blob);
-            }
-            const blobUrl = URL.createObjectURL(blob);
-            audioElement.src = blobUrl;
+            audio.src = streamUrl;
+            playbackSuccess = true;
+          } catch (error) {
+            console.error('Safari direct streaming failed:', error);
           }
-
-          // Set currentTrack before loading to prevent race conditions
-          setCurrentTrack(track);
-          
-          // Wait for audio to be ready before attempting playback
-          await new Promise((resolve, reject) => {
-            const loadedHandler = () => {
-              if (!audioElement) return
-              audioElement.removeEventListener('loadeddata', loadedHandler);
-              audioElement.removeEventListener('error', errorHandler);
-              resolve(null);
-            };
-            const errorHandler = () => {
-              if (!audioElement) return
-              audioElement.removeEventListener('loadeddata', loadedHandler);
-              audioElement.removeEventListener('error', errorHandler);
-              reject(new Error('Audio loading failed'));
-            };
-            if (!audioElement) return
-            audioElement.addEventListener('loadeddata', loadedHandler);
-            audioElement.addEventListener('error', errorHandler);
-            audioElement.load();
-          });
-
-          audioElement.currentTime = timeOffset;
-
-          if (autoPlay && !abortController.signal.aborted) {
-            const playPromise = audioElement.play();
-            if (playPromise !== undefined) {
-              await playPromise.catch(err => {
-                if (err.name !== 'AbortError') {
-                  console.error("play() error after load:", err);
-                }
+        } else {
+          // Try offline blob first
+          try {
+            const blob = await getOfflineBlob(track.id);
+            if (blob) {
+              currentObjectUrl = URL.createObjectURL(blob);
+              audio.src = currentObjectUrl;
+              playbackSuccess = true;
+            }
+          } catch (error) {
+            console.error('Offline blob playback failed:', error);
+          }
+  
+          // If offline blob failed, try MSE streaming
+          if (!playbackSuccess) {
+            try {
+              cleanup(); // Clean up any previous resources
+              
+              currentStreamer = new AudioStreamer(audio, progress => {
+                console.log(`Loading: ${progress.progress.toFixed(1)}%`);
               });
-              if (!abortController.signal.aborted) {
-                setIsPlaying(true);
-              }
+  
+              await currentStreamer.streamAudio(`${API_BASE_URL}/api/track/${track.id}.mp3`);
+              playbackSuccess = true;
+            } catch (error) {
+              console.error('MSE streaming failed:', error);
+              cleanup();
             }
           }
-        } catch (err: any) {
-          if (err.name === "AbortError") {
-            // Normal abort, ignore
-            return;
+  
+          // If both offline and MSE failed, fallback to direct streaming
+          if (!playbackSuccess) {
+            try {
+              cleanup(); // Clean up any previous resources
+              console.log('Falling back to direct streaming...');
+              const streamUrl = `${API_BASE_URL}/api/track/${track.id}.mp3`;
+              audio.src = streamUrl;
+              playbackSuccess = true;
+            } catch (error) {
+              console.error('Direct streaming fallback failed:', error);
+            }
           }
-          throw err; // Re-throw other errors
         }
-      } catch (err: any) {
+  
+        if (!playbackSuccess) {
+          throw new Error('All playback methods failed');
+        }
+  
+        setCurrentTrack(track);
+  
+        // Wait for audio to be ready
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error('Audio loading timeout'));
+          }, 10000);
+  
+          const loadedHandler = () => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('loadeddata', loadedHandler);
+            audio.removeEventListener('error', errorHandler);
+            resolve();
+          };
+  
+          const errorHandler = (e: ErrorEvent) => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('loadeddata', loadedHandler);
+            audio.removeEventListener('error', errorHandler);
+            reject(e.error || new Error('Audio loading failed'));
+          };
+  
+          audio.addEventListener('loadeddata', loadedHandler);
+          audio.addEventListener('error', errorHandler);
+        });
+  
+        // Now that loading is confirmed successful, set the time offset
+        if (timeOffset > 0) {
+          audio.currentTime = timeOffset;
+        }
+  
+        if (autoPlay) {
+          await audio.play();
+          setIsPlaying(true);
+        }
+  
+      } catch (err) {
         console.error("Playback error:", err);
-        // Clean up on error
-        audioElement.pause();
-        audioElement.removeAttribute("src");
-        audioElement.load();
+        cleanup();
+        audio.pause();
         setIsPlaying(false);
-      } finally {
-        if (currentAbortControllerRef.current === abortController) {
-          currentAbortControllerRef.current = null;
-        }
+        throw err;
       }
+  
+      // Set up cleanup for when audio source changes
+      const handleEmptied = () => {
+        cleanup();
+        audio.removeEventListener('emptied', handleEmptied);
+      };
+      audio.addEventListener('emptied', handleEmptied, { once: true });
     },
     [currentTrack, isSafari, isiOS, setIsPlaying]
-);
-
+  );
+  
   /**
    * Pause without discarding the current track or blob
    */

@@ -3,7 +3,7 @@ import { Track, Playlist } from "../types/types";
 
 const API_BASE_URL = "https://api.octave.gold";
 const DB_NAME = "OctaveDB";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 interface RecentlyPlayedEntry {
   timestamp: number;
