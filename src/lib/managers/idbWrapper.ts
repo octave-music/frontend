@@ -3,7 +3,7 @@ import { Track, Playlist } from "../types/types";
 
 const API_BASE_URL = "https://api.octave.gold";
 const DB_NAME = "OctaveDB";
-const DB_VERSION = 8;
+const DB_VERSION = 10;
 
 interface RecentlyPlayedEntry {
   timestamp: number;
@@ -242,11 +242,11 @@ export async function validateBlob(trackId: string): Promise<boolean> {
   }
 }
 
-export async function refreshTrackBlob(trackId: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/track/${trackId}.mp3`);
+export async function refreshTrackBlob(trackId: string, extension = ".mp3"): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/track/${trackId}${extension}`);
   if (!response.ok) throw new Error("Failed to fetch track");
 
   const blob = await response.blob();
-  await storeTrackBlob(trackId, blob);
+  await storeTrackBlob(trackId + "_" + extension.replace(".", ""), blob);
   return blob;
 }

@@ -145,6 +145,10 @@ export function SpotifyClone() {
     onVolumeChange,
     loadAudioBuffer,
     setOnTrackEndCallback,
+    audioQuality,
+    setAudioQuality,
+    isDataSaver,
+    changeAudioQuality,
   } = useAudio();
 
   // ----------------------------------------------------------
@@ -184,9 +188,6 @@ export function SpotifyClone() {
   const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
   const [seekPosition, setSeekPosition] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [audioQuality, setAudioQuality] = useState<
-    "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"
-  >("HIGH");
   const [listenCount, setListenCount] = useState(0);
 
   // Context Menu & Modals
@@ -508,18 +509,30 @@ export function SpotifyClone() {
     updatedPlaylists.forEach((pl) => storePlaylist(pl));
   };
 
-  const onCycleAudioQuality = useCallback(() => {
-    const arr: Array<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"> = [
-      "MAX",
-      "HIGH",
-      "NORMAL",
-      "DATA_SAVER",
-    ];
-    const i = arr.indexOf(audioQuality);
-    const next = arr[(i + 1) % arr.length];
-    setAudioQuality(next);
-    void storeSetting("audioQuality", next);
-  }, [audioQuality]);
+  async function onCycleAudioQuality() {
+    if (isDataSaver) {
+      toast.error("Data Saver is ON. Disable it to switch audio quality.");
+      return;
+    }
+    try {
+      const qualities: Array<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"> = [
+        "MAX",
+        "HIGH",
+        "NORMAL",
+        "DATA_SAVER",
+      ];
+      const currentIndex = qualities.indexOf(audioQuality);
+      const nextQ = qualities[(currentIndex + 1) % qualities.length];
+  
+      await changeAudioQuality(nextQ);
+      toast.success(`Switched audio quality to ${nextQ}`);
+    } catch (err: any) {
+      console.error("Could not change audio quality:", err);
+      toast.error(err?.message || "Could not change audio quality");
+    }
+  }
+  
+  
 
   const isTrackLiked = useCallback(
     (track: Track): boolean => {
@@ -955,7 +968,7 @@ export function SpotifyClone() {
         audioElement.removeEventListener("ended", handleTrackEnd);
       }
     };
-  }, [handleTrackEnd, volume]);
+  }, [handleTrackEnd, setAudioQuality, volume]);
 
   useEffect(() => {
     if (!audioElement) return;
@@ -1023,54 +1036,76 @@ export function SpotifyClone() {
   }, [currentTrack]);
 
   // Main init: load from IDB
-useEffect(() => {
-  async function init() {
-    try {
-      const savedRecommended = await getRecommendedTracks();
-      if (savedRecommended && savedRecommended.length > 0) {
-        setRecommendedTracks(savedRecommended);
+  useEffect(() => {
+    void (async function init() {
+      try {
+        // 1. Attempt to load recommended
+        const savedRecommended = await getRecommendedTracks();
+        if (savedRecommended && savedRecommended.length > 0) {
+          setRecommendedTracks(savedRecommended);
+        }
+  
+        // 2. Attempt to load queue
+        const savedQueue = await getQueue();
+  
+        // 3. Parallel IDB settings
+        const [
+          vol,
+          sOn,
+          qual,
+          pls,
+          rec,
+          onboard,
+          savedTrack,
+        ] = await Promise.all([
+          getSetting("volume"),
+          getSetting("shuffleOn"),
+          getSetting("audioQuality"),
+          getAllPlaylists(),
+          getRecentlyPlayed(),
+          getSetting("onboardingDone"),
+          getSetting("currentTrack"),
+        ]);
+  
+        // 4. Apply volume, shuffle, audioQuality
+        if (vol) setVolume(parseFloat(vol));
+        if (sOn) setShuffleOn(JSON.parse(sOn));
+  
+        if (qual) {
+          // e.g. "MAX", "HIGH", "NORMAL", or "DATA_SAVER"
+          await changeAudioQuality(qual as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
+        }
+  
+        // 5. Load playlists, recently played, handle onboarding
+        if (pls) setPlaylists(pls);
+        if (rec) setJumpBackIn(rec);
+        if (!onboard) setShowOnboarding(true);
+  
+        // 6. Decide on queue fallback
+        if (savedQueue && savedQueue.length > 0) {
+          setQueue(savedQueue);
+        } else if (savedRecommended && savedRecommended.length > 0) {
+          setQueue(savedRecommended);
+        } else {
+          await fetchNewRecommendations();
+        }
+  
+        // 7. If we have a saved track, load it (but do NOT auto-play if you prefer)
+        if (savedTrack) {
+          const track: Track = JSON.parse(savedTrack);
+          setCurrentTrack(track);
+          // If you want it to not start playing, set autoPlay = false
+          await playTrackFromSource(track, 0, true);
+        }
+      } catch (error) {
+        console.error("Initialization error:", error);
       }
+    })();
+    // [] ensures it runs only once after component mounts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      const savedQueue = await getQueue();
-      const [vol, sOn, qual, pls, rec, onboard, savedTrack] = await Promise.all([
-        getSetting("volume"),
-        getSetting("shuffleOn"),
-        getSetting("audioQuality"),
-        getAllPlaylists(),
-        getRecentlyPlayed(),
-        getSetting("onboardingDone"),
-        getSetting("currentTrack"),
-      ]);
-
-      if (vol) setVolume(parseFloat(vol));
-      if (sOn) setShuffleOn(JSON.parse(sOn));
-      if (qual) setAudioQuality(qual as any);
-      if (pls) setPlaylists(pls);
-      if (rec) setJumpBackIn(rec);
-      if (!onboard) setShowOnboarding(true);
-
-      if (savedQueue && savedQueue.length > 0) {
-        setQueue(savedQueue);
-      } else if (savedRecommended && savedRecommended.length > 0) {
-        setQueue(savedRecommended);
-      } else {
-        // Fetch new recommendations if no queue or recommended tracks
-        await fetchNewRecommendations();
-      }
-
-      // If there's a saved track from the last session, load it but do NOT auto-play
-      if (savedTrack) {
-        const track: Track = JSON.parse(savedTrack);
-        setCurrentTrack(track);
-        await playTrackFromSource(track, 0, true);
-      }
-    } catch (error) {
-      console.error("Initialization error:", error);
-    }
-  }
-  void init();
-}, [setIsPlaying, setVolume, playTrackFromSource, fetchNewRecommendations]);
-
+  
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1377,37 +1412,35 @@ useEffect(() => {
             <footer className="fixed bottom-0 left-0 right-0">
               {currentTrack ? (
                 <DesktopPlayer
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  previousTracks={previousTracks}
-                  setQueue={setQueue}
-                  togglePlay={togglePlay}
-                  skipTrack={skipTrack}
-                  previousTrack={previousTrackFunc}
-                  seekPosition={seekPosition}
-                  duration={duration}
-                  handleSeek={handleSeek}
-                  isLiked={isTrackLiked(currentTrack)}
-                  repeatMode={repeatMode}
-                  setRepeatMode={setRepeatMode}
-                  toggleLike={toggleLikeDesktop}
-                  lyrics={lyrics}
-                  currentLyricIndex={currentLyricIndex}
-                  showLyrics={showLyrics}
-                  toggleLyricsView={toggleLyricsView}
-                  shuffleOn={shuffleOn}
-                  shuffleQueue={shuffleQueue}
-                  queue={queue}
-                  currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-                  removeFromQueue={removeFromQueue}
-                  onQueueItemClick={onQueueItemClick}
-                  volume={volume}
-                  onVolumeChange={onVolumeChange}
-                  audioQuality={audioQuality}
-                  onCycleAudioQuality={onCycleAudioQuality}
-                  listenCount={listenCount}
-                  downloadTrack={downloadTrack}
-                />
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                previousTracks={previousTracks}
+                setQueue={setQueue}
+                togglePlay={togglePlay}
+                skipTrack={skipTrack}
+                previousTrack={previousTrackFunc}
+                seekPosition={seekPosition}
+                duration={duration}
+                handleSeek={handleSeek}
+                isLiked={isTrackLiked(currentTrack)}
+                repeatMode={repeatMode}
+                setRepeatMode={setRepeatMode}
+                toggleLike={toggleLikeDesktop}
+                lyrics={lyrics}
+                currentLyricIndex={currentLyricIndex}
+                showLyrics={showLyrics}
+                toggleLyricsView={toggleLyricsView}
+                shuffleOn={shuffleOn}
+                shuffleQueue={shuffleQueue}
+                queue={queue}
+                currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+                removeFromQueue={removeFromQueue}
+                onQueueItemClick={onQueueItemClick}
+                volume={volume}
+                onVolumeChange={onVolumeChange}
+                listenCount={listenCount}
+                downloadTrack={downloadTrack}
+              />              
               ) : (
                 <div className="bg-gray-800 text-white p-4 text-center">
                   No track is currently playing.
