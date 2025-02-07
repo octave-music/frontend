@@ -599,15 +599,15 @@ const handleForwardClick = useCallback(() => {
 
   /** The main cluster of playback controls in expanded mode. */
   const mainControlButtons = (
-    <div className="w-full flex items-center justify-between mb-8 px-4">
+<div className="w-full flex items-center justify-between mb-8 pl-4 pr-2 sm:px-4">
       <button
         onClick={shuffleQueue}
         className={`p-3 rounded-full ${
           shuffleOn ? "text-green-500" : "text-white/60 hover:bg-white/10"
         }`}
       >
-        <Shuffle className="w-6 h-6" />
-      </button>
+      <Shuffle className="w-6 h-6 xs:w-5 xs:h-5" />
+    </button>
       <div className="flex items-center space-x-8">
         <button
           className="p-2 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center"
@@ -643,14 +643,11 @@ const handleForwardClick = useCallback(() => {
         className="p-3 rounded-full"
       >
         {repeatMode === "one" ? (
-          <Repeat1 className="w-6 h-6 text-green-500" />
+          <Repeat1 className="w-6 h-6 xs:w-5 xs:h-5 text-green-500" />
         ) : (
-          <Repeat
-            className={`w-6 h-6 ${
-              repeatMode === "all" ? "text-green-500" : "text-white/60"
-            }`}
-          />
+          <Repeat className={`w-6 h-6 xs:w-5 xs:h-5 ${repeatMode === "all" ? "text-green-500" : "text-white/60"}`} />
         )}
+
       </button>
     </div>
   );
@@ -658,7 +655,7 @@ const handleForwardClick = useCallback(() => {
   return (
     <div className="px-6 flex flex-col items-center">
       {/* Container for miniplayer or expanded player */}
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-50">
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-10">
       {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
@@ -728,10 +725,11 @@ const handleForwardClick = useCallback(() => {
                     }}
                   >
                     {isPlaying ? (
-                      <Pause className="w-5 h-5 text-white" />
+                      <Pause className="w-5 h-5 xs:w-4 xs:h-4 text-white" />
                     ) : (
-                      <Play className="w-5 h-5 text-white" />
+                      <Play className="w-5 h-5 xs:w-4 xs:h-4 text-white" />
                     )}
+
                   </button>
                   <button
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -1123,7 +1121,11 @@ const handleForwardClick = useCallback(() => {
               <AnimatePresence>
                 {showAudioMenu && (
                   <motion.div
-                    className="fixed inset-0 bg-black/80 z-50"
+                    className="fixed inset-0 z-50"
+                    style={{
+                      background: "rgba(0,0,0,0.8)",
+                      pointerEvents: showAudioMenu ? "auto" : "none"
+                    }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}

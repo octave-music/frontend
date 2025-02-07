@@ -1077,12 +1077,12 @@ const SearchDrawer: React.FC<{
             type="text"
             placeholder="What do you want to listen to?"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && searchQuery.trim()) {
-                handleSearch(searchQuery);
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (e.target.value.trim().length > 3) {
+                handleSearch(e.target.value);
               }
-            }}
+            }}            
             className="w-full px-4 py-3 rounded-full bg-gray-800 text-white placeholder-gray-500 
               focus:outline-none focus:ring-2 focus:ring-green-500 pl-12 transition-all 
               duration-200 ease-in-out"

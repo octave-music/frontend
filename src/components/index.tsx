@@ -228,6 +228,7 @@ export function SpotifyClone() {
   // Onboarding
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showArtistSelection, setShowArtistSelection] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // ----------------------------------------------------------
   //                  Handlers & Utility Functions
@@ -239,6 +240,11 @@ export function SpotifyClone() {
   }, []);
 
   const deleteConfirmedPlaylist = useCallback(() => {
+    if (selectedPlaylist && selectedPlaylist.name === "Liked Songs") {
+      toast.error("You cannot delete the Liked Songs playlist.");
+      return;
+    }
+    // Proceed with deletion for other playlists:
     if (selectedPlaylist) {
       void deletePlaylistByName(selectedPlaylist.name).then((updatedPlaylists) => {
         setPlaylists(updatedPlaylists);
@@ -247,6 +253,29 @@ export function SpotifyClone() {
       });
     }
   }, [selectedPlaylist]);
+
+  useEffect(() => {
+    (async function initPlaylists() {
+      const pls = await getAllPlaylists();
+      if (pls) {
+        // Check if "Liked Songs" exists
+        if (!pls.some((pl) => pl.name === "Liked Songs")) {
+          const likedPlaylist: Playlist = {
+            name: "Liked Songs",
+            image: "/images/liked-songs.webp",
+            tracks: [],
+            // Optionally, add a pinned flag
+            pinned: true,
+          };
+          pls.push(likedPlaylist);
+          await storePlaylist(likedPlaylist);
+        }
+        setPlaylists(pls);
+      }
+    })();
+  }, []);
+  
+  
 
   const handlePlaylistSearch = useCallback(async (query: string) => {
     try {
@@ -300,6 +329,7 @@ export function SpotifyClone() {
   const fetchSearchResults = useMemo(
     () =>
       debounce(async (query: string) => {
+        setIsSearching(true);
         try {
           const resp = await fetch(
             `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
@@ -307,14 +337,18 @@ export function SpotifyClone() {
           const data = await resp.json();
           if (data && data.results) {
             setSearchResults(data.results as Track[]);
+          } else {
+            setSearchResults([]);
           }
         } catch (error) {
           console.log("Search error:", error);
+          setSearchResults([]);
+        } finally {
+          setIsSearching(false);
         }
       }, 300),
     []
   );
-
   const fetchLyrics = useCallback(async (track: Track) => {
     try {
       const fetchedLyrics = await handleFetchLyrics(track);
@@ -614,20 +648,29 @@ export function SpotifyClone() {
   const onQueueItemClick = useCallback(
     (track: Track, idx: number) => {
       if (idx < 0) {
-        // from previousTracks
+        // Handle clicks from previousTracks (if needed)
         setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
         setQueue((q) => [track, ...q]);
       } else {
-        // from queue
+        // Instead of removing the track entirely, reposition it to the top.
         setPreviousTracks((prev) =>
           currentTrack ? [currentTrack, ...prev] : prev
         );
-        setQueue((q) => q.filter((_, i) => i !== idx));
+        setQueue((q) => {
+          // Create a shallow copy of the current queue.
+          const newQueue = [...q];
+          // Remove the clicked track from its current position.
+          newQueue.splice(idx, 1);
+          // Insert the track at the beginning of the queue.
+          newQueue.unshift(track);
+          return newQueue;
+        });
       }
       setCurrentTrack(track);
     },
     [currentTrack]
   );
+  
 
   const openAddToPlaylistModal = useCallback((tr: Track) => {
     setContextMenuTrack(tr);
