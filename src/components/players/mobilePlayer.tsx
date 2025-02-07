@@ -524,18 +524,18 @@ const handleBackClick = useCallback(() => {
   if (backClickCountRef.current === 1) {
     setTimeout(() => {
       if (backClickCountRef.current === 1) {
-        // Single click => if currentTime>5 => go to 0, else => prevTrack
-        if (seekPosition > 5) handleSeek(0);
-        else previousTrack();
+        // Single click: reset current song to start.
+        handleSeek(0);
       }
       backClickCountRef.current = 0;
     }, 300);
   } else if (backClickCountRef.current === 2) {
-    // Double click => forced previous
+    // Double click: go to previous track.
     previousTrack();
     backClickCountRef.current = 0;
   }
-}, [seekPosition, handleSeek, previousTrack]);
+}, [handleSeek, previousTrack]);
+
 
 const forwardClickCountRef = useRef(0);
 const handleForwardClick = useCallback(() => {
@@ -658,8 +658,8 @@ const handleForwardClick = useCallback(() => {
   return (
     <div className="px-6 flex flex-col items-center">
       {/* Container for miniplayer or expanded player */}
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-50">
-        {/* --- Miniplayer if not expanded --- */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-50">
+      {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
             className="mx-2 rounded-xl overflow-visible mb-[env(safe-area-inset-bottom)]"            

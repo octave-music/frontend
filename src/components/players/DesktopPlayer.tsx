@@ -7,6 +7,7 @@ import Image from "next/image";
 import {
   Heart,
   Play,
+  Search,
   Pause,
   Volume2,
   GripVertical,
@@ -20,10 +21,7 @@ import {
   Repeat1,
   ListMusic,
   Download,
-  Library,
   Radio,
-  UserPlus,
-  Ban,
   Star,
   Flag,
   AlertCircle,
@@ -31,6 +29,9 @@ import {
   Mic2,
   Cast,
   Airplay,
+  UserPlus,
+  Ban,
+  Library,
   Share,
   ChevronDown,
   ChevronUp,
@@ -60,15 +61,15 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-} from "@dnd-kit/core";
+} from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useSortable } from "@dnd-kit/sortable"
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = "off" | "all" | "one";
@@ -292,14 +293,14 @@ function useAutoScrollLyrics(
         const offsetHeight = currentLyricEl.offsetHeight;
         const containerHeight = container.clientHeight;
         const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
-
         container.scrollTo({ top: scrollPos, behavior: "smooth" });
+        // Release auto-scrolling flag after a shorter delay for smooth transition:
         setTimeout(() => {
           isAutoScrollingRef.current = false;
-        }, 1000);
+        }, 600);
       }
     }
-  }, [currentLyricIndex, showLyrics, userScrolling, processedLyrics]);
+  }, [currentLyricIndex, showLyrics, userScrolling, processedLyrics]);  
 
   return { lyricsRef, userScrolling, handleUserScroll, lyricProgress, processedLyrics };
 }
@@ -315,6 +316,7 @@ const LyricsPanel: React.FC<{
   processedLyrics: Array<Lyric & { endTime?: number }>;
   lyricProgress: number;
   userScrolling: boolean;
+  handleUserScroll: (e: React.UIEvent<HTMLDivElement>) => void
 }> = ({
   currentTrack,
   currentLyricIndex,
@@ -323,6 +325,7 @@ const LyricsPanel: React.FC<{
   processedLyrics,
   lyricProgress,
   userScrolling,
+  handleUserScroll,
 }) => {
   if (!currentTrack) {
     return (
@@ -337,11 +340,10 @@ const LyricsPanel: React.FC<{
 
   return (
     <div
-      className="p-4 h-full overflow-y-auto custom-scrollbar"
+      className="p-4 h-full overflow-y-auto no-scrollbar"
       ref={lyricsRef}
-      onScroll={(_e) => {
-        // user scrolling => autoScrollingRef
-      }}
+      onScroll={handleUserScroll}
+
     >
       <div className="space-y-4">
         {processedLyrics.map((lyric, index) => {
@@ -394,6 +396,8 @@ const LyricsPanel: React.FC<{
 /* ----------------------------------------------
    Q U E U E   P A N E L
 ---------------------------------------------- */
+
+// Define Props for QueuePanel
 interface QueuePanelProps {
   queue: Track[];
   currentTrack: Track;
@@ -403,14 +407,23 @@ interface QueuePanelProps {
   setQueue: React.Dispatch<React.SetStateAction<Track[]>>;
 }
 
-const SortableItem: React.FC<{
+interface SortableItemProps {
   id: string;
   track: Track;
   index: number;
   onQueueItemClick: (track: Track, index: number) => void;
   removeFromQueue: (index: number) => void;
   currentTrackIndex: number;
-}> = ({ id, track, index, onQueueItemClick, removeFromQueue, currentTrackIndex }) => {
+}
+
+const SortableItem: React.FC<SortableItemProps> = ({
+  id,
+  track,
+  index,
+  onQueueItemClick,
+  removeFromQueue,
+  currentTrackIndex,
+}) => {
   const {
     attributes,
     listeners,
@@ -420,10 +433,10 @@ const SortableItem: React.FC<{
     isDragging,
   } = useSortable({ id });
 
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${isDragging ? 1.05 : 1})` : undefined,
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 999 : 1,
   };
 
   return (
@@ -432,65 +445,75 @@ const SortableItem: React.FC<{
       style={style}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      transition={{ delay: index * 0.05 }}
-      onClick={() => onQueueItemClick(track, index)}
-      className={`group relative flex items-center gap-4 p-3 rounded-xl overflow-y-auto cursor-pointer transition-all duration-300
-        ${index === currentTrackIndex
-          ? "bg-white/10 shadow-lg shadow-black/20"
-          : "hover:bg-white/5"}
-        ${currentTrackIndex === index ? "border-l-2 border-white/20" : ""}
-      `}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.2, delay: index * 0.03 }}
+      className={`group relative rounded-lg transition-all duration-200 mx-4 mb-2 ${
+        isDragging 
+          ? 'shadow-2xl bg-neutral-800/90 backdrop-blur-sm ring-2 ring-white/10' 
+          : ''
+      } ${
+        index === currentTrackIndex
+          ? 'bg-gradient-to-r from-purple-900/40 to-blue-900/40'
+          : 'hover:bg-white/5'
+      }`}
     >
-      {/* Drag Handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab opacity-100 group-hover:opacity-100 transition-opacity"
+      <div 
+        className={`flex items-center gap-4 p-4 relative ${
+          isDragging ? 'shadow-inner' : ''
+        }`}
       >
-        <GripVertical className="w-4 h-4 text-neutral-500" />
-      </div>
+        <div
+          {...attributes}
+          {...listeners}
+          className="touch-none flex items-center justify-center w-10 h-10 rounded-md 
+            hover:bg-white/10 transition-colors cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-5 h-5 text-neutral-400" />
+        </div>
 
-      {/* Track Number */}
-      <div className="w-5 text-sm font-medium text-neutral-400">
-        {index + 1}
-      </div>
+        <div className="relative flex-shrink-0">
+          <Image
+            src={track.album.cover_small || ''}
+            alt={track.title}
+            width={48}
+            height={48}
+            className={`rounded-md shadow-lg transition-transform ${
+              isDragging ? 'scale-105' : ''
+            }`}
+          />
+          {index === currentTrackIndex && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md">
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            </div>
+          )}
+        </div>
 
-      {/* Album Art */}
-      <div className="relative">
-        <Image
-          src={track.album.cover_small || ""}
-          alt={track.title}
-          width={48}
-          height={48}
-          className="rounded-lg object-cover shadow-lg shadow-black/20"
-        />
-        {index === currentTrackIndex && (
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-full animate-ping" />
-          </div>
-        )}
-      </div>
+        <div
+          className="flex-1 min-w-0 cursor-pointer py-2"
+          onClick={() => onQueueItemClick(track, index)}
+        >
+          <p className="font-medium text-base text-white truncate">{track.title}</p>
+          <p className="text-sm text-neutral-400 truncate">
+            {track.artist.name}
+          </p>
+        </div>
 
-      {/* Track Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-white font-medium truncate">{track.title}</p>
-        <p className="text-sm text-neutral-400 truncate">
-          {track.artist.name}
-        </p>
+        <div className="flex items-center gap-3">
+          {/* <span className="text-sm text-neutral-500">
+            {formatTimeDesktop(track.duration)}
+          </span> */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              removeFromQueue(index);
+            }}
+            className="opacity-0 group-hover:opacity-100 p-2 rounded-md
+              hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
+          >
+            <ListX className="w-5 h-5" />
+          </button>
+        </div>
       </div>
-
-      {/* Remove Button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          removeFromQueue(index);
-        }}
-        className="opacity-0 group-hover:opacity-100 p-2 rounded-full hover:bg-white/10 
-          text-neutral-400 hover:text-white transition-all duration-300"
-      >
-        <ListX className="w-4 h-4" />
-      </button>
     </motion.div>
   );
 };
@@ -503,46 +526,38 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
   removeFromQueue,
   setQueue,
 }) => {
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-
-    if (active.id !== over?.id) {
-      const oldIndex = queue.findIndex(track => track.id === active.id);
-      const newIndex = queue.findIndex(track => track.id === over?.id);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        setQueue((items) => arrayMove(items, oldIndex, newIndex));
-      }
+    if (over && active.id !== over.id) {
+      const oldIndex = queue.findIndex((track) => track.id === active.id);
+      const newIndex = queue.findIndex((track) => track.id === over.id);
+      setQueue((items) => arrayMove(items, oldIndex, newIndex));
     }
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={queue.map(track => track.id)}
-        strategy={verticalListSortingStrategy}
+    <div className="flex flex-col h-full bg-gradient-to-b from-neutral-900 to-black">
+      <div className="flex items-center justify-between p-4 border-b border-white/10">
+        <h2 className="text-xl font-bold text-white">Queue</h2>
+        <button
+          onClick={() => setQueue([])}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md
+            transition-colors text-sm font-medium"
+        >
+          Clear Queue
+        </button>
+      </div>
+
+      <DndContext
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
       >
-        <div className="space-y-2 pr-2 overflow-y-auto">
-          {queue.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
-              <div className="w-16 h-16 mb-4 rounded-full bg-neutral-800/50 flex items-center justify-center">
-                <ListX className="w-8 h-8" />
-              </div>
-              <p className="text-sm">No tracks in queue</p>
-            </div>
-          ) : (
-            queue.map((track, index) => (
+        <SortableContext
+          items={queue.map((track) => track.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <AnimatePresence>
+            {queue.map((track, index) => (
               <SortableItem
                 key={track.id}
                 id={track.id}
@@ -552,13 +567,14 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
                 removeFromQueue={removeFromQueue}
                 currentTrackIndex={currentTrackIndex}
               />
-            ))
-          )}
-        </div>
-      </SortableContext>
-    </DndContext>
+            ))}
+          </AnimatePresence>
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 };
+
 /* ----------------------------------------------
    D E T A I L S   P A N E L
 ---------------------------------------------- */
@@ -592,39 +608,45 @@ const DetailsPanel: React.FC<DetailsProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
 
+  // Enhanced smooth volume control
   useEffect(() => {
     if (!isDragging || !sliderRef.current) return;
-  
+
     const handleVolumeDrag = (event: MouseEvent) => {
       if (!sliderRef.current) return;
-  
+      event.preventDefault();
+
       const rect = sliderRef.current.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const width = rect.width;
-      const newVolume = Math.max(0, Math.min(1, x / width));
-  
-      onVolumeChange(newVolume);
+      const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+      const newVolume = x / rect.width;
+      
+      requestAnimationFrame(() => {
+        onVolumeChange(newVolume);
+      });
     };
-  
-    const handleMouseUp = () => setIsDragging(false);
-  
-    window.addEventListener("mousemove", handleVolumeDrag);
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.body.style.userSelect = 'none';
+    window.addEventListener("mousemove", handleVolumeDrag, { passive: false });
     window.addEventListener("mouseup", handleMouseUp);
-  
+
     return () => {
+      document.body.style.userSelect = 'auto';
       window.removeEventListener("mousemove", handleVolumeDrag);
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDragging, onVolumeChange]);
-  
 
   const handleVolumeClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!sliderRef.current) return;
     
     const rect = sliderRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const width = rect.width;
-    const newVolume = Math.max(0, Math.min(1, x / width));
+    const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+    const newVolume = x / rect.width;
     onVolumeChange(newVolume);
   };
 
@@ -655,6 +677,16 @@ const DetailsPanel: React.FC<DetailsProps> = ({
     },
   };
 
+  const trackDetails = [
+    { icon: Flag, label: "Report Content", color: "text-red-500" },
+    { icon: AlertCircle, label: "Track Info", color: "text-blue-400" },
+    { icon: Lock, label: "Exclusive Content", color: "text-purple-400" },
+    { icon: Mic2, label: "Lyrics Available", color: "text-green-400" },
+    { icon: Cast, label: "Cast", color: "text-orange-400" },
+    { icon: Airplay, label: "AirPlay", color: "text-sky-400" },
+    { icon: UserPlus, label: "Follow Artist", color: "text-pink-400" },
+    { icon: Library, label: "Add to Library", color: "text-emerald-400" },
+  ];
 
   return (
     <motion.div 
@@ -666,7 +698,7 @@ const DetailsPanel: React.FC<DetailsProps> = ({
       <motion.div 
         className="relative aspect-square rounded-2xl overflow-hidden shadow-2xl mb-8 group"
         whileHover={{ scale: 1.02 }}
-        transition={{ type: "spring", stiffness: 300 }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
         <Image
           src={currentTrack.album.cover_xl}
@@ -675,28 +707,25 @@ const DetailsPanel: React.FC<DetailsProps> = ({
           height={500}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-4">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            className="p-3 rounded-full bg-white text-black hover:bg-white/90"
-            onClick={() => setIsLiked(!isLiked)}
+            className="p-3 rounded-full bg-white text-black hover:bg-white/90 backdrop-blur-sm"
           >
             <Heart className={`w-6 h-6 ${isLiked ? 'fill-current text-pink-500' : ''}`} />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            className="p-3 rounded-full bg-white text-black hover:bg-white/90"
-            onClick={() => downloadTrack(currentTrack)}
+            className="p-3 rounded-full bg-white text-black hover:bg-white/90 backdrop-blur-sm"
           >
             <Download className="w-6 h-6" />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            className="p-3 rounded-full bg-white text-black hover:bg-white/90"
-            onClick={() => setShowShareMenu(!showShareMenu)}
+            className="p-3 rounded-full bg-white text-black hover:bg-white/90 backdrop-blur-sm"
           >
             <Share2 className="w-6 h-6" />
           </motion.button>
@@ -714,6 +743,21 @@ const DetailsPanel: React.FC<DetailsProps> = ({
           <span>•</span>
           <span>{listenCount?.toLocaleString()} plays</span>
         </div>
+      </div>
+
+      {/* Track Details Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {trackDetails.map(({ icon: Icon, label, color }) => (
+          <motion.button
+            key={label}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <Icon className={`w-6 h-6 ${color}`} />
+            <span className="text-xs text-neutral-400">{label}</span>
+          </motion.button>
+        ))}
       </div>
 
       {/* Quick Actions */}
@@ -736,10 +780,9 @@ const DetailsPanel: React.FC<DetailsProps> = ({
         </motion.button>
       </div>
 
-      {/* Volume Control */}
+      {/* Volume Control with enhanced smooth sliding */}
       <div className="space-y-4 mb-8">
-      <div className="flex items-center gap-3">
-          {/* Mute/Unmute Button */}
+        <div className="flex items-center gap-3">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -747,41 +790,32 @@ const DetailsPanel: React.FC<DetailsProps> = ({
             className="text-white hover:text-white/80"
           >
             {volume === 0 ? <VolumeX className="w-5 h-5" /> : 
-            volume < 0.5 ? <Volume1 className="w-5 h-5" /> : 
-            <Volume2 className="w-5 h-5" />}
+             volume < 0.5 ? <Volume1 className="w-5 h-5" /> : 
+             <Volume2 className="w-5 h-5" />}
           </motion.button>
 
-          {/* Volume Slider */}
           <div 
             ref={sliderRef}
             className="relative flex-1 h-2 bg-white/10 rounded-full overflow-hidden cursor-pointer"
-            onMouseDown={handleVolumeClick}
+            onClick={handleVolumeClick}
           >
-            {/* Volume Fill */}
             <motion.div
-              className="h-full bg-white"
-              style={{ width: `${volume * 100}%` }}
-              layout
+              className="absolute inset-0 bg-white origin-left"
+              style={{ scaleX: volume }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
             />
-
-            {/* Volume Thumb (Draggable Circle) */}
             <motion.div
-  className="absolute bg-white rounded-full w-3 h-3 shadow-lg cursor-pointer z-10" 
-  style={{
-    top: "50%",
-    transform: "translate(-50%, -50%)",
-    left: `${volume * 100}%`,
-    transition: "left 0.1s ease-out",
-    border: "2px solid #e5e7eb",
-    width: "12px",
-    height: "12px",
-  }}
-  onMouseDown={() => setIsDragging(true)}
-/>
-
+              className="absolute top-1/2 w-4 h-4 bg-white rounded-full shadow-lg cursor-grab active:cursor-grabbing"
+              style={{
+                left: `${volume * 100}%`,
+                y: "-50%",
+                x: "-50%",
+              }}
+              onMouseDown={() => setIsDragging(true)}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            />
           </div>
         </div>
-
       </div>
 
       {/* Audio Quality Selector */}
@@ -810,42 +844,19 @@ const DetailsPanel: React.FC<DetailsProps> = ({
               className="absolute bottom-full left-0 right-0 mb-2 bg-neutral-800 rounded-xl overflow-hidden shadow-xl"
             >
               {Object.entries(qualityOptions).map(([quality, { icon: QIcon, text }]) => (
-              <motion.button
-                key={quality}
-                whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
-                onClick={() => {
-                  changeAudioQuality(quality as AudioQuality);
-                  setShowQualityMenu(false);
-                }}
-                className={`w-full px-4 py-3 flex items-center gap-3
-                  ${audioQuality === quality ? 'text-white bg-white/10' : 'text-neutral-400'}`}
-                disabled={isDataSaver && quality !== 'DATA_SAVER'}
-              >
-                {React.createElement(QIcon, { size: 18 })}
-                <span>{text}</span>
-              </motion.button>
-            ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Share Menu */}
-        <AnimatePresence>
-          {showShareMenu && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute top-full left-0 right-0 mt-2 bg-neutral-800 rounded-xl overflow-hidden shadow-xl"
-            >
-              {['Copy Link', 'Share to Twitter', 'Share to Facebook', 'Share to Instagram'].map((option) => (
                 <motion.button
-                  key={option}
+                  key={quality}
                   whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
-                  className="w-full px-4 py-3 text-left text-neutral-400 hover:text-white"
-                  onClick={() => setShowShareMenu(false)}
+                  onClick={() => {
+                    changeAudioQuality(quality as AudioQuality);
+                    setShowQualityMenu(false);
+                  }}
+                  className={`w-full px-4 py-3 flex items-center gap-3
+                    ${audioQuality === quality ? 'text-white bg-white/10' : 'text-neutral-400'}`}
+                  disabled={isDataSaver && quality !== 'DATA_SAVER'}
                 >
-                  {option}
+                  {React.createElement(QIcon, { size: 18 })}
+                  <span>{text}</span>
                 </motion.button>
               ))}
             </motion.div>
@@ -894,13 +905,14 @@ const SidebarOverlay: React.FC<SidebarOverlayProps> = ({
     <AnimatePresence>
       {showSidebar && (
         <motion.div
-          className="fixed inset-0 bg-black/30 backdrop-blur-md z-50"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onClick={() => setShowSidebar(false)}
-        >
+        className="fixed inset-0 bg-black/30 backdrop-blur-md z-50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={() => setShowSidebar(false)}
+        style={{ pointerEvents: showSidebar ? "auto" : "none" }}
+      >
           <motion.div
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -947,7 +959,7 @@ const SidebarOverlay: React.FC<SidebarOverlayProps> = ({
             </div>
 
             {/* Content Panel */}
-            <div className="flex-1 overflow-y-auto scrollbar-none">
+            <div className="flex-1 overflow-y-auto no-scrollbar">
               <div className="p-6">
                 <motion.div
                   key={tab}
@@ -1008,6 +1020,24 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
   const [tab, setTab] = useState<SidebarTab>("queue");
   const [isCollapsed, setIsCollapsed] = useState(false);
   
+  const backClickCountRef = useRef(0);
+  const handleBackClick = useCallback(() => {
+    backClickCountRef.current++;
+    if (backClickCountRef.current === 1) {
+      setTimeout(() => {
+        if (backClickCountRef.current === 1) {
+          // Single click: restart current track
+          handleSeek(0);
+        }
+        backClickCountRef.current = 0;
+      }, 300);
+    } else if (backClickCountRef.current === 2) {
+      // Double click: go to previous track
+      previousTrack();
+      backClickCountRef.current = 0;
+    }
+  }, [handleSeek, previousTrack]);
+
 
   // Access the audio hook for data saver checks, or we can just pass in onCycleAudioQuality prop
   const { audioQuality, isDataSaver, changeAudioQuality } = useAudio();
@@ -1065,7 +1095,7 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
               </div>
               <div className="flex items-center gap-3 pl-2">
                 <button
-                  onClick={previousTrack}
+                  onClick={handleBackClick}
                   className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                 >
                   <SkipBack className="w-5 h-5" />
@@ -1171,7 +1201,7 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
                       <Shuffle className="w-5 h-5" />
                     </button>
                     <button
-                      onClick={previousTrack}
+                      onClick={handleBackClick}
                       className="p-2 rounded-full hover:bg-white/10 text-neutral-400"
                     >
                       <SkipBack className="w-5 h-5" />
@@ -1286,6 +1316,7 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
             currentLyricIndex={currentLyricIndex}
             handleSeek={handleSeek}
             lyricsRef={lyricsRef}
+            handleUserScroll={handleUserScroll}
             processedLyrics={processedLyrics}
             lyricProgress={lyricProgress}
             userScrolling={userScrolling}

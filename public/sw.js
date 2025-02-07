@@ -105,7 +105,7 @@ self.addEventListener('fetch', (event) => {
           });
       })
     );
-  } else if (url.origin.startsWith('https://api.yourdomain.com')) {
+  } else if (url.origin.startsWith('https://api.octave.gold')) {
     // API requests: Use Network-First strategy
     event.respondWith(
       fetch(event.request)
