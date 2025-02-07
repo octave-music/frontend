@@ -47,8 +47,6 @@ import {
   ListX,
   Guitar,
 } from "lucide-react";
-import { toast } from "react-toastify";
-import { motion as m } from "framer-motion"; // optional alias
 
 import { Track, Lyric } from "@/lib/types/types";
 import { useAudio } from "@/lib/hooks/useAudio";
@@ -69,7 +67,6 @@ import {
   verticalListSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = "off" | "all" | "one";
@@ -416,6 +413,29 @@ interface SortableItemProps {
   currentTrackIndex: number;
 }
 
+const SoundWave: React.FC = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg backdrop-blur-sm">
+    <div className="flex items-center gap-[2px]">
+      {[...Array(6)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="w-[2px] bg-white rounded-full"
+          initial={{ height: 8 }}
+          animate={{
+            height: [8, 24, 8],
+          }}
+          transition={{
+            duration: 0.7,
+            repeat: Infinity,
+            ease: "linear",
+            delay: i * 0.1,
+          }}
+        />
+      ))}
+    </div>
+  </div>
+);
+
 const SortableItem: React.FC<SortableItemProps> = ({
   id,
   track,
@@ -434,9 +454,18 @@ const SortableItem: React.FC<SortableItemProps> = ({
   } = useSortable({ id });
 
   const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${isDragging ? 1.05 : 1})` : undefined,
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${isDragging ? 1.05 : 1})`
+      : undefined,
     transition,
     zIndex: isDragging ? 999 : 1,
+  };
+
+  const handleTrackClick = () => {
+    if (!isDragging) {
+      const updatedTrack = track;
+      onQueueItemClick(updatedTrack, index);
+    }
   };
 
   return (
@@ -447,72 +476,62 @@ const SortableItem: React.FC<SortableItemProps> = ({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2, delay: index * 0.03 }}
-      className={`group relative rounded-lg transition-all duration-200 mx-4 mb-2 ${
-        isDragging 
-          ? 'shadow-2xl bg-neutral-800/90 backdrop-blur-sm ring-2 ring-white/10' 
-          : ''
+      className={`group relative rounded-lg transition-all duration-300 mx-4 mb-2 ${
+        isDragging
+          ? "shadow-2xl bg-neutral-800/90 backdrop-blur-sm ring-2 ring-white/10"
+          : "hover:ring-1 hover:ring-white/20"
       } ${
         index === currentTrackIndex
-          ? 'bg-gradient-to-r from-purple-900/40 to-blue-900/40'
-          : 'hover:bg-white/5'
+          ? "bg-gradient-to-r from-purple-900/40 via-blue-900/30 to-purple-900/40"
+          : "hover:bg-white/5"
       }`}
     >
       <div 
-        className={`flex items-center gap-4 p-4 relative ${
-          isDragging ? 'shadow-inner' : ''
-        }`}
+        className={`flex items-center gap-4 p-3 relative ${isDragging ? "shadow-inner" : ""}`}
+        onClick={handleTrackClick}
       >
         <div
           {...attributes}
           {...listeners}
-          className="touch-none flex items-center justify-center w-10 h-10 rounded-md 
-            hover:bg-white/10 transition-colors cursor-grab active:cursor-grabbing"
+          onClick={(e) => e.stopPropagation()}
+          className="touch-none flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white/10 transition-colors cursor-grab active:cursor-grabbing"
         >
-          <GripVertical className="w-5 h-5 text-neutral-400" />
+          <GripVertical className="w-4 h-4 text-neutral-400" />
         </div>
 
         <div className="relative flex-shrink-0">
-          <Image
-            src={track.album.cover_small || ''}
-            alt={track.title}
-            width={48}
-            height={48}
-            className={`rounded-md shadow-lg transition-transform ${
-              isDragging ? 'scale-105' : ''
-            }`}
-          />
-          {index === currentTrackIndex && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+          {track.album.cover_small ? (
+            <Image
+              src={track.album.cover_small}
+              alt={track.title}
+              width={40}
+              height={40}
+              className={`rounded-lg shadow-lg transition-transform ${isDragging ? "scale-105" : ""}`}
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center">
+              <Music2 className="w-5 h-5 text-neutral-400" />
             </div>
           )}
+          {index === currentTrackIndex && <SoundWave />}
         </div>
 
-        <div
-          className="flex-1 min-w-0 cursor-pointer py-2"
-          onClick={() => onQueueItemClick(track, index)}
-        >
-          <p className="font-medium text-base text-white truncate">{track.title}</p>
-          <p className="text-sm text-neutral-400 truncate">
-            {track.artist.name}
+        <div className="flex-1 min-w-0 py-1">
+          <p className={`font-medium text-sm truncate ${index === currentTrackIndex ? "text-white" : "text-neutral-200"}`}>
+            {track.title}
           </p>
+          <p className="text-xs text-neutral-400 truncate">{track.artist.name}</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* <span className="text-sm text-neutral-500">
-            {formatTimeDesktop(track.duration)}
-          </span> */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              removeFromQueue(index);
-            }}
-            className="opacity-0 group-hover:opacity-100 p-2 rounded-md
-              hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
-          >
-            <ListX className="w-5 h-5" />
-          </button>
-        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFromQueue(index);
+          }}
+          className="opacity-0 group-hover:opacity-100 p-2 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
+        >
+          <ListX className="w-4 h-4" />
+        </button>
       </div>
     </motion.div>
   );
@@ -526,7 +545,12 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
   removeFromQueue,
   setQueue,
 }) => {
-  const handleDragEnd = (event: DragEndEvent) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent): void => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
       const oldIndex = queue.findIndex((track) => track.id === active.id);
@@ -536,41 +560,52 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-neutral-900 to-black">
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
-        <h2 className="text-xl font-bold text-white">Queue</h2>
-        <button
-          onClick={() => setQueue([])}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md
-            transition-colors text-sm font-medium"
-        >
-          Clear Queue
-        </button>
+    <div className="flex flex-col h-full bg-gradient-to-b from-neutral-900 via-neutral-900 to-black">
+      <div className="sticky top-0 z-10 backdrop-blur-md bg-neutral-900/80">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-white">Queue</h2>
+            <span className="text-xs text-neutral-400 font-medium px-2 py-1 rounded-full bg-white/10">
+              {queue.length} tracks
+            </span>
+          </div>
+          {queue.length > 0 && (
+            <button
+              onClick={() => setQueue([])}
+              className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 rounded-lg transition-colors text-xs font-medium"
+            >
+              Clear Queue
+            </button>
+          )}
+        </div>
       </div>
 
-      <DndContext
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={queue.map((track) => track.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <AnimatePresence>
-            {queue.map((track, index) => (
-              <SortableItem
-                key={track.id}
-                id={track.id}
-                track={track}
-                index={index}
-                onQueueItemClick={onQueueItemClick}
-                removeFromQueue={removeFromQueue}
-                currentTrackIndex={currentTrackIndex}
-              />
-            ))}
-          </AnimatePresence>
-        </SortableContext>
-      </DndContext>
+      <div className="flex-1 overflow-y-auto pt-2 pb-4 scrollbar-hide">
+        {queue.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-neutral-400 space-y-2">
+            <Music2 className="w-12 h-12" />
+            <p className="text-sm">Queue is empty</p>
+          </div>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={queue.map((track) => track.id)} strategy={verticalListSortingStrategy}>
+              <AnimatePresence>
+                {queue.map((track, index) => (
+                  <SortableItem
+                    key={track.id}
+                    id={track.id}
+                    track={track}
+                    index={index}
+                    onQueueItemClick={onQueueItemClick}
+                    removeFromQueue={removeFromQueue}
+                    currentTrackIndex={currentTrackIndex}
+                  />
+                ))}
+              </AnimatePresence>
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
     </div>
   );
 };

@@ -1007,15 +1007,11 @@ function SearchView({
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && searchQuery.trim()) {
-                    handleSearch(searchQuery);
+                    // Optionally trigger a full search on enter as well.
+                    fetchSearchResults(searchQuery);
                   }
                 }}
-                className={cn(
-                  "w-full px-14 py-4 rounded-full bg-white/[0.03] backdrop-blur-xl",
-                  "text-white placeholder-gray-400 border border-white/[0.04]",
-                  "focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-[15px]",
-                  "transition-all duration-200 hover:bg-white/[0.04]"
-                )}
+                className="w-full px-14 py-4 rounded-full bg-white/[0.03] backdrop-blur-xl text-white placeholder-gray-400 border border-white/[0.04] focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 hover:bg-white/[0.04]"
               />
               {searchQuery && (
                 <button
