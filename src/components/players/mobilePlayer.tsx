@@ -44,10 +44,13 @@ import {
   ListX,
   Guitar,
 } from "lucide-react";
+import Image from "next/image";
+import { toast } from "react-toastify";
+import { motion as m } from "framer-motion"; // optional alias
+import { usePalette } from "react-palette";
 
 import { Track, Lyric } from "@/lib/types/types";
-import Image from "next/image";
-import { usePalette } from 'react-palette';
+import { useAudio } from "@/lib/hooks/useAudio";
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
@@ -82,21 +85,23 @@ interface MobilePlayerProps {
   listenCount: number;
 }
 
-// ------------------------------------
-// Utility
-// ------------------------------------
-const formatTime = (seconds: number): string => {
+interface ProcessedLyric extends Lyric {
+  endTime: number;
+}
+
+/** Format a time in seconds => mm:ss. */
+function formatTimeMobile(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
+}
 
-// ------------------------------------
-// Seekbar
-// ------------------------------------
+/* ------------------------------------------------------
+   S E E K   B A R
+------------------------------------------------------ */
 interface SeekbarProps {
-  progress: number; // 0..1
+  progress: number;
   handleSeek: (time: number) => void;
   isMiniplayer?: boolean;
   duration: number;
@@ -110,13 +115,21 @@ const Seekbar: React.FC<SeekbarProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [localProgress, setLocalProgress] = useState(progress);
-  const progressRef = useRef<HTMLDivElement | null>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isDragging) {
       setLocalProgress(isNaN(progress) ? 0 : progress);
     }
   }, [progress, isDragging]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const calculateProgress = useCallback((clientX: number): number => {
     if (!progressRef.current) return 0;
@@ -126,14 +139,16 @@ const Seekbar: React.FC<SeekbarProps> = ({
 
   const handleDragStart = (clientX: number) => {
     setIsDragging(true);
+    setShowTooltip(true);
+    touchStartRef.current = clientX;
     setLocalProgress(calculateProgress(clientX));
   };
 
   const handleDragMove = useCallback(
     (clientX: number) => {
       if (isDragging) {
-        const newP = calculateProgress(clientX);
-        setLocalProgress(isNaN(newP) ? 0 : newP);
+        const newProgress = calculateProgress(clientX);
+        setLocalProgress(isNaN(newProgress) ? 0 : newProgress);
       }
     },
     [isDragging, calculateProgress]
@@ -143,65 +158,101 @@ const Seekbar: React.FC<SeekbarProps> = ({
     if (isDragging) {
       handleSeek(localProgress * duration);
       setIsDragging(false);
+      setShowTooltip(false);
     }
   }, [isDragging, localProgress, duration, handleSeek]);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handleDragMove(e.clientX);
-    const handleTouchMove = (e: TouchEvent) =>
+    const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX);
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       handleDragMove(e.touches[0].clientX);
-    const handleEnd = () => handleDragEnd();
+    };
+    const onEnd = () => handleDragEnd();
 
     if (isDragging) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("touchmove", handleTouchMove);
-      window.addEventListener("mouseup", handleEnd);
-      window.addEventListener("touchend", handleEnd);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('mouseup', onEnd);
+      window.addEventListener('touchend', onEnd);
     }
-
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("mouseup", handleEnd);
-      window.removeEventListener("touchend", handleEnd);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchend', onEnd);
     };
   }, [isDragging, handleDragMove, handleDragEnd]);
 
+  const height = isMiniplayer ? 'h-1' : 'h-2';
+  const thumbSize = isMiniplayer ? 'w-3 h-3' : 'w-4 h-4';
+
   return (
-    <div className="mx-4 relative">
+    <div 
+      className="relative mx-4 py-4 touch-none"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => !isDragging && setShowTooltip(false)}
+    >
       <div
         ref={progressRef}
-        className={`seekbar-container relative w-full ${
-          isMiniplayer ? "h-0.5" : "h-1"
-        } cursor-pointer`}
+        className={`relative w-full ${height} cursor-pointer bg-white/20 rounded-full`}
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
-        style={{
-          height: isMiniplayer ? "2px" : "4px",
-          borderRadius: "2px",
-          overflow: "hidden",
-          appearance: "none",
-        }}
       >
         <motion.div
-          className="seekbar-progress absolute left-0 top-0 h-full"
-          style={{
-            backgroundColor: "#ffffff",
-            opacity: 1,
-            borderRadius: "2px",
-            willChange: "width",
-          }}
+          className="absolute left-0 top-0 h-full bg-white rounded-full"
           animate={{ width: `${isNaN(localProgress) ? 0 : localProgress * 100}%` }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={isDragging 
+            ? { duration: 0 } 
+            : { type: "spring", stiffness: 300, damping: 30 }}
         />
+
+        {!isMiniplayer && (
+          <motion.div
+            className="absolute"
+            style={{
+              // Instead of centering at 50%, move it up (adjust "-10px" as needed)
+              top: "calc(50% - 10px)",
+              left: `calc(${localProgress * 100}%)`,
+              x: "-50%",
+              touchAction: "none",
+              cursor: "grab",
+            }}
+          >
+          <motion.div
+            className={`${thumbSize} bg-white rounded-full shadow-lg`}
+            animate={{
+              scale: isDragging || showTooltip ? 1.2 : 0,
+              opacity: isDragging || showTooltip ? 1 : 0,
+            }}
+            transition={{ duration: 0.2 }}
+          />
+        </motion.div>
+      )}
       </div>
+
+      <AnimatePresence>
+        {(showTooltip || isDragging) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full mb-2 bg-black/80 text-white text-xs px-2 py-1 rounded"
+            style={{ 
+              left: `calc(${localProgress * 100}%)`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {formatTime(localProgress * duration)}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
-
-// ------------------------------------
-// Quality Badge
-// ------------------------------------
+/* ------------------------------------------------------
+   Q U A L I T Y   B A D G E
+------------------------------------------------------ */
 const QualityBadge: React.FC<{
   quality: AudioQuality;
   onClick: () => void;
@@ -234,9 +285,9 @@ const QualityBadge: React.FC<{
   );
 };
 
-// ------------------------------------
-// ActionButton (icon+label cell)
-// ------------------------------------
+/* ------------------------------------------------------
+   A C T I O N   B U T T O N
+------------------------------------------------------ */
 const ActionButton: React.FC<{
   icon: React.FC<SVGProps<SVGSVGElement>>;
   label: string;
@@ -250,13 +301,9 @@ const ActionButton: React.FC<{
     whileTap={{ scale: 0.95 }}
   >
     <div
-      className={`w-12 h-12 rounded-full flex items-center justify-center
-        ${
-          active
-            ? "bg-[#1a237e]/20 text-green-500"
-            : "bg-white/10 text-white/60"
-        }
-        transition-all duration-200 hover:bg-white/20`}
+      className={`w-12 h-12 rounded-full flex items-center justify-center ${
+        active ? "bg-[#1a237e]/20 text-green-500" : "bg-white/10 text-white/60"
+      } transition-all duration-200 hover:bg-white/20`}
     >
       <Icon className="w-6 h-6" />
     </div>
@@ -264,25 +311,26 @@ const ActionButton: React.FC<{
   </motion.button>
 );
 
-// ------------------------------------
-// Main MobilePlayer Component
-// ------------------------------------
+/* ------------------------------------------------------
+   M O B I L E   P L A Y E R
+------------------------------------------------------ */
 const MobilePlayer: React.FC<MobilePlayerProps> = ({
   currentTrack,
   isPlaying,
-  togglePlay,
-  setQueue,
   previousTracks,
+  setQueue,
+  togglePlay,
   skipTrack,
   previousTrack,
+  downloadTrack,
   seekPosition,
-  repeatMode,
-  setRepeatMode,
   duration,
   handleSeek,
   isLiked,
-  listenCount,
+  repeatMode,
+  setRepeatMode,
   toggleLike,
+  removeFromQueue,
   lyrics,
   currentLyricIndex,
   showLyrics,
@@ -291,127 +339,164 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   shuffleQueue,
   queue,
   currentTrackIndex,
-  removeFromQueue,
   onQueueItemClick,
   setIsPlayerOpen,
-  downloadTrack,
+  listenCount,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [audioQuality, setAudioQuality] = useState<AudioQuality>("MAX");
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [showQueueUI, setShowQueueUI] = useState(false);
-  const [miniPlayerTouchStartY, setMiniPlayerTouchStartY] = useState<
-    number | null
-  >(null);
-  const [dominantColor, setDominantColor] = useState<string | null>(null);
-  const [userScrolling, setUserScrolling] = useState(false);
-  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+
+  const [miniPlayerTouchStartY, setMiniPlayerTouchStartY] = useState<number | null>(
     null
   );
+  const [dominantColor, setDominantColor] = useState<string | null>(null);
+  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoScrollingRef = useRef(false);
   const lyricsRef = useRef<HTMLDivElement>(null);
   const [canShowActions, setCanShowActions] = useState(true);
-  const { data } = usePalette(currentTrack.album.cover_medium);
+  const [userScrolling, setUserScrolling] = useState<boolean>(false);
+
+
+  const controls = useAnimation();
+
+  // Access from custom audio hook
+  const { audioQuality, isDataSaver, changeAudioQuality } = useAudio();
+
+  const processedLyrics = useMemo<ProcessedLyric[]>(() => {
+    return lyrics.map((lyric: Lyric, i: number) => ({
+      ...lyric,
+      endTime: lyrics[i + 1]?.time || duration,
+    }));
+  }, [lyrics, duration]);
+
+  const getLyricProgress = (): number => {
+    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex]) return 0;
+    const currentL = processedLyrics[currentLyricIndex];
+    const start = currentL.time;
+    const end = currentL.endTime || duration;
+    const segmentDuration = end - start;
+    const elapsed = seekPosition - start;
+    return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
+  };
+  
+  const lyricProgress = getLyricProgress();
+
+  const handleUserScroll = (): void => {
+    if (isAutoScrollingRef.current) return;
+    setUserScrolling(true);
+    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
+    userScrollTimeoutRef.current = setTimeout(() => {
+      setUserScrolling(false);
+    }, 3000);
+  };
 
   useEffect(() => {
-    let resizeTimeout: NodeJS.Timeout | null = null;
+    // If userScrolling just ended => auto-scroll to active lyric
+    if (!userScrolling && showLyrics && lyricsRef.current) {
+      const container = lyricsRef.current;
+      const activeLine = container.children[currentLyricIndex] as HTMLElement;
+  
+      if (activeLine) {
+        isAutoScrollingRef.current = true;
+        const offsetTop = activeLine.offsetTop;
+        const halfContainer = container.clientHeight / 2;
+        const halfLine = activeLine.offsetHeight / 2;
+        const scrollPos = offsetTop - halfContainer + halfLine - 20;
+  
+        container.scrollTo({ 
+          top: scrollPos, 
+          behavior: "smooth" 
+        });
+  
+        setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, 600);
+      }
+    }
+  }, [userScrolling, showLyrics, currentLyricIndex]);
+  
 
+  // Extract approximate color from track cover (dominant color)
+  useEffect(() => {
+    if (!currentTrack.album.cover_medium) {
+      setDominantColor("#000000");
+      return;
+    }
+    
+    let isCancelled = false;
+    
+    // Fix the Image constructor typing
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img: HTMLImageElement = new (window.Image as any)();
+    
+    img.crossOrigin = "Anonymous";
+    img.src = currentTrack.album.cover_medium;
+    
+    img.onload = () => {
+      if (isCancelled) return;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      canvas.width = 1;
+      canvas.height = 1;
+      ctx.drawImage(img, 0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      setDominantColor(`rgb(${r}, ${g}, ${b})`);
+    };
+    
+    img.onerror = () => {
+      if (!isCancelled) {
+        setDominantColor("#000000");
+      }
+    };
+    
+    return () => {
+      isCancelled = true;
+    };
+}, [currentTrack.album.cover_medium]);
+
+  // Adjust show/hide action buttons depending on screen size
+  useEffect(() => {
+    let resizeTimeout: NodeJS.Timeout | null = null;
     const handleResize = () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
-
       resizeTimeout = setTimeout(() => {
-        setCanShowActions(window.innerWidth > 375);
-      }, 100); // Throttle updates
+        setCanShowActions(window.innerWidth > 400);
+      }, 100);
     };
-
-    // Initial call
     handleResize();
-
     window.addEventListener("resize", handleResize);
-
     return () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
       window.removeEventListener("resize", handleResize);
     };
   }, []);
 
-  const controls = useAnimation();
-
-  // Additional “More Options” items
+  /* More Options Items */
   const moreOptionsItems = [
     { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
-    {
-      icon: Ban,
-      label: "Dislike",
-      onClick: () => console.log("Disliked track"),
-    },
-    {
-      icon: Share2,
-      label: "Share",
-      onClick: () => console.log("Shared track to social"),
-    },
-    {
-      icon: UserPlus,
-      label: "Follow Artist",
-      onClick: () => console.log("Followed artist"),
-    },
-    {
-      icon: Radio,
-      label: "Start Radio",
-      onClick: () => console.log("Started radio"),
-    },
-    {
-      icon: Library,
-      label: "Add to Playlist",
-      onClick: () => setShowAddToPlaylistModal(true),
-    },
-    {
-      icon: Share,
-      label: "Copy Link",
-      onClick: () => console.log("Link Copied"),
-    },
-    {
-      icon: Music,
-      label: "Lyrics",
-      active: showLyrics,
-      onClick: toggleLyricsView,
-    },
-    {
-      icon: Flag,
-      label: "Report",
-      onClick: () => console.log("Reported track"),
-    },
-    {
-      icon: Download,
-      label: "Download",
-      onClick: () => downloadTrack(currentTrack),
-    },
-    {
-      icon: Lock,
-      label: "Audio Quality",
-      onClick: () => setShowAudioMenu(true),
-    },
-    {
-      icon: AlertCircle,
-      label: "Song Info",
-      onClick: () => console.log("Song Info displayed"),
-    },
-    {
-      icon: Mic2,
-      label: "Karaoke Mode",
-      onClick: () => console.log("Karaoke mode started"),
-    },
+    { icon: Ban, label: "Dislike", onClick: () => console.log("Disliked track") },
+    { icon: Share2, label: "Share", onClick: () => console.log("Shared track") },
+    { icon: UserPlus, label: "Follow Artist", onClick: () => console.log("Followed Artist") },
+    { icon: Radio, label: "Start Radio", onClick: () => console.log("Radio") },
+    { icon: Library, label: "Add to Playlist", onClick: () => setShowAddToPlaylistModal(true) },
+    { icon: ListMusic, label: "Queue", onClick: () => setShowQueueUI(true) },
+    { icon: Share, label: "Copy Link", onClick: () => console.log("Copied link") },
+    { icon: Music, label: "Lyrics", active: showLyrics, onClick: toggleLyricsView },
+    { icon: Flag, label: "Report", onClick: () => console.log("Reported track") },
+    { icon: Download, label: "Download", onClick: () => downloadTrack(currentTrack) },
+    { icon: Lock, label: "Audio Quality", onClick: () => setShowAudioMenu(true) },
+    { icon: AlertCircle, label: "Song Info", onClick: () => console.log("Song Info displayed") },
+    { icon: Mic2, label: "Karaoke Mode", onClick: () => console.log("Karaoke mode started") },
   ];
+  
 
-  // We can limit certain visible action buttons for smaller screens
-  const getVisibleActionButtons = () => {
-    // Only show action buttons if screen is large enough and we explicitly want to show them
-    if (!canShowActions) {
-      return [];
-    }
-    // For larger screens, return all action buttons
+  /* Buttons to show at the bottom (if canShowActions = true) */
+  const getVisibleActionButtons = useCallback(() => {
+    if (!canShowActions) return [];
     return [
       { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
       {
@@ -425,111 +510,79 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
         onClick: () => downloadTrack(currentTrack),
       },
     ];
-  };
+  }, [canShowActions, currentTrack, isLiked, toggleLike, downloadTrack]);
 
-  // Handle user scroll in lyrics
-  const handleUserScroll = () => {
-    if (isAutoScrollingRef.current) return;
-    setUserScrolling(true);
-    if (userScrollTimeoutRef.current)
-      clearTimeout(userScrollTimeoutRef.current);
-    userScrollTimeoutRef.current = setTimeout(() => {
-      setUserScrolling(false);
-    }, 3000);
-  };
-
-  // Expand / collapse main player
+  /** Expand or collapse miniplayer => full view. */
   const togglePlayer = () => {
     setIsExpanded(!isExpanded);
     setIsPlayerOpen(!isExpanded);
   };
 
-  // Extract approximate color from track cover
-  useEffect(() => {
-    if (!currentTrack.album.cover_medium) {
-      setDominantColor("#000000");
-      return;
+  const backClickCountRef = useRef(0);
+const handleBackClick = useCallback(() => {
+  backClickCountRef.current++;
+  if (backClickCountRef.current === 1) {
+    setTimeout(() => {
+      if (backClickCountRef.current === 1) {
+        // Single click: reset current song to start.
+        handleSeek(0);
+      }
+      backClickCountRef.current = 0;
+    }, 300);
+  } else if (backClickCountRef.current === 2) {
+    // Double click: go to previous track.
+    previousTrack();
+    backClickCountRef.current = 0;
+  }
+}, [handleSeek, previousTrack]);
+
+
+const forwardClickCountRef = useRef(0);
+const handleForwardClick = useCallback(() => {
+  forwardClickCountRef.current++;
+  if (forwardClickCountRef.current === 1) {
+    setTimeout(() => {
+      if (forwardClickCountRef.current === 1) {
+        // single
+        const timeLeft = duration - seekPosition;
+        if (timeLeft <= 5) skipTrack();
+        else handleSeek(duration);
+      }
+      forwardClickCountRef.current = 0;
+    }, 300);
+  } else if (forwardClickCountRef.current === 2) {
+    // double
+    skipTrack();
+    forwardClickCountRef.current = 0;
+  }
+}, [duration, seekPosition, skipTrack, handleSeek]);
+
+  /** If user tries to drag miniplayer left or right => skip track, etc. */
+  const handleMiniPlayerDragEnd = (info: PanInfo) => {
+    const threshold = 100;
+    if (info.offset.x > threshold) {
+      // drag right => previous
+      controls.start({ x: "100%", transition: { duration: 0.3 } }).then(() => {
+        previousTrack();
+        controls.set({ x: "-100%" });
+        controls.start({ x: 0, transition: { duration: 0.3 } });
+      });
+    } else if (info.offset.x < -threshold) {
+      // drag left => skip
+      controls.start({ x: "-100%", transition: { duration: 0.3 } }).then(() => {
+        skipTrack();
+        controls.set({ x: "100%" });
+        controls.start({ x: 0, transition: { duration: 0.3 } });
+      });
+    } else {
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 300 } });
     }
-
-    let isCancelled = false;
-
-    const img = new window.Image();
-    img.crossOrigin = "Anonymous";
-    img.src = currentTrack.album.cover_medium;
-
-    img.onload = () => {
-      if (isCancelled) return;
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      canvas.width = 1;
-      canvas.height = 1;
-      ctx.drawImage(img, 0, 0, 1, 1);
-
-      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-      const color = `rgb(${r}, ${g}, ${b})`;
-      setDominantColor(color);
-    };
-
-    img.onerror = () => {
-      if (!isCancelled) setDominantColor("#000000");
-    };
-
-    return () => {
-      // Prevent state updates on unmounted component
-      isCancelled = true;
-    };
-  }, [currentTrack.album.cover_medium]);
-
-  // Lyrics auto-scroll
-  const processedLyrics = useMemo(() => {
-    return lyrics.map((lyric, i) => ({
-      ...lyric,
-      endTime: lyrics[i + 1]?.time || duration,
-    }));
-  }, [lyrics, duration]);
-
-  const getLyricProgress = () => {
-    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex])
-      return 0;
-    const currentL = processedLyrics[currentLyricIndex];
-    const start = currentL.time;
-    const end = currentL.endTime || duration;
-    const segmentDuration = end - start;
-    const elapsed = seekPosition - start;
-    return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
   };
 
-  const lyricProgress = getLyricProgress();
-
-  useEffect(() => {
-    if (!showLyrics || !lyricsRef.current) return;
-    if (!userScrolling) {
-      const container = lyricsRef.current;
-      const currentLyricEl = container.children[
-        currentLyricIndex
-      ] as HTMLElement;
-      if (currentLyricEl) {
-        isAutoScrollingRef.current = true;
-        const offsetTop = currentLyricEl.offsetTop;
-        const offsetHeight = currentLyricEl.offsetHeight;
-        const containerHeight = container.clientHeight;
-        const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
-        container.scrollTo({ top: scrollPos, behavior: "smooth" });
-        setTimeout(() => {
-          isAutoScrollingRef.current = false;
-        }, 1000);
-      }
-    }
-  }, [currentLyricIndex, showLyrics, userScrolling]);
-
-  // Swipe up to expand miniplayer
+  /** If user swipes up => expand the player. */
   const handleMiniPlayerTouchStart = (e: React.TouchEvent) => {
     setMiniPlayerTouchStartY(e.touches[0].clientY);
   };
-
   const handleMiniPlayerTouchMove = (e: React.TouchEvent) => {
     if (miniPlayerTouchStartY !== null) {
       const deltaY = miniPlayerTouchStartY - e.touches[0].clientY;
@@ -540,95 +593,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
       }
     }
   };
-
   const handleMiniPlayerTouchEnd = () => {
     setMiniPlayerTouchStartY(null);
   };
 
-  // Double-click logic for skip vs. seek
-  let backClickCount = 0;
-  const handleBackClick = () => {
-    backClickCount++;
-    if (backClickCount === 1) {
-      setTimeout(() => {
-        if (backClickCount === 1) {
-          if (seekPosition > 5) {
-            handleSeek(0);
-          } else {
-            previousTrack();
-          }
-        }
-        backClickCount = 0;
-      }, 300);
-    } else if (backClickCount === 2) {
-      previousTrack();
-      backClickCount = 0;
-    }
-  };
-
-  let forwardClickCount = 0;
-  const handleForwardClick = () => {
-    forwardClickCount++;
-    if (forwardClickCount === 1) {
-      setTimeout(() => {
-        if (forwardClickCount === 1) {
-          const timeLeft = duration - seekPosition;
-          if (timeLeft <= 5) {
-            skipTrack();
-          } else {
-            handleSeek(duration);
-          }
-        }
-        forwardClickCount = 0;
-      }, 300);
-    } else if (forwardClickCount === 2) {
-      skipTrack();
-      forwardClickCount = 0;
-    }
-  };
-
-  // Horizontal drag logic to skip track
-  const handleMiniPlayerDragEnd = (info: PanInfo) => {
-    const threshold = 100;
-    if (info.offset.x > threshold) {
-      controls.start({ x: "100%", transition: { duration: 0.3 } }).then(() => {
-        previousTrack();
-        controls.set({ x: "-100%" });
-        controls.start({ x: 0, transition: { duration: 0.3 } });
-      });
-    } else if (info.offset.x < -threshold) {
-      controls.start({ x: "-100%", transition: { duration: 0.3 } }).then(() => {
-        skipTrack();
-        controls.set({ x: "100%" });
-        controls.start({ x: 0, transition: { duration: 0.3 } });
-      });
-    } else {
-      controls.start({ x: 0, transition: { type: "spring", stiffness: 300 } });
-    }
-  };
-
-  const handleDragEnd = (info: PanInfo) => {
-    const threshold = 100;
-    if (info.offset.x > threshold) {
-      controls.start({ x: "100%", transition: { duration: 0.3 } }).then(() => {
-        previousTrack();
-        controls.set({ x: "-100%" });
-        controls.start({ x: 0, transition: { duration: 0.3 } });
-      });
-    } else if (info.offset.x < -threshold) {
-      controls.start({ x: "-100%", transition: { duration: 0.3 } }).then(() => {
-        skipTrack();
-        controls.set({ x: "100%" });
-        controls.start({ x: 0, transition: { duration: 0.3 } });
-      });
-    } else {
-      controls.start({ x: 0, transition: { type: "spring", stiffness: 300 } });
-    }
-  };
-
-  // Main player control cluster
+  /** The main cluster of playback controls in expanded mode. */
   const mainControlButtons = (
-    <div className="w-full flex items-center justify-between mb-8">
+    <div className="w-full flex items-center justify-between mb-8 px-4">
       <button
         onClick={shuffleQueue}
         className={`p-3 rounded-full ${
@@ -686,11 +657,12 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   return (
     <div className="px-6 flex flex-col items-center">
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-50">
-        {/* --- Miniplayer --- */}
+      {/* Container for miniplayer or expanded player */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-50">
+      {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
-            className="mx-2 rounded-xl overflow-hidden mb-[env(safe-area-inset-bottom)]"
+            className="mx-2 rounded-xl overflow-visible mb-[env(safe-area-inset-bottom)]"            
             style={{
               background: dominantColor
                 ? `linear-gradient(to bottom, ${dominantColor}CC, rgba(0,0,0,0.95))`
@@ -713,6 +685,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
           >
             <div className="p-3">
               <div className="flex items-center justify-between">
+                {/* Artwork + Title */}
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <motion.div
                     className="relative w-12 h-12 rounded-lg overflow-hidden"
@@ -736,6 +709,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     </p>
                   </div>
                 </div>
+                {/* Buttons: back / play / forward / like */}
                 <div className="flex items-center space-x-2 justify-center">
                   <button
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -785,6 +759,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Seekbar */}
               <div className="mt-2">
                 <Seekbar
                   progress={seekPosition / duration}
@@ -813,7 +789,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 26, stiffness: 300 }}
             >
-              {/* Header */}
+              {/* Header: top row */}
               <div className="flex items-center justify-between p-4">
                 <button
                   className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -828,33 +804,44 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
                     <Airplay className="w-5 h-5 text-white/60" />
                   </button>
+                  {canShowActions ? (
                   <button
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     onClick={() => setShowQueueUI(true)}
                   >
                     <ListMusic className="w-5 h-5 text-white/60" />
                   </button>
-                  {/* Only show More options in header when action buttons are hidden */}
-                  {!canShowActions && (
-                    <button
-                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                      onClick={() => setShowMoreOptions(true)}
-                    >
-                      <MoreHorizontal className="w-5 h-5 text-white/60" />
-                    </button>
-                  )}
+                ) : ( 
+                  <>
+                   <button
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    onClick={() => setShowQueueUI(true)}
+                  >
+                    <ListMusic className="w-5 h-5 text-white/60" />
+                  </button>
+
+                  <button
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    onClick={() => setShowMoreOptions(true)}
+                  >
+                    <MoreHorizontal className="w-5 h-5 text-white/60" />
+                  </button>
+                  </>
+                )}
                 </div>
               </div>
 
+              {/* Body content */}
               <div className="px-4 flex-grow flex flex-col items-center">
+                {/* If queue open */}
                 {showQueueUI ? (
-                  // Queue UI
                   <div
-                    className="h-[calc(100vh-15vh)] w-full overflow-y-auto"
+                    className="h-[calc(100vh-15vh)] w-full overflow-y-auto custom-scrollbar"
                     style={{
                       paddingBottom: "calc(6rem + env(safe-area-inset-bottom))",
                     }}
                   >
+                    {/* Example queue UI */}
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center">
                         <button
@@ -877,7 +864,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                      {/* Previous Tracks (history) */}
+                      {/* Show previous tracks */}
                       {previousTracks.map((t, i) => (
                         <motion.div
                           key={`prev-${t.id}-${i}`}
@@ -886,14 +873,14 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                           whileTap={{ scale: 0.98 }}
                           onClick={() => onQueueItemClick(t, -1 * (i + 1))}
                         >
-                          <div className="w-12 h-12 rounded-lg overflow-hidden">
-                          <Image
-                            src={t.album.cover_medium}
-                            alt={t.title}
-                            fill
-                            sizes="(max-width: 768px) 48px, 96px"
-                            className="object-cover"
-                          />
+                          <div className="w-12 h-12 rounded-lg overflow-hidden relative">
+                            <Image
+                              src={t.album.cover_medium}
+                              alt={t.title}
+                              fill
+                              sizes="(max-width: 768px) 48px, 96px"
+                              className="object-cover"
+                            />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-gray-400 font-medium truncate">
@@ -906,7 +893,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         </motion.div>
                       ))}
 
-                      {/* Actual Queue */}
+                      {/* Actual queue */}
                       {queue.map((tr, i) => (
                         <AnimatePresence key={`queue-${tr.id}-${i}`}>
                           <motion.div className="relative">
@@ -930,13 +917,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                                 onClick={() => onQueueItemClick(tr, i)}
                               >
                                 <div className="w-12 h-12 relative rounded-lg overflow-hidden">
-                                <Image
-                                  src={tr.album.cover_medium}
-                                  alt={tr.title}
-                                  fill
-                                  sizes="(max-width: 768px) 48px, 96px"
-                                  className="object-cover"
-                                />
+                                  <Image
+                                    src={tr.album.cover_medium}
+                                    alt={tr.title}
+                                    fill
+                                    sizes="(max-width: 768px) 48px, 96px"
+                                    className="object-cover"
+                                  />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-medium truncate">
@@ -963,10 +950,11 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     </div>
                   </div>
                 ) : showLyrics ? (
-                  // Lyrics View
+                  // --- Lyrics View (Integrated from old code) ---
                   <div
-                    className="h-[calc(100vh-10vh)] w-full overflow-y-auto"
+                    className="h-[calc(100vh-10vh)] w-full overflow-y-auto custom-scrollbar"
                     onScroll={handleUserScroll}
+                    onTouchMove={handleUserScroll}
                   >
                     <div className="flex items-center mb-6">
                       <button
@@ -982,11 +970,10 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     <div
                       className="space-y-6 overflow-y-auto"
                       ref={lyricsRef}
-                      style={{ height: "calc(100% - 4rem)" }}
+                      style={{ height: "calc(100% - 4rem)", scrollBehavior: "smooth", }}
                     >
-                      {processedLyrics.map((ly, idx) => {
+                      {processedLyrics.map((ly: ProcessedLyric, idx: number) => {
                         const isActive = idx === currentLyricIndex;
-
                         if (!isActive) {
                           return (
                             <motion.p
@@ -1002,12 +989,9 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                             </motion.p>
                           );
                         }
-
-                        // For active lyrics, animate letters
-                        const letters = ly.text.split("");
+                        const letters: string[] = ly.text.split("");
                         const totalLetters = letters.length;
                         const filled = Math.floor(lyricProgress * totalLetters);
-
                         return (
                           <motion.p
                             key={idx}
@@ -1015,7 +999,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                             initial="hidden"
                             animate="visible"
                           >
-                            {letters.map((letter, i2) => (
+                            {letters.map((letter: string, i2: number) => (
                               <motion.span
                                 key={i2}
                                 initial={{ color: "rgba(255,255,255,0.4)" }}
@@ -1026,8 +1010,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                                       : "rgba(255,255,255,0.4)",
                                 }}
                                 transition={{
-                                  duration: 0.3,
-                                  delay: i2 * 0.05, // Add delay per letter for smoother animation
+                                  duration: 0.2,
+                                  delay: i2 * 0.02,
                                 }}
                               >
                                 {letter}
@@ -1037,10 +1021,13 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         );
                       })}
                     </div>
+
                   </div>
-                ) : (
-                  // Expanded Player (artwork, controls, etc.)
+                ) :
+                (
+                  // Normal expanded player
                   <>
+                    {/* Artwork background blur */}
                     <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
                       <div
                         className="absolute inset-0"
@@ -1048,11 +1035,9 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                           backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
-                          filter: "blur(25px) brightness(1.2) saturate(1.3)", // Increased brightness and saturation
-                          transform: "scale(1.8)", // Slightly reduced from 2 for more visible effect
-                          opacity: 0.95, // Increased opacity for more visibility
-                          mask: "radial-gradient(circle at center, black 40%, transparent 80%)", // Adjusted gradient stops
-                          WebkitMask: "radial-gradient(circle at center, black 40%, transparent 80%)",
+                          filter: "blur(25px) brightness(1.2) saturate(1.3)",
+                          transform: "scale(1.8)",
+                          opacity: 0.95,  
                           zIndex: -1,
                         }}
                       />
@@ -1060,7 +1045,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         drag="x"
                         dragConstraints={{ left: 0, right: 0 }}
                         dragElastic={0.2}
-                        onDragEnd={(event, info) => handleDragEnd(info)}
+                        onDragEnd={(event, info) => handleMiniPlayerDragEnd(info)}
                         className="relative z-10 w-[min(60vw,320px)] h-[min(60vw,320px)]"
                       >
                         <Image
@@ -1072,15 +1057,17 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                           priority
                         />
                       </motion.div>
-                    </div>     
+                    </div>
+
+                    {/* Title + Artist */}
                     <div className="w-full text-center mb-8">
                       <h2 className="text-2xl font-bold text-white mb-2">
                         {currentTrack.title}
                       </h2>
-                      <p className="text-white/60">
-                        {currentTrack.artist.name}
-                      </p>
+                      <p className="text-white/60">{currentTrack.artist.name}</p>
                     </div>
+
+                    {/* Audio Quality Badge + Listen Count */}
                     <div className="flex flex-col items-center">
                       <QualityBadge
                         quality={audioQuality}
@@ -1091,19 +1078,22 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         <span>Listened {listenCount} times</span>
                       </p>
                     </div>
-                    <div className="w-full mb-8 mt-6">
-                      <Seekbar
-                        progress={seekPosition / duration}
-                        handleSeek={handleSeek}
-                        duration={duration}
-                      />
-                      <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
-                        <span>{formatTime(seekPosition)}</span>
-                        <span>{formatTime(duration)}</span>
-                      </div>
+
+                    {/* Seekbar */}
+                    <div className="w-full mb-8 mt-6 overflow-visible">
+                    <Seekbar progress={seekPosition / duration} handleSeek={handleSeek} duration={duration} />
+                    <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
+                      <span>{formatTimeMobile(seekPosition)}</span>
+                      <span>{formatTimeMobile(duration)}</span>
                     </div>
+                  </div>
+
+
+
+                    {/* Main playback controls */}
                     {mainControlButtons}
-                    {/* Only render if we have buttons to show */}
+
+                    {/* Extra action buttons */}
                     {getVisibleActionButtons().length > 0 && (
                       <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
                         {getVisibleActionButtons().map((btn, i) => (
@@ -1115,6 +1105,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                             onClick={btn.onClick}
                           />
                         ))}
+                        {/* "More" button for additional actions */}
                         <div className="md:hidden">
                           <ActionButton
                             icon={MoreHorizontal}
@@ -1150,50 +1141,56 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         <h3 className="text-lg font-bold text-white mb-4 text-center">
                           Audio Quality
                         </h3>
-                        {(
-                          [
-                            "MAX",
-                            "HIGH",
-                            "NORMAL",
-                            "DATA_SAVER",
-                          ] as AudioQuality[]
-                        ).map((qual) => (
-                          <button
-                            key={qual}
-                            className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all
-                              ${
+                        {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map(
+                          (qual) => (
+                            <button
+                              key={qual}
+                              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
                                 audioQuality === qual
                                   ? "bg-white/10"
                                   : "hover:bg-white/5"
                               }`}
-                            onClick={() => {
-                              setAudioQuality(qual);
-                              setShowAudioMenu(false);
-                            }}
-                          >
-                            <div className="flex flex-col items-start justify-center">
-                              <p className="text-white font-semibold leading-none">
-                                {qual}
-                              </p>
-                              <p className="text-sm text-white/60 leading-none mt-1">
-                                {qual === "MAX" &&
-                                  "HiFi Plus (24-bit, up to 192kHz)"}
-                                {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
-                                {qual === "NORMAL" && "High (320kbps)"}
-                                {qual === "DATA_SAVER" &&
-                                  "Data Saver (128kbps)"}
-                              </p>
-                            </div>
-                            {qual === audioQuality && (
-                              <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
-                                <motion.div
-                                  className="w-3 h-3 bg-white rounded-full"
-                                  layoutId="quality-indicator"
-                                />
+                              onClick={async () => {
+                                if (isDataSaver && qual !== "DATA_SAVER") {
+                                  toast.error(
+                                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
+                                  );
+                                  return;
+                                }
+                                try {
+                                  await changeAudioQuality(qual);
+                                  toast.success(`Switched to ${qual} Quality`);
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error("Failed to change audio quality");
+                                } finally {
+                                  setShowAudioMenu(false);
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col items-start justify-center">
+                                <p className="text-white font-semibold leading-none">
+                                  {qual}
+                                </p>
+                                <p className="text-sm text-white/60 leading-none mt-1">
+                                  {qual === "MAX" &&
+                                    "HiFi Plus (24-bit, up to 192kHz)"}
+                                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
+                                  {qual === "NORMAL" && "High (320kbps)"}
+                                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
+                                </p>
                               </div>
-                            )}
-                          </button>
-                        ))}
+                              {qual === audioQuality && (
+                                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
+                                  <motion.div
+                                    className="w-3 h-3 bg-white rounded-full"
+                                    layoutId="quality-indicator"
+                                  />
+                                </div>
+                              )}
+                            </button>
+                          )
+                        )}
                         <button
                           className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
                           onClick={() => setShowAudioMenu(false)}
@@ -1217,7 +1214,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     onClick={() => setShowMoreOptions(false)}
                   >
                     <motion.div
-                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl max-h-[80%] overflow-y-auto"
+                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl max-h-[80%] overflow-y-auto custom-scrollbar"
                       initial={{ y: "100%" }}
                       animate={{ y: 0 }}
                       exit={{ y: "100%" }}

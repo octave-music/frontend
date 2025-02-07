@@ -13,24 +13,28 @@
   "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "categories": ["music", "entertainment", "streaming"],
+  "categories": ["music", "entertainment", "streaming", "travel", "utilities"],
   "lang": "en-US",
   "media_control": "android-media-control",
   "media_session": {
-    "actions": ["play", "pause", "previoustrack", "nexttrack", "seekto", "seekbackward", "seekforward"],
+    "actions": [
+      "play",
+      "pause",
+      "previoustrack",
+      "nexttrack",
+      "seekto",
+      "seekbackward",
+      "seekforward"
+    ],
     "artwork": true
   },
   "dir": "ltr",
   "prefer_related_applications": false,
+  "id": "OctaveGoldOfficial",
   "icons": [
     {
-      "src": "images/favicon-16x16.png",
-      "sizes": "16x16",
-      "type": "image/png"
-    },
-    {
-      "src": "images/favicon-32x32.png",
-      "sizes": "32x32",
+      "src": "images/android-chrome-512x512.png",
+      "sizes": "512x512",
       "type": "image/png"
     },
     {
@@ -39,40 +43,68 @@
       "type": "image/png"
     },
     {
-      "src": "images/android-chrome-512x512.png",
-      "sizes": "512x512",
+      "src": "images/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png"
     },
     {
-      "src": "images/apple-touch-icon.png",
-      "sizes": "180x180",
+      "src": "images/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "images/favicon-16x16.png",
+      "sizes": "16x16",
       "type": "image/png"
     },
     {
       "src": "images/favicon.ico",
       "sizes": "48x48",
       "type": "image/x-icon"
-    },
+    }
+  ],
+  "screenshots": [
     {
-      "src": "images/defaultPlaylistImage.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "images/defaultSongImage.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "images/OctaveBanner.png",
-      "sizes": "1024x500",
+      "src": "/images/screenshot-desktop.png",
+      "sizes": "1920x1080",
       "type": "image/png",
-      "purpose": "any"
+      "form_factor": "wide"
     },
     {
-      "src": "images/liked-songs.webp",
-      "sizes": "512x512",
-      "type": "image/webp"
+      "src": "/images/screenshot-mobile.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "widgets": [
+    {
+      "name": "Octave Now Playing",
+      "short_name": "Now Playing",
+      "description": "Displays the currently playing song.",
+      "layout": "rectangular",
+      "size": "medium",
+      "update": "onChange",
+      "refresh_interval": 60
+    },
+    {
+      "name": "Octave Quick Controls",
+      "short_name": "Quick Controls",
+      "description": "Provides quick access to play/pause and next track.",
+      "layout": "square",
+      "size": "small",
+      "update": "onInteraction",
+      "refresh_interval": 30
     }
   ]
 }

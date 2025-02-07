@@ -1531,7 +1531,10 @@ const DesktopLayout = (props: DesktopLayoutProps) => {
                 volume={volume}
                 onVolumeChange={onVolumeChange}
                 audioQuality={audioQuality}
-                setAudioQuality={setAudioQuality}
+                setAudioQuality={(q) => {
+                  void storeSetting("audioQuality", q);
+                  setAudioQuality(q);
+                }}
                 storeSetting={storeSetting}
               />
             ) : view === "playlist" && currentPlaylist ? (

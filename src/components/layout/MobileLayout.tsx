@@ -38,6 +38,7 @@ import TrackItem from "../common/TrackItem";
 
 // Types
 import { Track, Playlist, Lyric, ContextMenuOption } from "@/lib/types/types";
+import { useAudio } from "@/lib/hooks/useAudio";
 
 type RepeatMode = "off" | "all" | "one";
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
@@ -1294,6 +1295,8 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
     setView,
   } = props;
 
+  const { changeAudioQuality } = useAudio();
+
   return (
     <div className="md:hidden flex flex-col h-[100dvh]">
       {/* Header */}
@@ -1313,7 +1316,11 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
           volume={volume}
           onVolumeChange={onVolumeChange}
           audioQuality={audioQuality}
-          setAudioQuality={setAudioQuality}
+          setAudioQuality={async (q) => {
+            setAudioQuality(q); 
+            await storeSetting("audioQuality", q);
+            await changeAudioQuality(q);
+            }}
           storeSetting={storeSetting}
         />
       ) : (
