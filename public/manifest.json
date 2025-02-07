@@ -73,24 +73,21 @@
       "url": "url"
     }
   },
-  "widgets": [
-    {
-      "name": "Octave Now Playing",
-      "short_name": "Now Playing",
-      "description": "Displays the currently playing song.",
-      "layout": "rectangular",
-      "size": "medium",
-      "update": "onChange",
-      "refresh_interval": 60
-    },
-    {
-      "name": "Octave Quick Controls",
-      "short_name": "Quick Controls",
-      "description": "Provides quick access to play/pause and next track.",
-      "layout": "square",
-      "size": "small",
-      "update": "onInteraction",
-      "refresh_interval": 30
+  "scope_extensions": [],
+  "related_applications": [],
+  "iarc_rating_id": "",
+  "screenshots": [],
+  "edge_side_panel": {
+    "enabled": false
+  },
+  "file_handlers": {
+    "audio/*": {
+      "action": "/audio-handler"
     }
-  ]
+  },
+  "handle_links": {
+    "default": "chrome"
+  },
+  "shortcuts": [],
+  "widgets": []
 }
