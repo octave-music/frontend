@@ -183,8 +183,12 @@ export function useAudio() {
         const existing = await getOfflineBlob(offlineKey);
         if (existing) {
           console.log("[useAudio] Found offlineKey =>", offlineKey, "Reusing offline blob");
+          const prevUrl = audioElement.src;
           const url = URL.createObjectURL(existing);
           audioElement.src = url;
+          if (prevUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(prevUrl);
+          }
           setCurrentTrack(track);
         } else {
           // 2) If not offline, fetch from server (with fallback)
@@ -209,18 +213,18 @@ export function useAudio() {
         await new Promise<void>((resolve, reject) => {
           const loadedHandler = () => {
             if (!audioElement) return;
-            audioElement.removeEventListener("loadeddata", loadedHandler);
+            audioElement.removeEventListener("canplaythrough", loadedHandler);
             audioElement.removeEventListener("error", errorHandler);
             resolve();
           };
           const errorHandler = () => {
             if (!audioElement) return;
-            audioElement.removeEventListener("loadeddata", loadedHandler);
+            audioElement.removeEventListener("canplaythrough", loadedHandler);
             audioElement.removeEventListener("error", errorHandler);
             reject(new Error("Audio loading failed"));
           };
           if (!audioElement) return;
-          audioElement.addEventListener("loadeddata", loadedHandler);
+          audioElement.addEventListener("canplaythrough", loadedHandler);
           audioElement.addEventListener("error", errorHandler);
           audioElement.load();
         });

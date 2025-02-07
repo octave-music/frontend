@@ -23,6 +23,7 @@ const ServiceWorkerRegistration = () => {
                   if (navigator.serviceWorker.controller) {
                     if (confirm("New version available. Refresh to update?")) {
                       window.location.reload();
+                      console.log("New version available. Refresh to update.");
                     }
                   } else {
                     console.log("Content is cached for offline use.");

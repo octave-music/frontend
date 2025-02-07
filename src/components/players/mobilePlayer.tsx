@@ -85,6 +85,10 @@ interface MobilePlayerProps {
   listenCount: number;
 }
 
+interface ProcessedLyric extends Lyric {
+  endTime: number;
+}
+
 /** Format a time in seconds => mm:ss. */
 function formatTimeMobile(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
@@ -97,11 +101,12 @@ function formatTimeMobile(seconds: number): string {
    S E E K   B A R
 ------------------------------------------------------ */
 interface SeekbarProps {
-  progress: number; // 0..1
+  progress: number;
   handleSeek: (time: number) => void;
   isMiniplayer?: boolean;
   duration: number;
 }
+
 const Seekbar: React.FC<SeekbarProps> = ({
   progress,
   handleSeek,
@@ -110,16 +115,22 @@ const Seekbar: React.FC<SeekbarProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [localProgress, setLocalProgress] = useState(progress);
-  const progressRef = useRef<HTMLDivElement | null>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<number>(0);
 
-  // If not dragging, follow the “real” progress
   useEffect(() => {
     if (!isDragging) {
       setLocalProgress(isNaN(progress) ? 0 : progress);
     }
   }, [progress, isDragging]);
 
-  /** Convert clientX => 0..1 progress. */
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const calculateProgress = useCallback((clientX: number): number => {
     if (!progressRef.current) return 0;
     const rect = progressRef.current.getBoundingClientRect();
@@ -128,14 +139,16 @@ const Seekbar: React.FC<SeekbarProps> = ({
 
   const handleDragStart = (clientX: number) => {
     setIsDragging(true);
+    setShowTooltip(true);
+    touchStartRef.current = clientX;
     setLocalProgress(calculateProgress(clientX));
   };
 
   const handleDragMove = useCallback(
     (clientX: number) => {
       if (isDragging) {
-        const newP = calculateProgress(clientX);
-        setLocalProgress(isNaN(newP) ? 0 : newP);
+        const newProgress = calculateProgress(clientX);
+        setLocalProgress(isNaN(newProgress) ? 0 : newProgress);
       }
     },
     [isDragging, calculateProgress]
@@ -145,62 +158,98 @@ const Seekbar: React.FC<SeekbarProps> = ({
     if (isDragging) {
       handleSeek(localProgress * duration);
       setIsDragging(false);
+      setShowTooltip(false);
     }
   }, [isDragging, localProgress, duration, handleSeek]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX);
-    const onTouchMove = (e: TouchEvent) =>
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       handleDragMove(e.touches[0].clientX);
+    };
     const onEnd = () => handleDragEnd();
 
     if (isDragging) {
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("touchmove", onTouchMove);
-      window.addEventListener("mouseup", onEnd);
-      window.addEventListener("touchend", onEnd);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('mouseup', onEnd);
+      window.addEventListener('touchend', onEnd);
     }
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("mouseup", onEnd);
-      window.removeEventListener("touchend", onEnd);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchend', onEnd);
     };
   }, [isDragging, handleDragMove, handleDragEnd]);
 
+  const height = isMiniplayer ? 'h-1' : 'h-2';
+  const thumbSize = isMiniplayer ? 'w-3 h-3' : 'w-4 h-4';
+
   return (
-    <div className="mx-4 relative">
+    <div 
+      className="relative mx-4 py-4 touch-none"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => !isDragging && setShowTooltip(false)}
+    >
       <div
         ref={progressRef}
-        className={`seekbar-container relative w-full ${
-          isMiniplayer ? "h-0.5" : "h-1"
-        } cursor-pointer`}
+        className={`relative w-full ${height} cursor-pointer bg-white/20 rounded-full`}
         onMouseDown={(e) => handleDragStart(e.clientX)}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
-        style={{
-          height: isMiniplayer ? "2px" : "4px",
-          borderRadius: "2px",
-          overflow: "hidden",
-          appearance: "none",
-          backgroundColor: "transparent",
-        }}
       >
         <motion.div
-          className="seekbar-progress absolute left-0 top-0 h-full"
-          style={{
-            backgroundColor: "#ffffff",
-            opacity: 1,
-            borderRadius: "2px",
-            willChange: "width",
-          }}
+          className="absolute left-0 top-0 h-full bg-white rounded-full"
           animate={{ width: `${isNaN(localProgress) ? 0 : localProgress * 100}%` }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={isDragging 
+            ? { duration: 0 } 
+            : { type: "spring", stiffness: 300, damping: 30 }}
         />
+
+        {!isMiniplayer && (
+          <motion.div
+            className="absolute"
+            style={{
+              // Instead of centering at 50%, move it up (adjust "-10px" as needed)
+              top: "calc(50% - 10px)",
+              left: `calc(${localProgress * 100}%)`,
+              x: "-50%",
+              touchAction: "none",
+              cursor: "grab",
+            }}
+          >
+          <motion.div
+            className={`${thumbSize} bg-white rounded-full shadow-lg`}
+            animate={{
+              scale: isDragging || showTooltip ? 1.2 : 0,
+              opacity: isDragging || showTooltip ? 1 : 0,
+            }}
+            transition={{ duration: 0.2 }}
+          />
+        </motion.div>
+      )}
       </div>
+
+      <AnimatePresence>
+        {(showTooltip || isDragging) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full mb-2 bg-black/80 text-white text-xs px-2 py-1 rounded"
+            style={{ 
+              left: `calc(${localProgress * 100}%)`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {formatTime(localProgress * duration)}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
-
 /* ------------------------------------------------------
    Q U A L I T Y   B A D G E
 ------------------------------------------------------ */
@@ -308,11 +357,67 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   const isAutoScrollingRef = useRef(false);
   const lyricsRef = useRef<HTMLDivElement>(null);
   const [canShowActions, setCanShowActions] = useState(true);
+  const [userScrolling, setUserScrolling] = useState<boolean>(false);
+
 
   const controls = useAnimation();
 
   // Access from custom audio hook
   const { audioQuality, isDataSaver, changeAudioQuality } = useAudio();
+
+  const processedLyrics = useMemo<ProcessedLyric[]>(() => {
+    return lyrics.map((lyric: Lyric, i: number) => ({
+      ...lyric,
+      endTime: lyrics[i + 1]?.time || duration,
+    }));
+  }, [lyrics, duration]);
+
+  const getLyricProgress = (): number => {
+    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex]) return 0;
+    const currentL = processedLyrics[currentLyricIndex];
+    const start = currentL.time;
+    const end = currentL.endTime || duration;
+    const segmentDuration = end - start;
+    const elapsed = seekPosition - start;
+    return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
+  };
+  
+  const lyricProgress = getLyricProgress();
+
+  const handleUserScroll = (): void => {
+    if (isAutoScrollingRef.current) return;
+    setUserScrolling(true);
+    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
+    userScrollTimeoutRef.current = setTimeout(() => {
+      setUserScrolling(false);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    // If userScrolling just ended => auto-scroll to active lyric
+    if (!userScrolling && showLyrics && lyricsRef.current) {
+      const container = lyricsRef.current;
+      const activeLine = container.children[currentLyricIndex] as HTMLElement;
+  
+      if (activeLine) {
+        isAutoScrollingRef.current = true;
+        const offsetTop = activeLine.offsetTop;
+        const halfContainer = container.clientHeight / 2;
+        const halfLine = activeLine.offsetHeight / 2;
+        const scrollPos = offsetTop - halfContainer + halfLine - 20;
+  
+        container.scrollTo({ 
+          top: scrollPos, 
+          behavior: "smooth" 
+        });
+  
+        setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, 600);
+      }
+    }
+  }, [userScrolling, showLyrics, currentLyricIndex]);
+  
 
   // Extract approximate color from track cover (dominant color)
   useEffect(() => {
@@ -375,41 +480,19 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
     { icon: Ban, label: "Dislike", onClick: () => console.log("Disliked track") },
     { icon: Share2, label: "Share", onClick: () => console.log("Shared track") },
-    {
-      icon: UserPlus,
-      label: "Follow Artist",
-      onClick: () => console.log("Followed Artist"),
-    },
+    { icon: UserPlus, label: "Follow Artist", onClick: () => console.log("Followed Artist") },
     { icon: Radio, label: "Start Radio", onClick: () => console.log("Radio") },
-    {
-      icon: Library,
-      label: "Add to Playlist",
-      onClick: () => setShowAddToPlaylistModal(true),
-    },
+    { icon: Library, label: "Add to Playlist", onClick: () => setShowAddToPlaylistModal(true) },
+    { icon: ListMusic, label: "Queue", onClick: () => setShowQueueUI(true) },
     { icon: Share, label: "Copy Link", onClick: () => console.log("Copied link") },
     { icon: Music, label: "Lyrics", active: showLyrics, onClick: toggleLyricsView },
     { icon: Flag, label: "Report", onClick: () => console.log("Reported track") },
-    {
-      icon: Download,
-      label: "Download",
-      onClick: () => downloadTrack(currentTrack),
-    },
-    {
-      icon: Lock,
-      label: "Audio Quality",
-      onClick: () => setShowAudioMenu(true),
-    },
-    {
-      icon: AlertCircle,
-      label: "Song Info",
-      onClick: () => console.log("Song Info displayed"),
-    },
-    {
-      icon: Mic2,
-      label: "Karaoke Mode",
-      onClick: () => console.log("Karaoke mode started"),
-    },
+    { icon: Download, label: "Download", onClick: () => downloadTrack(currentTrack) },
+    { icon: Lock, label: "Audio Quality", onClick: () => setShowAudioMenu(true) },
+    { icon: AlertCircle, label: "Song Info", onClick: () => console.log("Song Info displayed") },
+    { icon: Mic2, label: "Karaoke Mode", onClick: () => console.log("Karaoke mode started") },
   ];
+  
 
   /* Buttons to show at the bottom (if canShowActions = true) */
   const getVisibleActionButtons = useCallback(() => {
@@ -579,7 +662,7 @@ const handleForwardClick = useCallback(() => {
         {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
-            className="mx-2 rounded-xl overflow-hidden mb-[env(safe-area-inset-bottom)]"
+            className="mx-2 rounded-xl overflow-visible mb-[env(safe-area-inset-bottom)]"            
             style={{
               background: dominantColor
                 ? `linear-gradient(to bottom, ${dominantColor}CC, rgba(0,0,0,0.95))`
@@ -721,21 +804,30 @@ const handleForwardClick = useCallback(() => {
                   <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
                     <Airplay className="w-5 h-5 text-white/60" />
                   </button>
+                  {canShowActions ? (
                   <button
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     onClick={() => setShowQueueUI(true)}
                   >
                     <ListMusic className="w-5 h-5 text-white/60" />
                   </button>
-                  {/* More for small screen if we can't show them all */}
-                  {!canShowActions && (
-                    <button
-                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                      onClick={() => setShowMoreOptions(true)}
-                    >
-                      <MoreHorizontal className="w-5 h-5 text-white/60" />
-                    </button>
-                  )}
+                ) : ( 
+                  <>
+                   <button
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    onClick={() => setShowQueueUI(true)}
+                  >
+                    <ListMusic className="w-5 h-5 text-white/60" />
+                  </button>
+
+                  <button
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    onClick={() => setShowMoreOptions(true)}
+                  >
+                    <MoreHorizontal className="w-5 h-5 text-white/60" />
+                  </button>
+                  </>
+                )}
                 </div>
               </div>
 
@@ -858,8 +950,12 @@ const handleForwardClick = useCallback(() => {
                     </div>
                   </div>
                 ) : showLyrics ? (
-                  // If you want a lyrics mode
-                  <div className="h-[calc(100vh-10vh)] w-full overflow-y-auto custom-scrollbar">
+                  // --- Lyrics View (Integrated from old code) ---
+                  <div
+                    className="h-[calc(100vh-10vh)] w-full overflow-y-auto custom-scrollbar"
+                    onScroll={handleUserScroll}
+                    onTouchMove={handleUserScroll}
+                  >
                     <div className="flex items-center mb-6">
                       <button
                         onClick={toggleLyricsView}
@@ -871,10 +967,64 @@ const handleForwardClick = useCallback(() => {
                         Lyrics
                       </h2>
                     </div>
-                    {/* Put your lyrics display here */}
-                    {/* ... */}
+                    <div
+                      className="space-y-6 overflow-y-auto"
+                      ref={lyricsRef}
+                      style={{ height: "calc(100% - 4rem)", scrollBehavior: "smooth", }}
+                    >
+                      {processedLyrics.map((ly: ProcessedLyric, idx: number) => {
+                        const isActive = idx === currentLyricIndex;
+                        if (!isActive) {
+                          return (
+                            <motion.p
+                              key={idx}
+                              initial={{ opacity: 0.5 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="text-lg text-center text-white/40 hover:text-white"
+                              onClick={() => handleSeek(ly.time)}
+                            >
+                              {ly.text}
+                            </motion.p>
+                          );
+                        }
+                        const letters: string[] = ly.text.split("");
+                        const totalLetters = letters.length;
+                        const filled = Math.floor(lyricProgress * totalLetters);
+                        return (
+                          <motion.p
+                            key={idx}
+                            className="text-lg text-center font-bold text-white"
+                            initial="hidden"
+                            animate="visible"
+                          >
+                            {letters.map((letter: string, i2: number) => (
+                              <motion.span
+                                key={i2}
+                                initial={{ color: "rgba(255,255,255,0.4)" }}
+                                animate={{
+                                  color:
+                                    i2 < filled
+                                      ? "rgba(255,255,255,1)"
+                                      : "rgba(255,255,255,0.4)",
+                                }}
+                                transition={{
+                                  duration: 0.2,
+                                  delay: i2 * 0.02,
+                                }}
+                              >
+                                {letter}
+                              </motion.span>
+                            ))}
+                          </motion.p>
+                        );
+                      })}
+                    </div>
+
                   </div>
-                ) : (
+                ) :
+                (
                   // Normal expanded player
                   <>
                     {/* Artwork background blur */}
@@ -887,10 +1037,7 @@ const handleForwardClick = useCallback(() => {
                           backgroundPosition: "center",
                           filter: "blur(25px) brightness(1.2) saturate(1.3)",
                           transform: "scale(1.8)",
-                          opacity: 0.95,
-                          mask: "radial-gradient(circle at center, black 40%, transparent 80%)",
-                          WebkitMask:
-                            "radial-gradient(circle at center, black 40%, transparent 80%)",
+                          opacity: 0.95,  
                           zIndex: -1,
                         }}
                       />
@@ -933,17 +1080,15 @@ const handleForwardClick = useCallback(() => {
                     </div>
 
                     {/* Seekbar */}
-                    <div className="w-full mb-8 mt-6">
-                      <Seekbar
-                        progress={seekPosition / duration}
-                        handleSeek={handleSeek}
-                        duration={duration}
-                      />
-                      <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
-                        <span>{formatTimeMobile(seekPosition)}</span>
-                        <span>{formatTimeMobile(duration)}</span>
-                      </div>
+                    <div className="w-full mb-8 mt-6 overflow-visible">
+                    <Seekbar progress={seekPosition / duration} handleSeek={handleSeek} duration={duration} />
+                    <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
+                      <span>{formatTimeMobile(seekPosition)}</span>
+                      <span>{formatTimeMobile(duration)}</span>
                     </div>
+                  </div>
+
+
 
                     {/* Main playback controls */}
                     {mainControlButtons}
