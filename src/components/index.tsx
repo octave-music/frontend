@@ -1449,7 +1449,7 @@ export function SpotifyClone() {
 
           {/* Desktop Footer */}
           {mounted && (
-            <footer className="fixed bottom-0 left-0 right-0">
+            <footer className="hidden md:block fixed bottom-0 left-0 right-0">
               {currentTrack ? (
                 <DesktopPlayer
                   currentTrack={currentTrack}
