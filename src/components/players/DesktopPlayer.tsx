@@ -49,7 +49,6 @@ import {
 } from "lucide-react";
 
 import { Track, Lyric } from "@/lib/types/types";
-import { useAudio } from "@/lib/hooks/useAudio";
 
 import {
   DndContext,
@@ -100,6 +99,11 @@ interface DesktopPlayerProps {
   toggleLyricsView: () => void;
   currentTrackIndex: number;
   removeFromQueue: (index: number) => void;
+  audioQuality: AudioQuality;
+  isDataSaver: boolean;
+  changeAudioQuality: (
+    quality: AudioQuality
+  ) => Promise<void>; // or a synchronous function if you prefer
 }
 
 /** Convert seconds => mm:ss. */
@@ -698,12 +702,12 @@ const DetailsPanel: React.FC<DetailsProps> = ({
     HIGH: {
       icon: Star,
       color: "bg-gradient-to-br from-violet-400 to-purple-600",
-      text: "Hi-Fi Quality (16-bit, 44.1kHz)",
+      text: "High Quality (16-bit, 44.1kHz)",
     },
     NORMAL: {
       icon: Fan,
       color: "bg-gradient-to-br from-blue-400 to-blue-600",
-      text: "High Quality (320kbps)",
+      text: "Normal Quality (320kbps)",
     },
     DATA_SAVER: {
       icon: CircleDollarSign,
@@ -1031,6 +1035,9 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
     duration,
     handleSeek,
     isLiked,
+    audioQuality,
+    isDataSaver,
+    changeAudioQuality,
     toggleLike,
     lyrics,
     currentLyricIndex,
@@ -1075,7 +1082,6 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
 
 
   // Access the audio hook for data saver checks, or we can just pass in onCycleAudioQuality prop
-  const { audioQuality, isDataSaver, changeAudioQuality } = useAudio();
 
   const { lyricsRef, userScrolling, handleUserScroll, lyricProgress, processedLyrics } =
     useAutoScrollLyrics(showLyrics, currentLyricIndex, lyrics, duration, seekPosition);

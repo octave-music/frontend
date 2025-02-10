@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Home,
@@ -29,7 +29,6 @@ import {
 import Image from "next/image";
 
 // Hooks & Utilities
-import { storeSetting } from "@/lib/managers/idbWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/utils";
 
@@ -38,7 +37,6 @@ import TrackItem from "../common/TrackItem";
 
 // Types
 import { Track, Playlist, Lyric, ContextMenuOption } from "@/lib/types/types";
-import { useAudio } from "@/lib/hooks/useAudio";
 
 type RepeatMode = "off" | "all" | "one";
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
@@ -127,6 +125,9 @@ type MobileLayoutProps = {
   previousTrackFunc: () => void;
   handleSeek: (position: number) => void;
   shuffleOn: boolean;
+  changeAudioQuality: (
+    quality: AudioQuality
+  ) => Promise<void>; // or a synchronous function if you prefer
 };
 
 /* =================================
@@ -1049,7 +1050,7 @@ const SearchDrawer: React.FC<{
       animate={{ y: 0 }}
       exit={{ y: "100%" }}
       transition={{ type: "spring", damping: 25, stiffness: 500 }}
-      className="fixed inset-0 bg-black z-50 flex flex-col"
+      className="fixed inset-0 bg-black z-[10000] flex flex-col"
     >
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <button
@@ -1186,53 +1187,94 @@ const SearchDrawer: React.FC<{
 /* =================================
    8. FOOTER NAV
    ================================= */
-const FooterNav: React.FC<{
-  isPlayerOpen: boolean;
-  setView: (v: string) => void;
-  setIsSearchOpen: (v: boolean) => void;
-  setSearchQuery: (q: string) => void;
-}> = ({ isPlayerOpen, setView, setIsSearchOpen, setSearchQuery }) => {
-  if (isPlayerOpen) return null;
-
-  return (
-    <footer
-      className="bg-black p-4 flex justify-around fixed bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)]"
-      style={{
-        zIndex: 9999,
-        paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))",
-      }}
-    >
-      <button
-        className="flex flex-col items-center text-gray-400 hover:text-white"
-        onClick={() => {
+   const FooterNav = ({ 
+    isPlayerOpen, 
+    setView, 
+    setIsSearchOpen, 
+    setSearchQuery 
+  }: {
+    isPlayerOpen: boolean;
+    setView: (v: string) => void;
+    setIsSearchOpen: (v: boolean) => void;
+    setSearchQuery: (q: string) => void;
+  }) => {
+    const [isMobileSmall, setIsMobileSmall] = useState(false);
+  
+    // Check screen size on mount and resize
+    useEffect(() => {
+      const checkScreenSize = () => {
+        setIsMobileSmall(window.innerWidth <= 375); // iPhone SE width
+      };
+  
+      checkScreenSize();
+      window.addEventListener('resize', checkScreenSize);
+      return () => window.removeEventListener('resize', checkScreenSize);
+    }, []);
+  
+    if (isPlayerOpen) return null;
+  
+    const navItems = [
+      {
+        icon: Home,
+        label: "Home",
+        onClick: () => {
           setView("home");
           setSearchQuery("");
-        }}
-      >
-        <Home className="w-6 h-6" />
-        <span className="text-xs mt-1">Home</span>
-      </button>
-      <button
-        className="flex flex-col items-center text-gray-400 hover:text-white"
-        onClick={() => {
+        },
+      },
+      {
+        icon: Search,
+        label: "Search",
+        onClick: () => {
           setIsSearchOpen(true);
           setView("search");
+        },
+      },
+      {
+        icon: Library,
+        label: "Library",
+        onClick: () => setView("library"),
+      },
+      {
+        icon: Cog,
+        label: "Setting",
+        onClick: () => setView("settings"),
+      },
+      // You can add more items here and they'll be scrollable
+    ];
+  
+    return (
+      <footer
+        className="fixed bottom-0 left-0 right-0 z-50"
+        style={{
+          background: "rgba(0, 0, 0, 0.85)",
+          backdropFilter: "blur(10px)",
         }}
       >
-        <Search className="w-6 h-6" />
-        <span className="text-xs mt-1">Search</span>
-      </button>
-      <button
-        className="flex flex-col items-center text-gray-400 hover:text-white"
-        onClick={() => setView("library")}
-      >
-        <Library className="w-6 h-6" />
-        <span className="text-xs mt-1">Your Library</span>
-      </button>
-    </footer>
-  );
-};
-
+        <div className="px-4 pb-[env(safe-area-inset-bottom)]">
+          <div className="overflow-x-auto scrollbar-hide snap-x snap-mandatory">
+            <div className="flex items-center py-3 min-w-full">
+              {navItems.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={item.onClick}
+                  className="flex flex-col items-center justify-center flex-1 min-w-[80px] px-2 text-gray-300 hover:text-white transition-colors"
+                >
+                  <item.icon className="w-6 h-6 mb-1" />
+                  {!isMobileSmall && (
+                    <span className="text-xs font-medium truncate w-full text-center">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
+    );
+  };
+  
 /* =================================
    9. MAIN MOBILE LAYOUT
    ================================= */
@@ -1292,10 +1334,9 @@ const MobileLayout: React.FC<MobileLayoutProps> = (props) => {
     setRecentSearches,
     // Footer Nav
     isPlayerOpen,
+    changeAudioQuality,
     setView,
   } = props;
-
-  const { changeAudioQuality } = useAudio();
 
   return (
     <div className="md:hidden flex flex-col h-[100dvh]">

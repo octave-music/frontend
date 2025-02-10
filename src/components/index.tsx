@@ -211,7 +211,8 @@ export function SpotifyClone() {
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<string | null>(
     null
   );
-  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] = useState(false);
+  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] =
+    useState(false);
   const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<
     Track[]
   >([]);
@@ -274,8 +275,6 @@ export function SpotifyClone() {
       }
     })();
   }, []);
-  
-  
 
   const handlePlaylistSearch = useCallback(async (query: string) => {
     try {
@@ -349,6 +348,7 @@ export function SpotifyClone() {
       }, 300),
     []
   );
+
   const fetchLyrics = useCallback(async (track: Track) => {
     try {
       const fetchedLyrics = await handleFetchLyrics(track);
@@ -462,15 +462,15 @@ export function SpotifyClone() {
         }
         return prevPlaylists;
       });
-  
+
       // Retrieve the updated playlists
       const updatedPlaylists = await getAllPlaylists();
       const liked = updatedPlaylists.find((p) => p.name === "Liked Songs");
-  
+
       if (!liked) {
         throw new Error("Failed to create 'Liked Songs' playlist.");
       }
-  
+
       const topArtists: string[] = await getTopArtists(6);
       const trackPromises = topArtists.map(async (artistName: string) => {
         const response = await fetch(
@@ -492,15 +492,13 @@ export function SpotifyClone() {
       const tracksByArtist = await Promise.all(tracksByArtistPromises);
       const allTracks = tracksByArtist.flat();
       const shuffledTracks = allTracks.sort(() => Math.random() - 0.5);
-  
+
       setQueue((prevQueue) => [...prevQueue, ...shuffledTracks]);
       setRecommendedTracks(shuffledTracks);
     } catch (error) {
       console.error("Error fetching new recommendations:", error);
     }
   }, [setPlaylists, setQueue, setRecommendedTracks]);
-  
-  
 
   const handleTrackEnd = useCallback((): void => {
     if (!currentTrack || !audioElement) return;
@@ -557,7 +555,7 @@ export function SpotifyClone() {
       ];
       const currentIndex = qualities.indexOf(audioQuality);
       const nextQ = qualities[(currentIndex + 1) % qualities.length];
-  
+
       await changeAudioQuality(nextQ);
       toast.success(`Switched audio quality to ${nextQ}`);
     } catch (err: any) {
@@ -565,8 +563,6 @@ export function SpotifyClone() {
       toast.error(err?.message || "Could not change audio quality");
     }
   }
-  
-  
 
   const isTrackLiked = useCallback(
     (track: Track): boolean => {
@@ -670,7 +666,6 @@ export function SpotifyClone() {
     },
     [currentTrack]
   );
-  
 
   const openAddToPlaylistModal = useCallback((tr: Track) => {
     setContextMenuTrack(tr);
@@ -1087,10 +1082,10 @@ export function SpotifyClone() {
         if (savedRecommended && savedRecommended.length > 0) {
           setRecommendedTracks(savedRecommended);
         }
-  
+
         // 2. Attempt to load queue
         const savedQueue = await getQueue();
-  
+
         // 3. Parallel IDB settings
         const [
           vol,
@@ -1109,21 +1104,21 @@ export function SpotifyClone() {
           getSetting("onboardingDone"),
           getSetting("currentTrack"),
         ]);
-  
+
         // 4. Apply volume, shuffle, audioQuality
         if (vol) setVolume(parseFloat(vol));
         if (sOn) setShuffleOn(JSON.parse(sOn));
-  
+
         if (qual) {
           // e.g. "MAX", "HIGH", "NORMAL", or "DATA_SAVER"
           await changeAudioQuality(qual as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
         }
-  
+
         // 5. Load playlists, recently played, handle onboarding
         if (pls) setPlaylists(pls);
         if (rec) setJumpBackIn(rec);
         if (!onboard) setShowOnboarding(true);
-  
+
         // 6. Decide on queue fallback
         if (savedQueue && savedQueue.length > 0) {
           setQueue(savedQueue);
@@ -1132,7 +1127,7 @@ export function SpotifyClone() {
         } else {
           await fetchNewRecommendations();
         }
-  
+
         // 7. If we have a saved track, load it (but do NOT auto-play if you prefer)
         if (savedTrack) {
           const track: Track = JSON.parse(savedTrack);
@@ -1147,8 +1142,6 @@ export function SpotifyClone() {
     // [] ensures it runs only once after component mounts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1258,6 +1251,7 @@ export function SpotifyClone() {
             setShowSettingsMenu={setShowSettingsMenu}
             showPwaModal={showPwaModal}
             storeSetting={storeSetting}
+            changeAudioQuality={changeAudioQuality}
             setShowPwaModal={setShowPwaModal}
             view={view}
             currentPlaylist={currentPlaylist}
@@ -1352,8 +1346,11 @@ export function SpotifyClone() {
                 currentTrack={currentTrack}
                 currentTrackIndex={queue.findIndex((t) => t.id === currentTrack?.id)}
                 isPlaying={isPlaying}
+                audioQuality={audioQuality}
+                isDataSaver={isDataSaver}
+                changeAudioQuality={changeAudioQuality}
                 removeFromQueue={removeFromQueue}
-                downloadTrack={downloadTrack} 
+                downloadTrack={downloadTrack}
                 setQueue={setQueue}
                 togglePlay={togglePlay}
                 skipTrack={skipTrack}
@@ -1455,35 +1452,38 @@ export function SpotifyClone() {
             <footer className="fixed bottom-0 left-0 right-0">
               {currentTrack ? (
                 <DesktopPlayer
-                currentTrack={currentTrack}
-                isPlaying={isPlaying}
-                previousTracks={previousTracks}
-                setQueue={setQueue}
-                togglePlay={togglePlay}
-                skipTrack={skipTrack}
-                previousTrack={previousTrackFunc}
-                seekPosition={seekPosition}
-                duration={duration}
-                handleSeek={handleSeek}
-                isLiked={isTrackLiked(currentTrack)}
-                repeatMode={repeatMode}
-                setRepeatMode={setRepeatMode}
-                toggleLike={toggleLikeDesktop}
-                lyrics={lyrics}
-                currentLyricIndex={currentLyricIndex}
-                showLyrics={showLyrics}
-                toggleLyricsView={toggleLyricsView}
-                shuffleOn={shuffleOn}
-                shuffleQueue={shuffleQueue}
-                queue={queue}
-                currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-                removeFromQueue={removeFromQueue}
-                onQueueItemClick={onQueueItemClick}
-                volume={volume}
-                onVolumeChange={onVolumeChange}
-                listenCount={listenCount}
-                downloadTrack={downloadTrack}
-              />              
+                  currentTrack={currentTrack}
+                  isPlaying={isPlaying}
+                  audioQuality={audioQuality}
+                  isDataSaver={isDataSaver}
+                  changeAudioQuality={changeAudioQuality}
+                  previousTracks={previousTracks}
+                  setQueue={setQueue}
+                  togglePlay={togglePlay}
+                  skipTrack={skipTrack}
+                  previousTrack={previousTrackFunc}
+                  seekPosition={seekPosition}
+                  duration={duration}
+                  handleSeek={handleSeek}
+                  isLiked={isTrackLiked(currentTrack)}
+                  repeatMode={repeatMode}
+                  setRepeatMode={setRepeatMode}
+                  toggleLike={toggleLikeDesktop}
+                  lyrics={lyrics}
+                  currentLyricIndex={currentLyricIndex}
+                  showLyrics={showLyrics}
+                  toggleLyricsView={toggleLyricsView}
+                  shuffleOn={shuffleOn}
+                  shuffleQueue={shuffleQueue}
+                  queue={queue}
+                  currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+                  removeFromQueue={removeFromQueue}
+                  onQueueItemClick={onQueueItemClick}
+                  volume={volume}
+                  onVolumeChange={onVolumeChange}
+                  listenCount={listenCount}
+                  downloadTrack={downloadTrack}
+                />
               ) : (
                 <div className="bg-gray-800 text-white p-4 text-center">
                   No track is currently playing.
@@ -1492,6 +1492,7 @@ export function SpotifyClone() {
             </footer>
           )}
 
+          {/* Context Menu */}
           {showContextMenu && contextMenuOptions && (
             <Portal>
               <motion.div
@@ -1666,17 +1667,24 @@ export function SpotifyClone() {
           )}
 
           {showDeleteConfirmation && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-              <div className="bg-gradient-to-b from-gray-900 to-black rounded-xl p-6 w-full max-w-sm border border-gray-800 shadow-2xl">
-                <div className="flex items-center space-x-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
-                    <Trash2 className="w-6 h-6 text-red-500" />
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
+                              animate-[fadeIn_0.2s_ease-out]">
+              <div className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
+                              backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
+                              border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
+                              animate-[slideUp_0.3s_ease-out]
+                              hover:border-white/20 transition-all duration-500">
+                <div className="flex items-start space-x-5 mb-6">
+                  <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
+                                  shadow-lg shadow-red-500/5 border border-red-500/20
+                                  animate-[pulse_2s_ease-in-out_infinite]">
+                    <Trash2 className="w-7 h-7 text-red-400" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-1">
+                    <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
                       Delete Playlist
                     </h3>
-                    <p className="text-gray-400 text-sm">
+                    <p className="text-gray-300/90 text-[15px] leading-relaxed">
                       Are you sure you want to delete "
                       <span className="text-white font-medium">
                         {selectedPlaylist?.name}
@@ -1685,84 +1693,33 @@ export function SpotifyClone() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-3 mt-6">
+                <div className="flex gap-4 mt-8">
                   <button
                     onClick={() => setShowDeleteConfirmation(false)}
-                    className="flex-1 py-2.5 px-4 rounded-lg border border-gray-700 text-gray-300 font-medium
-                              hover:bg-gray-800/50 transition-all duration-300"
+                    className="flex-1 py-3 px-4 rounded-xl border border-gray-700/75 text-gray-200 font-semibold
+                                hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
+                                transition-all duration-300 ease-out"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={deleteConfirmedPlaylist}
-                    className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-red-500 to-red-600
-                              hover:from-red-600 hover:to-red-700 text-white font-medium
-                              transition-all duration-300 hover:scale-[1.02] group"
+                    className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-500 to-red-600
+                                hover:from-red-600 hover:to-red-700 text-white font-semibold
+                                shadow-lg shadow-red-500/20 hover:shadow-red-500/30
+                                transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
+                                group"
                   >
                     <span className="flex items-center justify-center">
                       Delete
-                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 group-hover:translate-x-0.5" />
+                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 
+                                            group-hover:translate-x-1" />
                     </span>
                   </button>
                 </div>
               </div>
             </div>
           )}
-
-            {showDeleteConfirmation && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
-                              animate-[fadeIn_0.2s_ease-out]">
-                <div className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
-                                backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
-                                border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
-                                animate-[slideUp_0.3s_ease-out]
-                                hover:border-white/20 transition-all duration-500">
-                  <div className="flex items-start space-x-5 mb-6">
-                    <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
-                                  shadow-lg shadow-red-500/5 border border-red-500/20
-                                  animate-[pulse_2s_ease-in-out_infinite]">
-                      <Trash2 className="w-7 h-7 text-red-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
-                        Delete Playlist
-                      </h3>
-                      <p className="text-gray-300/90 text-[15px] leading-relaxed">
-                        Are you sure you want to delete "<span className="text-white font-medium">
-                        {selectedPlaylist?.name}</span>"?
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4 mt-8">
-                    <button
-                      onClick={() => setShowDeleteConfirmation(false)}
-                      className="flex-1 py-3 px-4 rounded-xl border border-gray-700/75 text-gray-200 font-semibold
-                                hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
-                                transition-all duration-300 ease-out"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={deleteConfirmedPlaylist}
-                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-500 to-red-600
-                                hover:from-red-600 hover:to-red-700 text-white font-semibold
-                                shadow-lg shadow-red-500/20 hover:shadow-red-500/30
-                                transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
-                                group"
-                    >
-                      <span className="flex items-center justify-center">
-                        Delete
-                        <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 
-                                            group-hover:translate-x-1" />
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-
-
 
           {showCreatePlaylist && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">

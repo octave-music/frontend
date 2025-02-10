@@ -46,11 +46,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { toast } from "react-toastify";
-import { motion as m } from "framer-motion"; // optional alias
-import { usePalette } from "react-palette";
 
 import { Track, Lyric } from "@/lib/types/types";
-import { useAudio } from "@/lib/hooks/useAudio";
 
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
@@ -83,6 +80,11 @@ interface MobilePlayerProps {
   onQueueItemClick: (track: Track, index: number) => void;
   setIsPlayerOpen: (isOpen: boolean) => void;
   listenCount: number;
+  audioQuality: AudioQuality;
+  isDataSaver: boolean;
+  changeAudioQuality: (
+    quality: AudioQuality
+  ) => Promise<void>; // or a synchronous function if you prefer
 }
 
 interface ProcessedLyric extends Lyric {
@@ -332,6 +334,9 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   toggleLike,
   removeFromQueue,
   lyrics,
+  audioQuality,
+  isDataSaver,
+  changeAudioQuality,
   currentLyricIndex,
   showLyrics,
   toggleLyricsView,
@@ -363,7 +368,6 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   const controls = useAnimation();
 
   // Access from custom audio hook
-  const { audioQuality, isDataSaver, changeAudioQuality } = useAudio();
 
   const processedLyrics = useMemo<ProcessedLyric[]>(() => {
     return lyrics.map((lyric: Lyric, i: number) => ({
@@ -599,40 +603,40 @@ const handleForwardClick = useCallback(() => {
 
   /** The main cluster of playback controls in expanded mode. */
   const mainControlButtons = (
-<div className="w-full flex items-center justify-between mb-8 pl-4 pr-2 sm:px-4">
+    <div className="w-full flex items-center justify-between mb-8 p-2 sm:px-4">
       <button
         onClick={shuffleQueue}
-        className={`p-3 rounded-full ${
-          shuffleOn ? "text-green-500" : "text-white/60 hover:bg-white/10"
-        }`}
+        className="p-3 rounded-full text-white/60 hover:bg-white/10"
       >
-      <Shuffle className="w-6 h-6 xs:w-5 xs:h-5" />
-    </button>
-      <div className="flex items-center space-x-8">
-        <button
-          className="p-2 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center"
-          onClick={handleBackClick}
-        >
-          <SkipBack className="w-6 h-6 text-white" />
-        </button>
-        <motion.button
-          className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90 transition-colors"
-          whileTap={{ scale: 0.95 }}
-          onClick={togglePlay}
-        >
-          {isPlaying ? (
-            <Pause className="w-8 h-8 text-black" />
-          ) : (
-            <Play className="w-8 h-8 text-black ml-1" />
-          )}
-        </motion.button>
-        <button
-          className="p-2 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center"
-          onClick={handleForwardClick}
-        >
-          <SkipForward className="w-6 h-6 text-white" />
-        </button>
-      </div>
+        <Shuffle className="w-6 h-6 xs:w-5 xs:h-5" />
+      </button>
+
+      <button
+        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+        onClick={handleBackClick}
+      >
+        <SkipBack className="w-6 h-6 text-white" />
+      </button>
+
+      <motion.button
+        className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90 transition-colors"
+        whileTap={{ scale: 0.95 }}
+        onClick={togglePlay}
+      >
+        {isPlaying ? (
+          <Pause className="w-8 h-8 text-black" />
+        ) : (
+          <Play className="w-8 h-8 text-black ml-1" />
+        )}
+      </motion.button>
+
+      <button
+        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+        onClick={handleForwardClick}
+      >
+        <SkipForward className="w-6 h-6 text-white" />
+      </button>
+
       <button
         onClick={() => {
           const modes: RepeatMode[] = ["off", "all", "one"];
@@ -647,9 +651,9 @@ const handleForwardClick = useCallback(() => {
         ) : (
           <Repeat className={`w-6 h-6 xs:w-5 xs:h-5 ${repeatMode === "all" ? "text-green-500" : "text-white/60"}`} />
         )}
-
       </button>
     </div>
+
   );
 
   return (

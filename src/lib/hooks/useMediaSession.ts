@@ -10,6 +10,7 @@ interface MediaSessionHandlers {
   setIsPlaying: (playing: boolean) => void;
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 }
+
 export function setupMediaSession(
   currentTrack: Track | null,
   isPlaying: boolean,
@@ -79,8 +80,6 @@ export function setupMediaSession(
 
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 
-    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-
     navigator.mediaSession.setActionHandler("play", () => {
       if (!isPlaying && currentTrack && handlers.audioRef.current) {
         void handlers.audioRef.current.play();
@@ -97,34 +96,66 @@ export function setupMediaSession(
       }
     });
 
-    navigator.mediaSession.setActionHandler("nexttrack", handlers.skipTrack);
-    navigator.mediaSession.setActionHandler(
-      "previoustrack",
-      handlers.previousTrackFunc
-    );
+    // Modified handler for "nexttrack" to mimic UI behavior:
+    navigator.mediaSession.setActionHandler("nexttrack", () => {
+      const audio = handlers.audioRef.current;
+      if (!audio) return;
+      // If currentTime is not near the end (threshold of 5 sec), jump near the end first.
+      if (audio.currentTime < (audio.duration || 0) - 5) {
+        audio.currentTime = (audio.duration || 0) - 1;
+        setPositionStateIfValid();
+      } else {
+        handlers.skipTrack();
+      }
+    });
+
+    // Modified handler for "previoustrack" to mimic UI behavior:
+    navigator.mediaSession.setActionHandler("previoustrack", () => {
+      const audio = handlers.audioRef.current;
+      if (!audio) return;
+      // If currentTime is more than 5 sec, reset to start first.
+      if (audio.currentTime > 5) {
+        audio.currentTime = 0;
+        setPositionStateIfValid();
+      } else {
+        handlers.previousTrackFunc();
+      }
+    });
+
+    // Added improved handler for seekbackward.
+    navigator.mediaSession.setActionHandler("seekbackward", (details) => {
+      const audio = handlers.audioRef.current;
+      if (!audio) return;
+      const offset = details?.seekOffset || 10;
+      audio.currentTime = Math.max(audio.currentTime - offset, 0);
+      setPositionStateIfValid();
+    });
+
+    // Added improved handler for seekforward.
+    navigator.mediaSession.setActionHandler("seekforward", (details) => {
+      const audio = handlers.audioRef.current;
+      if (!audio) return;
+      const offset = details?.seekOffset || 10;
+      audio.currentTime = Math.min(audio.currentTime + offset, audio.duration || 0);
+      setPositionStateIfValid();
+    });
 
     navigator.mediaSession.setActionHandler("seekto", (details) => {
       if (details.seekTime != null && handlers.audioRef.current) {
-        const clampedSeekTime = Math.min(
-          details.seekTime,
-          handlers.audioRef.current.duration || 0
-        );
-        if (
-          Math.abs(handlers.audioRef.current.currentTime - clampedSeekTime) > 0.1
-        ) {
+        const audio = handlers.audioRef.current;
+        const clampedSeekTime = Math.min(details.seekTime, audio.duration || 0);
+        if (Math.abs(audio.currentTime - clampedSeekTime) > 0.1) {
           handlers.handleSeek(clampedSeekTime);
         }
-        
-        // Only force playback if we *aren’t* manually paused:
-        // e.g., if isPlaying is true or some "wasUserPaused" flag is false:
-        if (handlers.audioRef.current.paused === false) {
-          void handlers.audioRef.current.play();
+
+        // Only force playback if we aren't manually paused.
+        if (!audio.paused) {
+          void audio.play();
         }
-    
+
         setPositionStateIfValid();
       }
     });
-    
 
     const updatePositionState = () => {
       setPositionStateIfValid();
@@ -134,14 +165,11 @@ export function setupMediaSession(
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && handlers.audioRef.current) {
-        // Only update playback state if there's a mismatch
-        const actualState = handlers.audioRef.current.paused
-          ? "paused"
-          : "playing";
+        const actualState = handlers.audioRef.current.paused ? "paused" : "playing";
         if (navigator.mediaSession.playbackState !== actualState) {
           navigator.mediaSession.playbackState = actualState;
         }
-        setPositionStateIfValid(); // Update position state only
+        setPositionStateIfValid();
       }
     };
 
