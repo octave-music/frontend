@@ -82,9 +82,7 @@ interface MobilePlayerProps {
   listenCount: number;
   audioQuality: AudioQuality;
   isDataSaver: boolean;
-  changeAudioQuality: (
-    quality: AudioQuality
-  ) => Promise<void>; // or a synchronous function if you prefer
+  changeAudioQuality: (quality: AudioQuality) => Promise<void>;
 }
 
 interface ProcessedLyric extends Lyric {
@@ -130,7 +128,7 @@ const Seekbar: React.FC<SeekbarProps> = ({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   const calculateProgress = useCallback((clientX: number): number => {
@@ -173,24 +171,24 @@ const Seekbar: React.FC<SeekbarProps> = ({
     const onEnd = () => handleDragEnd();
 
     if (isDragging) {
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('touchmove', onTouchMove, { passive: false });
-      window.addEventListener('mouseup', onEnd);
-      window.addEventListener('touchend', onEnd);
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchend", onEnd);
     }
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('mouseup', onEnd);
-      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchend", onEnd);
     };
   }, [isDragging, handleDragMove, handleDragEnd]);
 
-  const height = isMiniplayer ? 'h-1' : 'h-2';
-  const thumbSize = isMiniplayer ? 'w-3 h-3' : 'w-4 h-4';
+  const height = isMiniplayer ? "h-1" : "h-2";
+  const thumbSize = isMiniplayer ? "w-3 h-3" : "w-4 h-4";
 
   return (
-    <div 
+    <div
       className="relative mx-4 py-4 touch-none"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => !isDragging && setShowTooltip(false)}
@@ -204,16 +202,17 @@ const Seekbar: React.FC<SeekbarProps> = ({
         <motion.div
           className="absolute left-0 top-0 h-full bg-white rounded-full"
           animate={{ width: `${isNaN(localProgress) ? 0 : localProgress * 100}%` }}
-          transition={isDragging 
-            ? { duration: 0 } 
-            : { type: "spring", stiffness: 300, damping: 30 }}
+          transition={
+            isDragging
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 300, damping: 30 }
+          }
         />
 
         {!isMiniplayer && (
           <motion.div
             className="absolute"
             style={{
-              // Instead of centering at 50%, move it up (adjust "-10px" as needed)
               top: "calc(50% - 10px)",
               left: `calc(${localProgress * 100}%)`,
               x: "-50%",
@@ -221,16 +220,16 @@ const Seekbar: React.FC<SeekbarProps> = ({
               cursor: "grab",
             }}
           >
-          <motion.div
-            className={`${thumbSize} bg-white rounded-full shadow-lg`}
-            animate={{
-              scale: isDragging || showTooltip ? 1.2 : 0,
-              opacity: isDragging || showTooltip ? 1 : 0,
-            }}
-            transition={{ duration: 0.2 }}
-          />
-        </motion.div>
-      )}
+            <motion.div
+              className={`${thumbSize} bg-white rounded-full shadow-lg`}
+              animate={{
+                scale: isDragging || showTooltip ? 1.2 : 0,
+                opacity: isDragging || showTooltip ? 1 : 0,
+              }}
+              transition={{ duration: 0.2 }}
+            />
+          </motion.div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -240,9 +239,9 @@ const Seekbar: React.FC<SeekbarProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             className="absolute bottom-full mb-2 bg-black/80 text-white text-xs px-2 py-1 rounded"
-            style={{ 
+            style={{
               left: `calc(${localProgress * 100}%)`,
-              transform: 'translateX(-50%)',
+              transform: "translateX(-50%)",
             }}
           >
             {formatTime(localProgress * duration)}
@@ -252,6 +251,7 @@ const Seekbar: React.FC<SeekbarProps> = ({
     </div>
   );
 };
+
 /* ------------------------------------------------------
    Q U A L I T Y   B A D G E
 ------------------------------------------------------ */
@@ -363,12 +363,11 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   const lyricsRef = useRef<HTMLDivElement>(null);
   const [canShowActions, setCanShowActions] = useState(true);
   const [userScrolling, setUserScrolling] = useState<boolean>(false);
-
+  const [scaleFactor, setScaleFactor] = useState(1);
 
   const controls = useAnimation();
 
-  // Access from custom audio hook
-
+  /** Precompute lyric intervals. */
   const processedLyrics = useMemo<ProcessedLyric[]>(() => {
     return lyrics.map((lyric: Lyric, i: number) => ({
       ...lyric,
@@ -385,7 +384,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     const elapsed = seekPosition - start;
     return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
   };
-  
+
   const lyricProgress = getLyricProgress();
 
   const handleUserScroll = (): void => {
@@ -398,47 +397,43 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   };
 
   useEffect(() => {
-    // If userScrolling just ended => auto-scroll to active lyric
+    // Auto-scroll to active lyric if user isn't manually scrolling
     if (!userScrolling && showLyrics && lyricsRef.current) {
       const container = lyricsRef.current;
       const activeLine = container.children[currentLyricIndex] as HTMLElement;
-  
+
       if (activeLine) {
         isAutoScrollingRef.current = true;
         const offsetTop = activeLine.offsetTop;
         const halfContainer = container.clientHeight / 2;
         const halfLine = activeLine.offsetHeight / 2;
         const scrollPos = offsetTop - halfContainer + halfLine - 20;
-  
-        container.scrollTo({ 
-          top: scrollPos, 
-          behavior: "smooth" 
+
+        container.scrollTo({
+          top: scrollPos,
+          behavior: "smooth",
         });
-  
+
         setTimeout(() => {
           isAutoScrollingRef.current = false;
         }, 600);
       }
     }
   }, [userScrolling, showLyrics, currentLyricIndex]);
-  
 
-  // Extract approximate color from track cover (dominant color)
+  // Extract approximate color from track cover
   useEffect(() => {
     if (!currentTrack.album.cover_medium) {
       setDominantColor("#000000");
       return;
     }
-    
+
     let isCancelled = false;
-    
-    // Fix the Image constructor typing
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const img: HTMLImageElement = new (window.Image as any)();
-    
     img.crossOrigin = "Anonymous";
     img.src = currentTrack.album.cover_medium;
-    
+
     img.onload = () => {
       if (isCancelled) return;
       const canvas = document.createElement("canvas");
@@ -450,17 +445,17 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
       const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
       setDominantColor(`rgb(${r}, ${g}, ${b})`);
     };
-    
+
     img.onerror = () => {
       if (!isCancelled) {
         setDominantColor("#000000");
       }
     };
-    
+
     return () => {
       isCancelled = true;
     };
-}, [currentTrack.album.cover_medium]);
+  }, [currentTrack.album.cover_medium]);
 
   // Adjust show/hide action buttons depending on screen size
   useEffect(() => {
@@ -468,7 +463,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     const handleResize = () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        setCanShowActions(window.innerWidth > 400);
+        // Adjust thresholds to consider both width & height
+        setCanShowActions(window.innerWidth > 380 && window.innerHeight > 600);
       }, 100);
     };
     handleResize();
@@ -496,9 +492,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     { icon: AlertCircle, label: "Song Info", onClick: () => console.log("Song Info displayed") },
     { icon: Mic2, label: "Karaoke Mode", onClick: () => console.log("Karaoke mode started") },
   ];
-  
 
-  /* Buttons to show at the bottom (if canShowActions = true) */
+  /** Visible action buttons (if canShowActions is true). */
   const getVisibleActionButtons = useCallback(() => {
     if (!canShowActions) return [];
     return [
@@ -522,57 +517,58 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     setIsPlayerOpen(!isExpanded);
   };
 
+  // Single vs double-click for "back" button
   const backClickCountRef = useRef(0);
-const handleBackClick = useCallback(() => {
-  backClickCountRef.current++;
-  if (backClickCountRef.current === 1) {
-    setTimeout(() => {
-      if (backClickCountRef.current === 1) {
-        // Single click: reset current song to start.
-        handleSeek(0);
-      }
+  const handleBackClick = useCallback(() => {
+    backClickCountRef.current++;
+    if (backClickCountRef.current === 1) {
+      setTimeout(() => {
+        if (backClickCountRef.current === 1) {
+          // Single click: reset current song to start
+          handleSeek(0);
+        }
+        backClickCountRef.current = 0;
+      }, 300);
+    } else if (backClickCountRef.current === 2) {
+      // Double click: go to previous track
+      previousTrack();
       backClickCountRef.current = 0;
-    }, 300);
-  } else if (backClickCountRef.current === 2) {
-    // Double click: go to previous track.
-    previousTrack();
-    backClickCountRef.current = 0;
-  }
-}, [handleSeek, previousTrack]);
+    }
+  }, [handleSeek, previousTrack]);
 
-
-const forwardClickCountRef = useRef(0);
-const handleForwardClick = useCallback(() => {
-  forwardClickCountRef.current++;
-  if (forwardClickCountRef.current === 1) {
-    setTimeout(() => {
-      if (forwardClickCountRef.current === 1) {
-        // single
-        const timeLeft = duration - seekPosition;
-        if (timeLeft <= 5) skipTrack();
-        else handleSeek(duration);
-      }
+  // Single vs double-click for "forward" button
+  const forwardClickCountRef = useRef(0);
+  const handleForwardClick = useCallback(() => {
+    forwardClickCountRef.current++;
+    if (forwardClickCountRef.current === 1) {
+      setTimeout(() => {
+        if (forwardClickCountRef.current === 1) {
+          // Single click
+          const timeLeft = duration - seekPosition;
+          if (timeLeft <= 5) skipTrack();
+          else handleSeek(duration);
+        }
+        forwardClickCountRef.current = 0;
+      }, 300);
+    } else if (forwardClickCountRef.current === 2) {
+      // Double click
+      skipTrack();
       forwardClickCountRef.current = 0;
-    }, 300);
-  } else if (forwardClickCountRef.current === 2) {
-    // double
-    skipTrack();
-    forwardClickCountRef.current = 0;
-  }
-}, [duration, seekPosition, skipTrack, handleSeek]);
+    }
+  }, [duration, seekPosition, skipTrack, handleSeek]);
 
-  /** If user tries to drag miniplayer left or right => skip track, etc. */
+  /** Dragging the miniplayer left/right => skip/previous track. */
   const handleMiniPlayerDragEnd = (info: PanInfo) => {
     const threshold = 100;
     if (info.offset.x > threshold) {
-      // drag right => previous
+      // Drag right => previous track
       controls.start({ x: "100%", transition: { duration: 0.3 } }).then(() => {
         previousTrack();
         controls.set({ x: "-100%" });
         controls.start({ x: 0, transition: { duration: 0.3 } });
       });
     } else if (info.offset.x < -threshold) {
-      // drag left => skip
+      // Drag left => skip track
       controls.start({ x: "-100%", transition: { duration: 0.3 } }).then(() => {
         skipTrack();
         controls.set({ x: "100%" });
@@ -583,7 +579,7 @@ const handleForwardClick = useCallback(() => {
     }
   };
 
-  /** If user swipes up => expand the player. */
+  /** Swiping up => expand the player. */
   const handleMiniPlayerTouchStart = (e: React.TouchEvent) => {
     setMiniPlayerTouchStartY(e.touches[0].clientY);
   };
@@ -601,7 +597,7 @@ const handleForwardClick = useCallback(() => {
     setMiniPlayerTouchStartY(null);
   };
 
-  /** The main cluster of playback controls in expanded mode. */
+  /** Main cluster of playback controls in expanded mode. */
   const mainControlButtons = (
     <div className="w-full flex items-center justify-between mb-8 p-2 sm:px-4">
       <button
@@ -649,21 +645,46 @@ const handleForwardClick = useCallback(() => {
         {repeatMode === "one" ? (
           <Repeat1 className="w-6 h-6 xs:w-5 xs:h-5 text-green-500" />
         ) : (
-          <Repeat className={`w-6 h-6 xs:w-5 xs:h-5 ${repeatMode === "all" ? "text-green-500" : "text-white/60"}`} />
+          <Repeat
+            className={`w-6 h-6 xs:w-5 xs:h-5 ${
+              repeatMode === "all" ? "text-green-500" : "text-white/60"
+            }`}
+          />
         )}
       </button>
     </div>
-
   );
+
+  useEffect(() => {
+    // Baseline dimensions for iPhone SE
+    const baselineWidth = 375;
+    const baselineHeight = 667;
+  
+    const updateScale = () => {
+      const availableWidth = window.innerWidth;
+      const availableHeight = window.innerHeight;
+      // Compute scale factors for both dimensions
+      const scaleW = availableWidth / baselineWidth;
+      const scaleH = availableHeight / baselineHeight;
+      // Use the smaller scale factor (ensuring we never scale above 1)
+      const newScale = Math.min(scaleW, scaleH, 1);
+      setScaleFactor(newScale);
+    };
+  
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, []);
+
 
   return (
     <div className="px-6 flex flex-col items-center">
       {/* Container for miniplayer or expanded player */}
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-10">
+      <div className="fixed bottom-[calc(3rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-10">
       {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
-            className="mx-2 rounded-xl overflow-visible mb-[env(safe-area-inset-bottom)]"            
+            className="mx-2 rounded-xl overflow-visible mb-0"
             style={{
               background: dominantColor
                 ? `linear-gradient(to bottom, ${dominantColor}CC, rgba(0,0,0,0.95))`
@@ -733,7 +754,6 @@ const handleForwardClick = useCallback(() => {
                     ) : (
                       <Play className="w-5 h-5 xs:w-4 xs:h-4 text-white" />
                     )}
-
                   </button>
                   <button
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -779,18 +799,28 @@ const handleForwardClick = useCallback(() => {
         <AnimatePresence>
           {isExpanded && (
             <motion.div
-              className="fixed inset-0 z-50 flex flex-col"
+              // UPDATED: Ensuring no scrolling in the expanded container
+              className="fixed inset-0 z-50 flex flex-col" // removed flex-grow from children
               style={{
                 background: "rgba(0,0,0,0.92)",
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 paddingBottom: "env(safe-area-inset-bottom)",
+                // no overflow settings here => no scroll
               }}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 26, stiffness: 300 }}
             >
+              <div
+               style={{
+                transform: `scale(${scaleFactor})`,
+                transformOrigin: "top center",
+                width: "100%",
+                height: "100%",
+                }}
+              >
               {/* Header: top row */}
               <div className="flex items-center justify-between p-4">
                 <button
@@ -807,44 +837,44 @@ const handleForwardClick = useCallback(() => {
                     <Airplay className="w-5 h-5 text-white/60" />
                   </button>
                   {canShowActions ? (
-                  <button
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                    onClick={() => setShowQueueUI(true)}
-                  >
-                    <ListMusic className="w-5 h-5 text-white/60" />
-                  </button>
-                ) : ( 
-                  <>
-                   <button
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                    onClick={() => setShowQueueUI(true)}
-                  >
-                    <ListMusic className="w-5 h-5 text-white/60" />
-                  </button>
+                    <button
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      onClick={() => setShowQueueUI(true)}
+                    >
+                      <ListMusic className="w-5 h-5 text-white/60" />
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                        onClick={() => setShowQueueUI(true)}
+                      >
+                        <ListMusic className="w-5 h-5 text-white/60" />
+                      </button>
 
-                  <button
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                    onClick={() => setShowMoreOptions(true)}
-                  >
-                    <MoreHorizontal className="w-5 h-5 text-white/60" />
-                  </button>
-                  </>
-                )}
+                      <button
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                        onClick={() => setShowMoreOptions(true)}
+                      >
+                        <MoreHorizontal className="w-5 h-5 text-white/60" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Body content */}
-              <div className="px-4 flex-grow flex flex-col items-center">
+              <div className="px-4 flex-1 flex flex-col items-center">
                 {/* If queue open */}
                 {showQueueUI ? (
-                  <div
-                    className="h-[calc(100vh-15vh)] w-full overflow-y-auto custom-scrollbar"
+                  // UPDATED: Removed scrolling classes
+                  <motion.div
+                    className="w-full flex flex-col items-center"
                     style={{
                       paddingBottom: "calc(6rem + env(safe-area-inset-bottom))",
                     }}
                   >
-                    {/* Example queue UI */}
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between mb-6 w-full">
                       <div className="flex items-center">
                         <button
                           onClick={() => setShowQueueUI(false)}
@@ -865,7 +895,7 @@ const handleForwardClick = useCallback(() => {
                       </button>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="w-full flex flex-col items-start gap-4">
                       {/* Show previous tracks */}
                       {previousTracks.map((t, i) => (
                         <motion.div
@@ -898,7 +928,7 @@ const handleForwardClick = useCallback(() => {
                       {/* Actual queue */}
                       {queue.map((tr, i) => (
                         <AnimatePresence key={`queue-${tr.id}-${i}`}>
-                          <motion.div className="relative">
+                          <motion.div className="relative w-full">
                             <motion.div
                               className="relative bg-black"
                               drag="x"
@@ -950,13 +980,14 @@ const handleForwardClick = useCallback(() => {
                         </AnimatePresence>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 ) : showLyrics ? (
-                  // --- Lyrics View (Integrated from old code) ---
-                  <div
-                    className="h-[calc(100vh-10vh)] w-full overflow-y-auto custom-scrollbar"
-                    onScroll={handleUserScroll}
-                    onTouchMove={handleUserScroll}
+                  // UPDATED: Removed overflow-y-auto for lyrics
+                  <motion.div
+                    className="w-full flex flex-col"
+                    style={{
+                      height: "calc(100vh - 10vh)", // You can tweak
+                    }}
                   >
                     <div className="flex items-center mb-6">
                       <button
@@ -970,9 +1001,12 @@ const handleForwardClick = useCallback(() => {
                       </h2>
                     </div>
                     <div
-                      className="space-y-6 overflow-y-auto"
+                      className="space-y-6"
                       ref={lyricsRef}
-                      style={{ height: "calc(100% - 4rem)", scrollBehavior: "smooth", }}
+                      // removing scrolling => might cause content to clip if too large
+                      style={{ height: "100%", scrollBehavior: "smooth" }}
+                      onScroll={handleUserScroll}
+                      onTouchMove={handleUserScroll}
                     >
                       {processedLyrics.map((ly: ProcessedLyric, idx: number) => {
                         const isActive = idx === currentLyricIndex;
@@ -1023,10 +1057,8 @@ const handleForwardClick = useCallback(() => {
                         );
                       })}
                     </div>
-
-                  </div>
-                ) :
-                (
+                  </motion.div>
+                ) : (
                   // Normal expanded player
                   <>
                     {/* Artwork background blur */}
@@ -1039,7 +1071,7 @@ const handleForwardClick = useCallback(() => {
                           backgroundPosition: "center",
                           filter: "blur(25px) brightness(1.2) saturate(1.3)",
                           transform: "scale(1.8)",
-                          opacity: 0.95,  
+                          opacity: 0.95,
                           zIndex: -1,
                         }}
                       />
@@ -1082,15 +1114,17 @@ const handleForwardClick = useCallback(() => {
                     </div>
 
                     {/* Seekbar */}
-                    <div className="w-full mb-8 mt-6 overflow-visible">
-                    <Seekbar progress={seekPosition / duration} handleSeek={handleSeek} duration={duration} />
-                    <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
-                      <span>{formatTimeMobile(seekPosition)}</span>
-                      <span>{formatTimeMobile(duration)}</span>
+                    <div className="w-full mb-8 mt-6">
+                      <Seekbar
+                        progress={seekPosition / duration}
+                        handleSeek={handleSeek}
+                        duration={duration}
+                      />
+                      <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
+                        <span>{formatTimeMobile(seekPosition)}</span>
+                        <span>{formatTimeMobile(duration)}</span>
+                      </div>
                     </div>
-                  </div>
-
-
 
                     {/* Main playback controls */}
                     {mainControlButtons}
@@ -1128,7 +1162,7 @@ const handleForwardClick = useCallback(() => {
                     className="fixed inset-0 z-50"
                     style={{
                       background: "rgba(0,0,0,0.8)",
-                      pointerEvents: showAudioMenu ? "auto" : "none"
+                      pointerEvents: showAudioMenu ? "auto" : "none",
                     }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -1220,7 +1254,8 @@ const handleForwardClick = useCallback(() => {
                     onClick={() => setShowMoreOptions(false)}
                   >
                     <motion.div
-                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl max-h-[80%] overflow-y-auto custom-scrollbar"
+                      // UPDATED: Removed overflow-y-auto for the menu
+                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl max-h-[80%]"
                       initial={{ y: "100%" }}
                       animate={{ y: 0 }}
                       exit={{ y: "100%" }}
@@ -1253,6 +1288,7 @@ const handleForwardClick = useCallback(() => {
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
             </motion.div>
           )}
         </AnimatePresence>
