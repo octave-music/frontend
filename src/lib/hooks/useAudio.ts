@@ -33,9 +33,8 @@ function getTrackUrl(trackId: string, audioQuality: string): string {
 }
 
 /**
- * Ping a track URL (HEAD request) to warm up the server or caching layer.
- * This does not store anything in IDB; it's just a quick "touch" so future
- * full fetch requests might be faster or less likely to time out.
+ * Ping a track URL (HEAD request) to warm up the server or caching layer,
+ * but only if the user explicitly requests that quality or we are falling back to it.
  */
 async function pingTrackUrl(trackId: string, audioQuality: string): Promise<void> {
   const url = getTrackUrl(trackId, audioQuality);
@@ -48,28 +47,7 @@ async function pingTrackUrl(trackId: string, audioQuality: string): Promise<void
 }
 
 /**
- * A small helper to ping all possible qualities except one you might want to exclude.
- * For example, if we’re actively fetching "MAX", maybe skip pinging "MAX" again.
- */
-async function pingAllQualities(trackId: string, excludeQuality?: string) {
-  const allQualities: Array<"MAX" | "HIGH" | "DATA_SAVER"> = ["MAX", "HIGH", "DATA_SAVER"];
-  for (const q of allQualities) {
-    if (q === excludeQuality) continue;
-    const key = `${trackId}_${q}`;
-    const hasBlob = await getOfflineBlob(key);
-    // Only ping if we don't already have it offline
-    if (!hasBlob) {
-      pingTrackUrl(trackId, q).catch((err) =>
-        console.warn("[pingAllQualities] HEAD request error:", err)
-      );
-    }
-  }
-}
-
-/**
  * Helper: Fetch with retry logic.
- * For any non-OK response (or network error), wait retryDelay ms and try again,
- * up to the given number of retries. All error statuses trigger a retry.
  * This function forces a fresh network fetch by using { cache: 'no-store' }.
  */
 async function fetchWithRetry(
@@ -130,7 +108,7 @@ async function fetchWithFallback(
   console.log("[fetchWithFallback] Attempting quality:", requestedQuality);
   const mainUrl = getTrackUrl(trackId, requestedQuality);
 
-  // 1) "Ping it" first
+  // 1) "Ping" the requested quality first
   try {
     await pingTrackUrl(trackId, requestedQuality);
   } catch (pingError) {
@@ -204,9 +182,10 @@ export function useAudio() {
   const [currentTime, setCurrentTime] = useState(0);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
 
-  // User’s chosen audio quality & data saver toggle.
+  // Make NORMAL (mp3) the default unless user sets otherwise
   const [audioQuality, setAudioQuality] =
-    useState<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER">("HIGH");
+    useState<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER">("NORMAL");
+
   const [isDataSaver, setIsDataSaver] = useState(false);
 
   // onTrackEnd callback reference.
@@ -220,10 +199,16 @@ export function useAudio() {
 
     const handleTimeUpdate = () => setCurrentTime(audioElement?.currentTime || 0);
     const handleLoadedMetadata = () => setDuration(audioElement?.duration || 0);
+
+    // We remove setIsPlaying(false) so that user code can handle repeat loops
+    // in the onTrackEndCallback without a forced pause
     const handleEnded = () => {
-      if (onTrackEndCallbackRef.current) onTrackEndCallbackRef.current();
-      setIsPlaying(false);
+      if (onTrackEndCallbackRef.current) {
+        onTrackEndCallbackRef.current();
+      }
+      // Do NOT force setIsPlaying(false) here; let parent handle loop logic.
     };
+
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
 
@@ -276,9 +261,9 @@ export function useAudio() {
     });
 
   /**
-   * Play a track using the mp3-first approach for non-NORMAL qualities,
-   * plus an IndexedDB check to avoid re-fetching if the high-quality blob
-   * is already in storage. forceFetch is relevant to NORMAL only.
+   * Play a track, with optional time offset & autoPlay. 
+   * If user requests a non-NORMAL quality, we load mp3 first for instant playback, 
+   * then fetch the requested quality in background and switch only after it's ready.
    */
   const playTrackFromSource = useCallback(
     async (
@@ -295,14 +280,16 @@ export function useAudio() {
       const requested: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER" =
         isDataSaver ? "DATA_SAVER" : qualityOverride || audioQuality;
 
-      // Case 1: If requested != NORMAL, do the “mp3-first” flow.
+      // If the user specifically wants NORMAL or if DataSaver => we just fetch normal or saver.
+      // If user wants HIGH or MAX, we do MP3-first approach for instant playback, then fetch the requested quality in background.
+
+      // Case 1: If requested != NORMAL, do the mp3-first flow.
       if (requested !== "NORMAL") {
-        // 1) Ensure we have the NORMAL version.
+        // 1) Ensure we have the NORMAL version
         const normalKey = `${track.id}_NORMAL`;
         let mp3Blob: Blob | null = (await getOfflineBlob(normalKey)) ?? null;
 
         if (!mp3Blob) {
-          // If no mp3, fetch it now (fallback is just NORMAL => error if it fails).
           try {
             const result = await fetchWithFallback(
               track.id,
@@ -342,13 +329,7 @@ export function useAudio() {
           }
         }
 
-        // 2.5) In the background, ping all other qualities (except the requested one),
-        // so that if the user switches or fallback triggers, it’s possibly faster.
-        pingAllQualities(track.id, requested).catch((err) =>
-          console.warn("[useAudio] pingAllQualities error:", err)
-        );
-
-        // 3) Check if requested quality is already in IDB
+        // 3) Check if requested (HIGH, MAX, or DATA_SAVER) is already in IDB
         const requestedKey = `${track.id}_${requested}`;
         let highQualityBlob = await getOfflineBlob(requestedKey);
         if (highQualityBlob) {
@@ -413,7 +394,7 @@ export function useAudio() {
           blob = (await getOfflineBlob(key)) ?? null;
         }
 
-        // If still no blob, fetch it
+        // If no blob, fetch it
         if (!blob) {
           try {
             const result = await fetchWithFallback(
@@ -453,12 +434,6 @@ export function useAudio() {
             console.error(err);
           }
         }
-
-        // In the background, ping other qualities so they're “warmed up.”
-        pingAllQualities(track.id, "NORMAL").catch((err) =>
-          console.warn("[useAudio] pingAllQualities error:", err)
-        );
-        return;
       }
     },
     [audioQuality, isDataSaver]
@@ -524,7 +499,7 @@ export function useAudio() {
           console.log("[useAudio.loadAudioBuffer] Reusing offline =>", key);
           return existing;
         }
-        // Ping first
+        // Ping the specifically requested quality
         await pingTrackUrl(trackId, requested).catch(() =>
           console.warn("[useAudio.loadAudioBuffer] Ping error ignored")
         );
@@ -585,8 +560,7 @@ export function useAudio() {
       if (currentTrack) {
         const oldTime = audioElement.currentTime || 0;
         const wasPlaying = !audioElement.paused;
-        // We do NOT explicitly force fetch here in all cases, because
-        // the logic in playTrackFromSource will handle it if needed.
+        // Re-run play logic with the new quality
         await playTrackFromSource(
           currentTrack,
           oldTime,
