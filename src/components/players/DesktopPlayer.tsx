@@ -1062,23 +1062,27 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
   const [tab, setTab] = useState<SidebarTab>("queue");
   const [isCollapsed, setIsCollapsed] = useState(false);
   
-  const backClickCountRef = useRef(0);
-  const handleBackClick = useCallback(() => {
-    backClickCountRef.current++;
-    if (backClickCountRef.current === 1) {
-      setTimeout(() => {
-        if (backClickCountRef.current === 1) {
-          // Single click: restart current track
-          handleSeek(0);
-        }
-        backClickCountRef.current = 0;
-      }, 300);
-    } else if (backClickCountRef.current === 2) {
-      // Double click: go to previous track
-      previousTrack();
-      backClickCountRef.current = 0;
-    }
-  }, [handleSeek, previousTrack]);
+  const DOUBLE_CLICK_DELAY = 300; // adjust as needed
+
+// Example for DesktopPlayer or MobilePlayer:
+const backTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+const handleBackClick = useCallback(() => {
+  // If there’s already a timer, it means this is the second click.
+  if (backTimerRef.current) {
+    clearTimeout(backTimerRef.current);
+    backTimerRef.current = null;
+    // Double click: go to previous track
+    previousTrack();
+  } else {
+    // First click: set a timer for the single click action.
+    backTimerRef.current = setTimeout(() => {
+      // Single click action: restart current track
+      handleSeek(0);
+      backTimerRef.current = null;
+    }, DOUBLE_CLICK_DELAY);
+  }
+}, [handleSeek, previousTrack]);
 
 
   // Access the audio hook for data saver checks, or we can just pass in onCycleAudioQuality prop

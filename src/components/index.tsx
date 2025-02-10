@@ -132,24 +132,24 @@ export function SpotifyClone() {
   // ----------------------------------------------------------
   const isMounted = useRef(false);
 
-  const {
-    isPlaying,
-    setIsPlaying,
-    duration,
-    volume,
-    setVolume,
-    getCurrentPlaybackTime,
-    pauseAudio,
-    handleSeek,
-    playTrackFromSource,
-    onVolumeChange,
-    loadAudioBuffer,
-    setOnTrackEndCallback,
-    audioQuality,
-    setAudioQuality,
-    isDataSaver,
-    changeAudioQuality,
-  } = useAudio();
+  const { 
+    isPlaying, 
+    setIsPlaying, 
+    duration, 
+    volume, 
+    setVolume, 
+    getCurrentPlaybackTime, 
+    pauseAudio, 
+    handleSeek, 
+    playTrackFromSource, 
+    onVolumeChange, 
+    loadAudioBuffer, 
+    setOnTrackEndCallback, 
+    audioQuality, 
+    setAudioQuality, 
+    isDataSaver, 
+    changeAudioQuality, 
+  } = useAudio(); 
 
   // ----------------------------------------------------------
   //                  Core App State
@@ -500,38 +500,61 @@ export function SpotifyClone() {
     }
   }, [setPlaylists, setQueue, setRecommendedTracks]);
 
-  const handleTrackEnd = useCallback((): void => {
-    if (!currentTrack || !audioElement) return;
+  const handleTrackEnd = useCallback(async (): Promise<void> => {
+  // Ensure that there is a current track and a valid audio element.
+  if (!currentTrack || !audioElement) return;
 
-    switch (repeatMode) {
-      case "one":
-        void playTrackFromSource(currentTrack, 0, true);
+  switch (repeatMode) {
+    case "one":
+      // Repeat the current track.
+      try {
+        await playTrackFromSource(currentTrack, 0, true);
         setIsPlaying(true);
-        break;
-      case "all": {
-        const isLastTrack =
-          queue.findIndex((t) => t.id === currentTrack.id) === queue.length - 1;
-        if (isLastTrack) {
-          if (queue.length === 0) return;
-          setCurrentTrack(queue[0]);
-          void playTrackFromSource(queue[0], 0, true);
-          setIsPlaying(true);
-        } else {
-          skipTrack();
-        }
+      } catch (error) {
+        console.error("Error playing track in repeat 'one' mode:", error);
+      }
+      break;
+
+    case "all": {
+      // Find the index of the current track in the queue.
+      const currentIndex = queue.findIndex((t) => t.id === currentTrack.id);
+      if (currentIndex === -1) {
+        console.error("Current track not found in the queue.");
         break;
       }
-      case "off":
-      default:
-        if (queue.length > 1) {
-          skipTrack();
-        } else {
-          setIsPlaying(false);
-          audioElement.pause();
+
+      const isLastTrack = currentIndex === queue.length - 1;
+      if (isLastTrack && queue.length > 0) {
+        // If the current track is the last one, loop back to the first track.
+        const firstTrack = queue[0];
+        setCurrentTrack(firstTrack);
+        try {
+          await playTrackFromSource(firstTrack, 0, true);
+          setIsPlaying(true);
+        } catch (error) {
+          console.error("Error playing first track in repeat 'all' mode:", error);
         }
-        break;
+      } else {
+        // Otherwise, skip to the next track.
+        skipTrack();
+      }
+      break;
     }
-  }, [currentTrack, repeatMode, playTrackFromSource, setIsPlaying, queue, skipTrack]);
+
+    case "off":
+    default:
+      // If repeat is off and there is more than one track in the queue, skip.
+      if (queue.length > 1) {
+        skipTrack();
+      } else {
+        // If there's only one track, pause playback.
+        setIsPlaying(false);
+        audioElement.pause();
+      }
+      break;
+  }
+}, [currentTrack, repeatMode, playTrackFromSource, setIsPlaying, queue, skipTrack]);
+
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
     const updatedPlaylists = playlists.map((pl) =>
