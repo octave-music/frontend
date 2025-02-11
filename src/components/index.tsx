@@ -276,37 +276,6 @@ export function SpotifyClone() {
     })();
   }, []);
 
-  useEffect(() => {
-    function unlockAudioContext() {
-      if (audioElement && audioElement.paused) {
-        // Mute the audio so that the play call isn’t disruptive.
-        audioElement.muted = true;
-        audioElement
-          .play()
-          .then(() => {
-            // Once playback starts, unmute.
-            audioElement!.muted = false;
-          })
-          .catch((err) => {
-            console.error("Audio unlock failed:", err);
-          });
-        // Remove the listeners once the audio context is unlocked.
-        document.removeEventListener("touchstart", unlockAudioContext);
-        document.removeEventListener("click", unlockAudioContext);
-      }
-    }
-
-    // Attach listeners for both touch and click events.
-    document.addEventListener("touchstart", unlockAudioContext);
-    document.addEventListener("click", unlockAudioContext);
-
-    // Cleanup the event listeners when the component unmounts.
-    return () => {
-      document.removeEventListener("touchstart", unlockAudioContext);
-      document.removeEventListener("click", unlockAudioContext);
-    };
-  }, []);
-
   const handlePlaylistSearch = useCallback(async (query: string) => {
     try {
       const response = await fetch(
