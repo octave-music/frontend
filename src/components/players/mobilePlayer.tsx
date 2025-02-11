@@ -516,32 +516,42 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   /** Expand or collapse miniplayer => full view. */
   const togglePlayer = () => {
-    setIsExpanded(!isExpanded);
-    setIsPlayerOpen(!isExpanded);
+    if (isExpanded) {
+      // Collapse: allow exit animation to complete
+      setIsExpanded(false);
+      setTimeout(() => {
+        setIsPlayerOpen(false);
+      }, 300); // Adjust this timing to match your exit transition duration
+    } else {
+      // Expand immediately
+      setIsExpanded(true);
+      setIsPlayerOpen(true);
+    }
   };
-
+  
   // Single vs double-click for "back" button
-  const DOUBLE_CLICK_DELAY = 300; // adjust as needed
-
-// Example for DesktopPlayer or MobilePlayer:
-const backTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-const handleBackClick = useCallback(() => {
-  // If there’s already a timer, it means this is the second click.
-  if (backTimerRef.current) {
-    clearTimeout(backTimerRef.current);
-    backTimerRef.current = null;
-    // Double click: go to previous track
-    previousTrack();
-  } else {
-    // First click: set a timer for the single click action.
-    backTimerRef.current = setTimeout(() => {
-      // Single click action: restart current track
-      handleSeek(0);
-      backTimerRef.current = null;
-    }, DOUBLE_CLICK_DELAY);
-  }
-}, [handleSeek, previousTrack]);
+  const lastTapRef = useRef<number>(0);
+  const DOUBLE_TAP_DELAY = 300; // in milliseconds
+  
+  const handleBackTap = useCallback(() => {
+    const now = Date.now();
+    // If a previous tap exists and the interval is less than the threshold…
+    if (lastTapRef.current && now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Double tap detected – go to previous track.
+      previousTrack();
+      lastTapRef.current = 0; // Reset for the next sequence.
+    } else {
+      // First tap – store the timestamp and schedule the single tap action.
+      lastTapRef.current = now;
+      setTimeout(() => {
+        if (lastTapRef.current) {
+          // If no second tap has occurred within the threshold, treat as single tap.
+          handleSeek(0);
+          lastTapRef.current = 0;
+        }
+      }, DOUBLE_TAP_DELAY);
+    }
+  }, [previousTrack, handleSeek]);;
 
   // Single vs double-click for "forward" button
   const forwardClickCountRef = useRef(0);
@@ -606,60 +616,43 @@ const handleBackClick = useCallback(() => {
 
   /** Main cluster of playback controls in expanded mode. */
   const mainControlButtons = (
-    <div className="w-full flex items-center justify-between mb-8 p-2 sm:px-4">
-      <button
-        onClick={shuffleQueue}
-        className="p-3 rounded-full text-white/60 hover:bg-white/10"
-      >
-        <Shuffle className="w-6 h-6 xs:w-5 xs:h-5" />
-      </button>
-
-      <button
-        className="p-2 hover:bg-white/10 rounded-full transition-colors"
-        onClick={handleBackClick}
-      >
-        <SkipBack className="w-6 h-6 text-white" />
-      </button>
-
-      <motion.button
-        className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90 transition-colors"
-        whileTap={{ scale: 0.95 }}
-        onClick={togglePlay}
-      >
-        {isPlaying ? (
-          <Pause className="w-8 h-8 text-black" />
-        ) : (
-          <Play className="w-8 h-8 text-black ml-1" />
-        )}
-      </motion.button>
-
-      <button
-        className="p-2 hover:bg-white/10 rounded-full transition-colors"
-        onClick={handleForwardClick}
-      >
-        <SkipForward className="w-6 h-6 text-white" />
-      </button>
-
-      <button
-        onClick={() => {
-          const modes: RepeatMode[] = ["off", "all", "one"];
-          const currentIndex = modes.indexOf(repeatMode);
-          const nextMode = modes[(currentIndex + 1) % modes.length];
-          setRepeatMode(nextMode);
-        }}
-        className="p-3 rounded-full"
-      >
-        {repeatMode === "one" ? (
-          <Repeat1 className="w-6 h-6 xs:w-5 xs:h-5 text-green-500" />
-        ) : (
-          <Repeat
-            className={`w-6 h-6 xs:w-5 xs:h-5 ${
-              repeatMode === "all" ? "text-green-500" : "text-white/60"
-            }`}
-          />
-        )}
-      </button>
-    </div>
+    <div className="w-full flex items-center justify-around mb-8 p-2 sm:px-4">
+  <button onClick={shuffleQueue} className="p-3 rounded-full text-white/60 hover:bg-white/10">
+    <Shuffle className="w-6 h-6" />
+  </button>
+  <button onClick={handleBackTap} className="p-2 rounded-full hover:bg-white/10">
+    <SkipBack className="w-6 h-6 text-white" />
+  </button>
+  <motion.button
+    className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90"
+    whileTap={{ scale: 0.95 }}
+    onClick={togglePlay}
+  >
+    {isPlaying ? (
+      <Pause className="w-8 h-8 text-black" />
+    ) : (
+      <Play className="w-8 h-8 text-black ml-1" />
+    )}
+  </motion.button>
+  <button onClick={handleForwardClick} className="p-2 rounded-full hover:bg-white/10">
+    <SkipForward className="w-6 h-6 text-white" />
+  </button>
+  <button
+    onClick={() => {
+      const modes: RepeatMode[] = ["off", "all", "one"];
+      const currentIndex = modes.indexOf(repeatMode);
+      const nextMode = modes[(currentIndex + 1) % modes.length];
+      setRepeatMode(nextMode);
+    }}
+    className="p-3 rounded-full"
+  >
+    {repeatMode === "one" ? (
+      <Repeat1 className="w-6 h-6 text-green-500" />
+    ) : (
+      <Repeat className={`w-6 h-6 ${repeatMode === "all" ? "text-green-500" : "text-white/60"}`} />
+    )}
+  </button>
+</div>
   );
 
   useEffect(() => {
@@ -744,7 +737,7 @@ const handleBackClick = useCallback(() => {
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleBackClick();
+                      handleBackTap();
                     }}
                   >
                     <SkipBack className="w-5 h-5 text-white" />
@@ -803,7 +796,7 @@ const handleBackClick = useCallback(() => {
         )}
 
         {/* --- Expanded Player --- */}
-        <AnimatePresence>
+        <AnimatePresence  mode="wait">
           {isExpanded && (
             <motion.div
               // UPDATED: Ensuring no scrolling in the expanded container
@@ -1071,70 +1064,69 @@ const handleBackClick = useCallback(() => {
                   <>
                     {/* Artwork background blur */}
                     <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                          filter: "blur(25px) brightness(1.2) saturate(1.3)",
-                          transform: "scale(1.8)",
-                          opacity: 0.95,
-                          zIndex: -1,
-                        }}
-                      />
-                      <motion.div
-                        drag="x"
-                        dragConstraints={{ left: 0, right: 0 }}
-                        dragElastic={0.2}
-                        onDragEnd={(event, info) => handleMiniPlayerDragEnd(info)}
-                        className="relative z-10 w-[min(60vw,320px)] h-[min(60vw,320px)]"
-                      >
-                        <Image
-                          src={currentTrack.album.cover_medium || ""}
-                          alt={currentTrack.title || ""}
-                          fill
-                          sizes="(max-width: 768px) 60vw, 320px"
-                          className="rounded-lg shadow-xl object-cover"
-                          priority
-                        />
-                      </motion.div>
-                    </div>
+                          <div
+                            className="absolute inset-0"
+                            style={{
+                              backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                              filter: "blur(25px) brightness(1.2) saturate(1.3)",
+                              transform: "scale(1.8)",
+                              opacity: 0.95,
+                              zIndex: -1,
+                            }}
+                          />
+                          <div className="relative w-[60vw] min-w-[200px] aspect-square flex justify-center items-center">
+                            <motion.div
+                              drag="x"
+                              dragConstraints={{ left: 0, right: 0 }}
+                              dragElastic={0.2}
+                              onDragEnd={(event, info) => handleMiniPlayerDragEnd(info)}
+                              className="relative z-10 w-full h-full"
+                            >
+                              <Image
+                                src={currentTrack.album.cover_medium || ""}
+                                alt={currentTrack.title || ""}
+                                fill
+                                sizes="(max-width: 768px) 60vw, 320px"
+                                className="rounded-lg shadow-xl object-cover"
+                                priority
+                              />
+                            </motion.div>
+                          </div>
+                        </div>
+
 
                     {/* Title + Artist */}
-                    <div className="w-full text-center mb-8">
-                      <h2 className="text-2xl font-bold text-white mb-2">
-                        {currentTrack.title}
-                      </h2>
-                      <p className="text-white/60">{currentTrack.artist.name}</p>
-                    </div>
-
+                    <div className="w-full text-center mb-4">
+                        <h2 className="text-2xl font-bold text-white mb-1">
+                          {currentTrack.title}
+                        </h2>
+                        <p className="text-white/60">{currentTrack.artist.name}</p>
+                      </div>
                     {/* Audio Quality Badge + Listen Count */}
-                    <div className="flex flex-col items-center">
-                      <QualityBadge
-                        quality={audioQuality}
-                        onClick={() => setShowAudioMenu(true)}
-                      />
-                      <p className="text-[#FFD700] text-xs mt-1 flex items-center space-x-1">
-                        <Guitar className="w-4 h-4 inline-block" />
+                    <div className="flex flex-col items-center space-y-1">
+                      <QualityBadge quality={audioQuality} onClick={() => setShowAudioMenu(true)} />
+                      <p className="text-[#FFD700] text-xs flex items-center space-x-1">
+                        <Guitar className="w-4 h-4" />
                         <span>Listened {listenCount} times</span>
                       </p>
                     </div>
 
                     {/* Seekbar */}
-                    <div className="w-full mb-8 mt-6">
+                    <div className="w-full mb-8 mt-6 px-4">
                       <Seekbar
                         progress={seekPosition / duration}
                         handleSeek={handleSeek}
                         duration={duration}
                       />
-                      <div className="flex justify-between text-sm text-white/60 mt-2 px-6">
+                      <div className="flex justify-between text-sm text-white/60 mt-2">
                         <span>{formatTimeMobile(seekPosition)}</span>
                         <span>{formatTimeMobile(duration)}</span>
                       </div>
                     </div>
 
-                    {/* Main playback controls */}
+                  {/* Main playback controls */}
                     {mainControlButtons}
 
                     {/* Extra action buttons */}
@@ -1164,92 +1156,85 @@ const handleBackClick = useCallback(() => {
               </div>
 
               {/* Audio Quality Menu */}
-              <AnimatePresence>
-                {showAudioMenu && (
+              {/* Updated Modal Container */}
+<AnimatePresence>
+  {showAudioMenu && (
+    <motion.div
+      className="fixed inset-0 z-50"
+      style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => setShowAudioMenu(false)}
+    >
+      <motion.div
+        className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
+        style={{ width: "100%", maxHeight: "80vh" }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4">
+          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+          <h3 className="text-lg font-bold text-white mb-4 text-center">
+            Audio Quality
+          </h3>
+          {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map((qual) => (
+            <button
+              key={qual}
+              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
+                audioQuality === qual ? "bg-white/10" : "hover:bg-white/5"
+              }`}
+              onClick={async () => {
+                if (isDataSaver && qual !== "DATA_SAVER") {
+                  toast.error(
+                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
+                  );
+                  return;
+                }
+                try {
+                  await changeAudioQuality(qual);
+                  toast.success(`Switched to ${qual} Quality`);
+                } catch (err) {
+                  console.error(err);
+                  toast.error("Failed to change audio quality");
+                } finally {
+                  setShowAudioMenu(false);
+                }
+              }}
+            >
+              <div className="flex flex-col items-start justify-center">
+                <p className="text-white font-semibold">{qual}</p>
+                <p className="text-sm text-white/60 mt-1">
+                  {qual === "MAX" && "HiFi Plus (24-bit, up to 192kHz)"}
+                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
+                  {qual === "NORMAL" && "High (320kbps)"}
+                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
+                </p>
+              </div>
+              {qual === audioQuality && (
+                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
                   <motion.div
-                    className="fixed inset-0 z-50"
-                    style={{
-                      background: "rgba(0,0,0,0.8)",
-                      pointerEvents: showAudioMenu ? "auto" : "none",
-                    }}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setShowAudioMenu(false)}
-                  >
-                    <motion.div
-                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
-                      initial={{ y: "100%" }}
-                      animate={{ y: 0 }}
-                      exit={{ y: "100%" }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="p-4">
-                        <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
-                        <h3 className="text-lg font-bold text-white mb-4 text-center">
-                          Audio Quality
-                        </h3>
-                        {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map(
-                          (qual) => (
-                            <button
-                              key={qual}
-                              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
-                                audioQuality === qual
-                                  ? "bg-white/10"
-                                  : "hover:bg-white/5"
-                              }`}
-                              onClick={async () => {
-                                if (isDataSaver && qual !== "DATA_SAVER") {
-                                  toast.error(
-                                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
-                                  );
-                                  return;
-                                }
-                                try {
-                                  await changeAudioQuality(qual);
-                                  toast.success(`Switched to ${qual} Quality`);
-                                } catch (err) {
-                                  console.error(err);
-                                  toast.error("Failed to change audio quality");
-                                } finally {
-                                  setShowAudioMenu(false);
-                                }
-                              }}
-                            >
-                              <div className="flex flex-col items-start justify-center">
-                                <p className="text-white font-semibold leading-none">
-                                  {qual}
-                                </p>
-                                <p className="text-sm text-white/60 leading-none mt-1">
-                                  {qual === "MAX" &&
-                                    "HiFi Plus (24-bit, up to 192kHz)"}
-                                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
-                                  {qual === "NORMAL" && "High (320kbps)"}
-                                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
-                                </p>
-                              </div>
-                              {qual === audioQuality && (
-                                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
-                                  <motion.div
-                                    className="w-3 h-3 bg-white rounded-full"
-                                    layoutId="quality-indicator"
-                                  />
-                                </div>
-                              )}
-                            </button>
-                          )
-                        )}
-                        <button
-                          className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
-                          onClick={() => setShowAudioMenu(false)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    className="w-3 h-3 bg-white rounded-full"
+                    layoutId="quality-indicator"
+                  />
+                </div>
+              )}
+            </button>
+          ))}
+          <button
+            className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
+            onClick={() => setShowAudioMenu(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
 
               {/* More Options Menu */}
               <AnimatePresence>
