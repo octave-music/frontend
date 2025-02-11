@@ -87,6 +87,7 @@ import {
   Artist,
   BeforeInstallPromptEvent,
 } from "@/lib/types/types";
+import useAutoplayPermission from "@/lib/managers/autoPlay";
 
 declare global {
   interface Window {
@@ -150,6 +151,11 @@ export function SpotifyClone() {
     isDataSaver, 
     changeAudioQuality, 
   } = useAudio(); 
+
+  const { hasAutoplayPermission, isAudioContextStarted } = useAutoplayPermission({
+    storageType: 'local',
+    debugMode: true
+  });
 
   // ----------------------------------------------------------
   //                  Core App State
@@ -231,6 +237,10 @@ export function SpotifyClone() {
   const [showArtistSelection, setShowArtistSelection] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Autoplay
+  const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+
   // ----------------------------------------------------------
   //                  Handlers & Utility Functions
   // ----------------------------------------------------------
@@ -239,6 +249,7 @@ export function SpotifyClone() {
     setSelectedPlaylist(playlist);
     setShowDeleteConfirmation(true);
   }, []);
+  
 
   const deleteConfirmedPlaylist = useCallback(() => {
     if (selectedPlaylist && selectedPlaylist.name === "Liked Songs") {
@@ -254,6 +265,7 @@ export function SpotifyClone() {
       });
     }
   }, [selectedPlaylist]);
+  
 
   useEffect(() => {
     (async function initPlaylists() {
@@ -1234,6 +1246,28 @@ export function SpotifyClone() {
     }
     void loadRecommendedTracks();
   }, []);
+
+  useEffect(() => {
+    if (hasAutoplayPermission && isAudioContextStarted && currentTrack) {
+      void playTrackFromSource(
+        currentTrack,
+        getCurrentPlaybackTime(),
+        true,
+        undefined,
+        false,
+        true
+      );
+      setIsPlaying(true);
+    }
+  }, [
+    hasAutoplayPermission,
+    isAudioContextStarted,
+    currentTrack,
+    playTrackFromSource,
+    getCurrentPlaybackTime,
+    setIsPlaying
+  ]);
+  
 
   // ----------------------------------------------------------
   //                      Render
