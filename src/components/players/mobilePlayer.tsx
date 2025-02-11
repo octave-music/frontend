@@ -485,7 +485,10 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     { icon: Library, label: "Add to Playlist", onClick: () => setShowAddToPlaylistModal(true) },
     { icon: ListMusic, label: "Queue", onClick: () => setShowQueueUI(true) },
     { icon: Share, label: "Copy Link", onClick: () => console.log("Copied link") },
-    { icon: Music, label: "Lyrics", active: showLyrics, onClick: toggleLyricsView },
+    { icon: Music, label: "Lyrics", active: showLyrics,  onClick: () => {
+      setShowQueueUI(false);
+      toggleLyricsView();
+    }, },
     { icon: Flag, label: "Report", onClick: () => console.log("Reported track") },
     { icon: Download, label: "Download", onClick: () => downloadTrack(currentTrack) },
     { icon: Lock, label: "Audio Quality", onClick: () => setShowAudioMenu(true) },
@@ -899,8 +902,10 @@ const handleBackClick = useCallback(() => {
                       </button>
                     </div>
 
-                    <div className="w-full flex flex-col items-start gap-4">
-                      {/* Show previous tracks */}
+                    <div
+                      className="w-full flex flex-col items-start gap-4 overflow-y-auto"
+                      style={{ maxHeight: "calc(100vh - 10rem)" }} // Adjust height as needed
+                    >                      {/* Show previous tracks */}
                       {previousTracks.map((t, i) => (
                         <motion.div
                           key={`prev-${t.id}-${i}`}
@@ -1005,10 +1010,9 @@ const handleBackClick = useCallback(() => {
                       </h2>
                     </div>
                     <div
-                      className="space-y-6"
+                      className="space-y-6 overflow-y-auto"
                       ref={lyricsRef}
-                      // removing scrolling => might cause content to clip if too large
-                      style={{ height: "100%", scrollBehavior: "smooth" }}
+                      style={{ height: "calc(100vh - 10vh)", scrollBehavior: "smooth" }}
                       onScroll={handleUserScroll}
                       onTouchMove={handleUserScroll}
                     >
