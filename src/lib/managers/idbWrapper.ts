@@ -3,7 +3,7 @@ import { Track, Playlist } from "../types/types";
 
 const API_BASE_URL = "https://api.octave.gold";
 const DB_NAME = "OctaveDB";
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 interface RecentlyPlayedEntry {
   timestamp: number;
@@ -41,6 +41,10 @@ async function openIDB(): Promise<IDBDatabase> {
           }
         }
       });
+
+      if (!db.objectStoreNames.contains("lyrics")) {
+        db.createObjectStore("lyrics", { keyPath: "id" });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -249,4 +253,17 @@ export async function refreshTrackBlob(trackId: string, extension = ".mp3"): Pro
   const blob = await response.blob();
   await storeTrackBlob(trackId + "_" + extension.replace(".", ""), blob);
   return blob;
+}
+
+export async function storeCachedLyrics(trackId: string, lyrics: string): Promise<void> {
+  await dbOperation("lyrics", "readwrite", (store) => store.put({ id: trackId, lyrics }));
+}
+
+export async function getCachedLyrics(trackId: string): Promise<string | undefined> {
+  const result = await dbOperation<{ id: string, lyrics: string } | undefined>(
+    "lyrics",
+    "readonly",
+    (store) => store.get(trackId)
+  );
+  return result?.lyrics;
 }

@@ -449,11 +449,12 @@ const SettingsView: React.FC<{
    ================================= */
 const CategoryNav: React.FC = () => {
   const categories = [
-    "Music",
-    "Podcasts & Shows",
-    "Audiobooks",
-    "Live",
-    "New Releases",
+    // "Music",
+    "Coming Soon!"
+    // "Podcasts & Shows",
+    // "Audiobooks",
+    // "Live",
+    // "New Releases",
   ];
 
   return (
