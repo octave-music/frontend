@@ -15,9 +15,6 @@
  *    and PWA Install Modals
  *  - Separates MOBILE LAYOUT and DESKTOP LAYOUT to improve clarity
  *  - Strict TypeScript typing, ESLint, and Prettier compatible
- *
- *  NOTE: Type definitions for Tracks, Playlists, etc. are imported
- *  from ../lib/types/types or declared locally for strict typing.
  * ------------------------------------------------------------
  */
 
@@ -133,36 +130,38 @@ export function SpotifyClone() {
   // ----------------------------------------------------------
   const isMounted = useRef(false);
 
-  const { 
-    isPlaying, 
-    setIsPlaying, 
-    duration, 
-    volume, 
-    setVolume, 
-    getCurrentPlaybackTime, 
-    pauseAudio, 
-    handleSeek, 
-    playTrackFromSource, 
-    onVolumeChange, 
-    loadAudioBuffer, 
-    setOnTrackEndCallback, 
-    audioQuality, 
-    setAudioQuality, 
-    isDataSaver, 
-    changeAudioQuality, 
-  } = useAudio(); 
+  // Pull data & methods from the updated useAudio hook
+  const {
+    isPlaying,
+    setIsPlaying,
+    duration,
+    volume,
+    setVolume,
+    getCurrentPlaybackTime,
+    pauseAudio,
+    handleSeek,
+    playTrackFromSource,
+    onVolumeChange,
+    loadAudioBuffer,
+    setOnTrackEndCallback,
+    audioQuality,
+    setAudioQuality,
+    isDataSaver,
+    changeAudioQuality,
+    setLoop, // <-- new for toggling native loop
+  } = useAudio();
 
   const { hasAutoplayPermission, isAudioContextStarted } = useAutoplayPermission({
-    storageType: 'local',
-    debugMode: true
+    storageType: "local",
+    debugMode: true,
   });
 
   // ----------------------------------------------------------
   //                  Core App State
   // ----------------------------------------------------------
-  const [view, setView] = useState<
-    "home" | "search" | "playlist" | "settings" | "library"
-  >("home");
+  const [view, setView] = useState<"home" | "search" | "playlist" | "settings" | "library">(
+    "home"
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -188,6 +187,7 @@ export function SpotifyClone() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [playlistSearchQuery, setPlaylistSearchQuery] = useState("");
   const [playlistSearchResults, setPlaylistSearchResults] = useState<Track[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Playback Controls
   const [shuffleOn, setShuffleOn] = useState(false);
@@ -199,10 +199,7 @@ export function SpotifyClone() {
   // Context Menu & Modals
   const [showQueue, setShowQueue] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
-  const [contextMenuPosition, setContextMenuPosition] = useState<Position>({
-    x: 0,
-    y: 0,
-  });
+  const [contextMenuPosition, setContextMenuPosition] = useState<Position>({ x: 0, y: 0 });
   const [contextMenuTrack, setContextMenuTrack] = useState<Track | null>(null);
   const [contextMenuOptions, setContextMenuOptions] = useState<ContextMenuOption[]>([]);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
@@ -214,14 +211,9 @@ export function SpotifyClone() {
   // Playlist Creation
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [newPlaylistImage, setNewPlaylistImage] = useState<string | null>(null);
-  const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<string | null>(
-    null
-  );
-  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] =
-    useState(false);
-  const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<
-    Track[]
-  >([]);
+  const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState<string | null>(null);
+  const [showSearchInPlaylistCreation, setShowSearchInPlaylistCreation] = useState(false);
+  const [selectedTracksForNewPlaylist, setSelectedTracksForNewPlaylist] = useState<Track[]>([]);
 
   // Downloads & Progress
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -235,7 +227,6 @@ export function SpotifyClone() {
   // Onboarding
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showArtistSelection, setShowArtistSelection] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
 
   // Autoplay
   const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(false);
@@ -249,14 +240,12 @@ export function SpotifyClone() {
     setSelectedPlaylist(playlist);
     setShowDeleteConfirmation(true);
   }, []);
-  
 
   const deleteConfirmedPlaylist = useCallback(() => {
     if (selectedPlaylist && selectedPlaylist.name === "Liked Songs") {
-      toast.error("You cannot delete the Liked Songs playlist.");
+      toast.warning("You cannot delete the Liked Songs playlist.");
       return;
     }
-    // Proceed with deletion for other playlists:
     if (selectedPlaylist) {
       void deletePlaylistByName(selectedPlaylist.name).then((updatedPlaylists) => {
         setPlaylists(updatedPlaylists);
@@ -265,8 +254,8 @@ export function SpotifyClone() {
       });
     }
   }, [selectedPlaylist]);
-  
 
+  // On app load, ensure "Liked Songs" exists
   useEffect(() => {
     (async function initPlaylists() {
       const pls = await getAllPlaylists();
@@ -277,7 +266,6 @@ export function SpotifyClone() {
             name: "Liked Songs",
             image: "/images/liked-songs.webp",
             tracks: [],
-            // Optionally, add a pinned flag
             pinned: true,
           };
           pls.push(likedPlaylist);
@@ -305,32 +293,23 @@ export function SpotifyClone() {
   const addTrackToPlaylist = useCallback(
     async (track: Track) => {
       if (!currentPlaylist) return;
-
-      // Check if the track is already in the playlist
+      // Check if track is already in the playlist
       const isAlreadyIn = currentPlaylist.tracks.some((t) => t.id === track.id);
       if (isAlreadyIn) {
         toast.warning("This track is already in the playlist.");
         return;
       }
 
-      // Add the track to the playlist
       const updatedPlaylist: Playlist = {
         ...currentPlaylist,
         tracks: [...currentPlaylist.tracks, track],
       };
-
-      // Update state
       setCurrentPlaylist(updatedPlaylist);
       setPlaylists((prevPlaylists) =>
-        prevPlaylists.map((pl) =>
-          pl.name === updatedPlaylist.name ? updatedPlaylist : pl
-        )
+        prevPlaylists.map((pl) => (pl.name === updatedPlaylist.name ? updatedPlaylist : pl))
       );
-
-      // Store the updated playlist in IndexedDB
       await storePlaylist(updatedPlaylist);
 
-      // Optionally, reset the search
       setPlaylistSearchQuery("");
       setPlaylistSearchResults([]);
     },
@@ -378,22 +357,20 @@ export function SpotifyClone() {
   }, [showLyrics, currentTrack, fetchLyrics]);
 
   /**
-   * “Play Track” => set it to front of queue, optionally auto-play
+   * “Play Track” => set it as current, optionally auto-play
    */
   const playTrack = useCallback(
     (track: Track, autoPlay = true) => {
-      // Insert the track at front of queue
       setQueue((prev) => {
-        if (prev[0]?.id === track.id) return prev; // Already playing at front
+        // Put track at front of queue
+        if (prev[0]?.id === track.id) return prev;
         const filtered = prev.filter((t) => t.id !== track.id);
         return [track, ...filtered];
       });
-
-      // Move the current track to previousTracks
+      // Move current track into previous
       setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
       setCurrentTrack(track);
 
-      // Actually load & possibly play
       void playTrackFromSource(track, 0, autoPlay);
       if (autoPlay) setIsPlaying(true);
     },
@@ -401,22 +378,16 @@ export function SpotifyClone() {
   );
 
   /**
-   * Toggle the current track’s play state. If no track is loaded, do nothing.
+   * Toggle playback. If no track is loaded, do nothing.
    */
   const togglePlay = useCallback(async () => {
     if (!currentTrack || !audioElement) return;
-    try {
-      if (isPlaying) {
-        audioElement.pause();
-        setIsPlaying(false);
-      } else {
-        await audioElement.play();
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      console.error("Playback error:", error);
+    if (isPlaying) {
+      audioElement.pause();
       setIsPlaying(false);
-      audioElement.currentTime = 0;
+    } else {
+      await audioElement.play().catch(console.error);
+      setIsPlaying(true);
     }
   }, [currentTrack, isPlaying, setIsPlaying]);
 
@@ -466,22 +437,15 @@ export function SpotifyClone() {
             image: "/images/liked-songs.webp",
             tracks: [],
           };
-          // Store the new playlist
-          storePlaylist(newPL).catch((err) =>
-            console.error("Error storing new playlist:", err)
-          );
+          void storePlaylist(newPL);
           return [...prevPlaylists, newPL];
         }
         return prevPlaylists;
       });
 
-      // Retrieve the updated playlists
       const updatedPlaylists = await getAllPlaylists();
       const liked = updatedPlaylists.find((p) => p.name === "Liked Songs");
-
-      if (!liked) {
-        throw new Error("Failed to create 'Liked Songs' playlist.");
-      }
+      if (!liked) throw new Error("Failed to create 'Liked Songs' playlist.");
 
       const topArtists: string[] = await getTopArtists(6);
       const trackPromises = topArtists.map(async (artistName: string) => {
@@ -494,9 +458,7 @@ export function SpotifyClone() {
       const artists = (await Promise.all(trackPromises)).filter(Boolean);
       const tracksByArtistPromises = artists.map(async (artist) => {
         const response = await fetch(
-          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
-            artist.name
-          )}`
+          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
         );
         const data = await response.json();
         return data.results?.slice(0, 6) || [];
@@ -512,61 +474,48 @@ export function SpotifyClone() {
     }
   }, [setPlaylists, setQueue, setRecommendedTracks]);
 
+  /**
+   * If the track ends, handle repeating or skipping logic.
+   * For "repeat one" => do nothing, because we rely on `audioElement.loop = true`.
+   * For "all" => skip or loop back if at the end.
+   * For "off" => skip if more tracks remain, else stop.
+   */
   const handleTrackEnd = useCallback(async (): Promise<void> => {
-  // Ensure that there is a current track and a valid audio element.
-  if (!currentTrack || !audioElement) return;
+    if (!currentTrack || !audioElement) return;
 
-  switch (repeatMode) {
-    case "one":
-      // Repeat the current track.
-      try {
-        await playTrackFromSource(currentTrack, 0, true);
-        setIsPlaying(true);
-      } catch (error) {
-        console.error("Error playing track in repeat 'one' mode:", error);
-      }
-      break;
+    switch (repeatMode) {
+      case "one":
+        // With audioElement.loop = true, it won't actually fire ended, so do nothing
+        return;
 
-    case "all": {
-      // Find the index of the current track in the queue.
-      const currentIndex = queue.findIndex((t) => t.id === currentTrack.id);
-      if (currentIndex === -1) {
-        console.error("Current track not found in the queue.");
+      case "all": {
+        // Just skip to next; if at end, the skip logic re-inserts track or loops back
+        skipTrack();
         break;
       }
 
-      const isLastTrack = currentIndex === queue.length - 1;
-      if (isLastTrack && queue.length > 0) {
-        // If the current track is the last one, loop back to the first track.
-        const firstTrack = queue[0];
-        setCurrentTrack(firstTrack);
-        try {
-          await playTrackFromSource(firstTrack, 0, true);
-          setIsPlaying(true);
-        } catch (error) {
-          console.error("Error playing first track in repeat 'all' mode:", error);
+      case "off":
+      default:
+        // If there's more than one track, skip. Otherwise, pause.
+        if (queue.length > 1) {
+          skipTrack();
+        } else {
+          setIsPlaying(false);
+          audioElement.pause();
         }
-      } else {
-        // Otherwise, skip to the next track.
-        skipTrack();
-      }
-      break;
+        break;
     }
+  }, [currentTrack, repeatMode, skipTrack, queue, setIsPlaying]);
 
-    case "off":
-    default:
-      // If repeat is off and there is more than one track in the queue, skip.
-      if (queue.length > 1) {
-        skipTrack();
-      } else {
-        // If there's only one track, pause playback.
-        setIsPlaying(false);
-        audioElement.pause();
-      }
-      break;
-  }
-}, [currentTrack, repeatMode, playTrackFromSource, setIsPlaying, queue, skipTrack]);
+  // Turn on/off the HTMLAudioElement.loop when repeatMode changes
+  useEffect(() => {
+    setLoop(repeatMode === "one");
+  }, [repeatMode, setLoop]);
 
+  // At init, set onTrackEnd callback
+  useEffect(() => {
+    setOnTrackEndCallback(handleTrackEnd);
+  }, [handleTrackEnd, setOnTrackEndCallback]);
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
     const updatedPlaylists = playlists.map((pl) =>
@@ -617,14 +566,10 @@ export function SpotifyClone() {
       },
       album: {
         title: track.album?.title || "Unknown Album",
-        cover_medium:
-          track.album?.cover_medium || "/images/defaultPlaylistImage.png",
-        cover_small:
-          track.album?.cover_small || "/images/defaultPlaylistImage.png",
-        cover_big:
-          track.album?.cover_big || "/images/defaultPlaylistImage.png",
-        cover_xl:
-          track.album?.cover_xl || "/images/defaultPlaylistImage.png",
+        cover_medium: track.album?.cover_medium || "/images/defaultPlaylistImage.png",
+        cover_small: track.album?.cover_small || "/images/defaultPlaylistImage.png",
+        cover_big: track.album?.cover_big || "/images/defaultPlaylistImage.png",
+        cover_xl: track.album?.cover_xl || "/images/defaultPlaylistImage.png",
       },
     };
   };
@@ -633,7 +578,6 @@ export function SpotifyClone() {
     (rawTrack: Track) => {
       if (!rawTrack) return;
       const track = sanitizeTrack(rawTrack);
-
       const likedPlaylist = playlists.find((p) => p.name === "Liked Songs");
       if (!likedPlaylist) return;
 
@@ -648,9 +592,7 @@ export function SpotifyClone() {
       );
 
       setPlaylists(updatedPlaylists);
-      void storePlaylist(updatedLikedPlaylist).catch((err) =>
-        console.error("Error storing updated playlist:", err)
-      );
+      void storePlaylist(updatedLikedPlaylist);
     },
     [playlists]
   );
@@ -679,20 +621,14 @@ export function SpotifyClone() {
   const onQueueItemClick = useCallback(
     (track: Track, idx: number) => {
       if (idx < 0) {
-        // Handle clicks from previousTracks (if needed)
+        // from previousTracks
         setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
         setQueue((q) => [track, ...q]);
       } else {
-        // Instead of removing the track entirely, reposition it to the top.
-        setPreviousTracks((prev) =>
-          currentTrack ? [currentTrack, ...prev] : prev
-        );
+        setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
         setQueue((q) => {
-          // Create a shallow copy of the current queue.
           const newQueue = [...q];
-          // Remove the clicked track from its current position.
           newQueue.splice(idx, 1);
-          // Insert the track at the beginning of the queue.
           newQueue.unshift(track);
           return newQueue;
         });
@@ -708,12 +644,8 @@ export function SpotifyClone() {
   }, []);
 
   const handleContextMenu = useCallback(
-    (
-      evt: MouseEvent<HTMLButtonElement | HTMLDivElement>,
-      item: Track | Playlist
-    ) => {
+    (evt: MouseEvent<HTMLButtonElement | HTMLDivElement>, item: Track | Playlist) => {
       evt.preventDefault();
-
       let options: ContextMenuOption[] = [];
 
       // If item is a track
@@ -853,14 +785,9 @@ export function SpotifyClone() {
           return;
         }
 
-        // Store in IndexedDB
         await storeTrackBlob(track.id, blob);
-
-        // Allow user to save
         saveAs(blob, `${track.title} - ${track.artist.name}.mp3`);
-        toast.warning(
-          "Track downloaded and available for offline playback within the app."
-        );
+        toast.warning("Track downloaded and available offline in the app.");
       } catch (error) {
         console.error("Error downloading track:", error);
         toast.error("Failed to download track.");
@@ -917,9 +844,7 @@ export function SpotifyClone() {
 
         const fetchPromises = artists.map(async (artist) => {
           const response = await fetch(
-            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(
-              artist.name
-            )}`
+            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
           );
           const data = await response.json();
           return (data.results || []).slice(0, 5);
@@ -936,7 +861,6 @@ export function SpotifyClone() {
 
         setSearchResults(shuffled);
 
-        // If you want auto-play on first load:
         if (shuffled.length) {
           setCurrentTrack(shuffled[0]);
           setIsPlaying(true);
@@ -1049,7 +973,6 @@ export function SpotifyClone() {
       handleTrackEnd();
     };
     audioElement.addEventListener("ended", handleEnded);
-
     return () => {
       if (audioElement) {
         audioElement.removeEventListener("ended", handleEnded);
@@ -1066,14 +989,6 @@ export function SpotifyClone() {
 
   // MediaSession integration
   useEffect(() => {
-    setOnTrackEndCallback(handleTrackEnd);
-  }, [handleTrackEnd, setOnTrackEndCallback]);
-
-  useEffect(() => {
-    if (!audioElement) {
-      console.warn("Audio element is null during setup");
-      return;
-    }
     const cleanup = setupMediaSession(currentTrack, isPlaying, {
       getCurrentPlaybackTime: () => audioElement?.currentTime || 0,
       handleSeek: (time) => {
@@ -1104,7 +1019,7 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (currentTrack) {
-      storeSetting("currentTrack", JSON.stringify(currentTrack));
+      void storeSetting("currentTrack", JSON.stringify(currentTrack));
     }
   }, [currentTrack]);
 
@@ -1140,21 +1055,16 @@ export function SpotifyClone() {
           getSetting("currentTrack"),
         ]);
 
-        // 4. Apply volume, shuffle, audioQuality
         if (vol) setVolume(parseFloat(vol));
         if (sOn) setShuffleOn(JSON.parse(sOn));
-
         if (qual) {
-          // e.g. "MAX", "HIGH", "NORMAL", or "DATA_SAVER"
           await changeAudioQuality(qual as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
         }
 
-        // 5. Load playlists, recently played, handle onboarding
         if (pls) setPlaylists(pls);
         if (rec) setJumpBackIn(rec);
         if (!onboard) setShowOnboarding(true);
 
-        // 6. Decide on queue fallback
         if (savedQueue && savedQueue.length > 0) {
           setQueue(savedQueue);
         } else if (savedRecommended && savedRecommended.length > 0) {
@@ -1163,30 +1073,23 @@ export function SpotifyClone() {
           await fetchNewRecommendations();
         }
 
-        // 7. If we have a saved track, load it (but do NOT auto-play if you prefer)
         if (savedTrack) {
           const track: Track = JSON.parse(savedTrack);
           setCurrentTrack(track);
-          // If you want it to not start playing, set autoPlay = false
+          // If you want it not to start playing, set autoPlay = false
           await playTrackFromSource(track, 0, true);
         }
       } catch (error) {
         console.error("Initialization error:", error);
       }
     })();
-    // [] ensures it runs only once after component mounts
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchNewRecommendations, changeAudioQuality, playTrackFromSource, setVolume]);
 
   useEffect(() => {
     if (queue.length > 0) {
-      void storeQueue(queue).catch((err) =>
-        console.error("Failed to store queue in IDB:", err)
-      );
+      void storeQueue(queue);
     } else {
-      void clearQueue().catch((err) =>
-        console.error("Failed to clear queue in IDB:", err)
-      );
+      void clearQueue();
     }
   }, [queue]);
 
@@ -1210,9 +1113,7 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (previousTracks.length > 0) {
-      void storeSetting("previousTracks", JSON.stringify(previousTracks)).catch((err) =>
-        console.error("Failed to store previous tracks:", err)
-      );
+      void storeSetting("previousTracks", JSON.stringify(previousTracks));
     }
   }, [previousTracks]);
 
@@ -1237,7 +1138,6 @@ export function SpotifyClone() {
         if (savedTracks && savedTracks.length > 0) {
           setRecommendedTracks(savedTracks);
         } else {
-          console.log("No saved recommended tracks.");
           setRecommendedTracks([]);
         }
       } catch (err) {
@@ -1249,14 +1149,7 @@ export function SpotifyClone() {
 
   useEffect(() => {
     if (hasAutoplayPermission && isAudioContextStarted && currentTrack) {
-      void playTrackFromSource(
-        currentTrack,
-        getCurrentPlaybackTime(),
-        true,
-        undefined,
-        false,
-        true
-      );
+      void playTrackFromSource(currentTrack, getCurrentPlaybackTime(), true, undefined, false, true);
       setIsPlaying(true);
     }
   }, [
@@ -1265,9 +1158,8 @@ export function SpotifyClone() {
     currentTrack,
     playTrackFromSource,
     getCurrentPlaybackTime,
-    setIsPlaying
+    setIsPlaying,
   ]);
-  
 
   // ----------------------------------------------------------
   //                      Render
@@ -1346,9 +1238,7 @@ export function SpotifyClone() {
             isPlayerOpen={isPlayerOpen}
             setView={(v: string) => {
               setView(
-                v as SetStateAction<
-                  "home" | "search" | "playlist" | "settings" | "library"
-                >
+                v as SetStateAction<"home" | "search" | "playlist" | "settings" | "library">
               );
             }}
             mounted={mounted}
@@ -1571,10 +1461,7 @@ export function SpotifyClone() {
                       contextMenuPosition.y,
                       window.innerHeight - (contextMenuOptions.length * 44 + 16)
                     )}px`,
-                    left: `${Math.min(
-                      contextMenuPosition.x,
-                      window.innerWidth - 240
-                    )}px`,
+                    left: `${Math.min(contextMenuPosition.x, window.innerWidth - 240)}px`,
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1625,12 +1512,10 @@ export function SpotifyClone() {
                   className="relative w-full max-w-3xl transform overflow-hidden rounded-2xl bg-gradient-to-b from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl transition-all duration-300 animate-modal-appear"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Decorative elements */}
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500" />
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#1a237e]/10 rounded-full blur-3xl" />
                   <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
 
-                  {/* Header */}
                   <div className="relative flex items-center justify-between p-6 border-b border-gray-700/50">
                     <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
                       Import Spotify Playlist
@@ -1643,7 +1528,6 @@ export function SpotifyClone() {
                     </button>
                   </div>
 
-                  {/* Content */}
                   <div className="relative max-h-[80vh] overflow-y-auto custom-scrollbar p-6">
                     <SpotifyToDeezer
                       onClose={() => setShowSpotifyToDeezerModal(false)}
@@ -1681,9 +1565,9 @@ export function SpotifyClone() {
                     value={selectedPlaylistForAdd || "Unkown Value"}
                     onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
                     className="w-full pl-10 pr-10 py-3 rounded-xl bg-gray-800 text-white border border-gray-700
-                            focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none
-                            transition-all duration-300 cursor-pointer hover:border-gray-600
-                            appearance-none text-base"
+                               focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none
+                               transition-all duration-300 cursor-pointer hover:border-gray-600
+                               appearance-none text-base"
                   >
                     <option value="" disabled className="text-gray-400">
                       Select a playlist
@@ -1724,17 +1608,23 @@ export function SpotifyClone() {
           )}
 
           {showDeleteConfirmation && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
-                              animate-[fadeIn_0.2s_ease-out]">
-              <div className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
-                              backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
-                              border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
-                              animate-[slideUp_0.3s_ease-out]
-                              hover:border-white/20 transition-all duration-500">
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[99999] p-4
+                         animate-[fadeIn_0.2s_ease-out]"
+            >
+              <div
+                className="bg-gradient-to-br from-gray-900/95 via-gray-900/98 to-black/95 rounded-2xl
+                           backdrop-blur-xl backdrop-saturate-150 p-8 w-full max-w-sm
+                           border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.3)]
+                           animate-[slideUp_0.3s_ease-out]
+                           hover:border-white/20 transition-all duration-500"
+              >
                 <div className="flex items-start space-x-5 mb-6">
-                  <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
-                                  shadow-lg shadow-red-500/5 border border-red-500/20
-                                  animate-[pulse_2s_ease-in-out_infinite]">
+                  <div
+                    className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center flex-shrink-0
+                               shadow-lg shadow-red-500/5 border border-red-500/20
+                               animate-[pulse_2s_ease-in-out_infinite]"
+                  >
                     <Trash2 className="w-7 h-7 text-red-400" />
                   </div>
                   <div>
@@ -1743,9 +1633,7 @@ export function SpotifyClone() {
                     </h3>
                     <p className="text-gray-300/90 text-[15px] leading-relaxed">
                       Are you sure you want to delete "
-                      <span className="text-white font-medium">
-                        {selectedPlaylist?.name}
-                      </span>
+                      <span className="text-white font-medium">{selectedPlaylist?.name}</span>
                       "?
                     </p>
                   </div>
@@ -1754,23 +1642,25 @@ export function SpotifyClone() {
                   <button
                     onClick={() => setShowDeleteConfirmation(false)}
                     className="flex-1 py-3 px-4 rounded-xl border border-gray-700/75 text-gray-200 font-semibold
-                                hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
-                                transition-all duration-300 ease-out"
+                               hover:bg-gray-800/30 hover:border-gray-600 active:bg-gray-800/50
+                               transition-all duration-300 ease-out"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={deleteConfirmedPlaylist}
                     className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-500 to-red-600
-                                hover:from-red-600 hover:to-red-700 text-white font-semibold
-                                shadow-lg shadow-red-500/20 hover:shadow-red-500/30
-                                transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
-                                group"
+                               hover:from-red-600 hover:to-red-700 text-white font-semibold
+                               shadow-lg shadow-red-500/20 hover:shadow-red-500/30
+                               transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]
+                               group"
                   >
                     <span className="flex items-center justify-center">
                       Delete
-                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-300 
-                                            group-hover:translate-x-1" />
+                      <ArrowRight
+                        className="w-4 h-4 ml-2 transition-transform duration-300 
+                                   group-hover:translate-x-1"
+                      />
                     </span>
                   </button>
                 </div>
@@ -1792,8 +1682,8 @@ export function SpotifyClone() {
                       value={newPlaylistName}
                       onChange={(e) => setNewPlaylistName(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg bg-gray-800/50 text-white placeholder-gray-400
-                                border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
-                                transition-all duration-300 text-base"
+                                 border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500
+                                 transition-all duration-300 text-base"
                     />
                   </div>
                   <div>
@@ -1804,10 +1694,10 @@ export function SpotifyClone() {
                       <label
                         htmlFor="playlist-image"
                         className="relative flex flex-col items-center justify-center w-full h-[200px] sm:h-[240px]
-                                    rounded-lg cursor-pointer overflow-hidden transition-all duration-300
-                                    bg-gradient-to-br from-gray-800/50 to-gray-900/50
-                                    group-hover:from-gray-700/50 group-hover:to-gray-800/50
-                                    border-2 border-dashed border-gray-600 group-hover:border-green-500"
+                                   rounded-lg cursor-pointer overflow-hidden transition-all duration-300
+                                   bg-gradient-to-br from-gray-800/50 to-gray-900/50
+                                   group-hover:from-gray-700/50 group-hover:to-gray-800/50
+                                   border-2 border-dashed border-gray-600 group-hover:border-green-500"
                       >
                         {newPlaylistImage ? (
                           <div className="relative w-full h-full">
@@ -1817,11 +1707,13 @@ export function SpotifyClone() {
                               alt="Playlist Cover"
                               className="w-full h-full object-cover"
                               priority
-                              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                              sizes="(max-width: 768px) 100vw,
+                                     (max-width: 1200px) 50vw,
+                                     33vw"
                             />
                             <div
                               className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100
-                                        transition-opacity duration-300 flex items-center justify-center"
+                                         transition-opacity duration-300 flex items-center justify-center"
                             >
                               <p className="text-sm text-white font-medium">Change Image</p>
                             </div>
@@ -1871,16 +1763,16 @@ export function SpotifyClone() {
                     <button
                       onClick={() => setShowCreatePlaylist(false)}
                       className="flex-1 py-2.5 rounded-lg border border-gray-600 text-gray-300 font-medium
-                                hover:bg-gray-800/50 transition-all duration-300"
+                                 hover:bg-gray-800/50 transition-all duration-300"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={() => void createPlaylist()}
                       className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600
-                                hover:from-blue-600 hover:to-blue-700 text-white font-medium
-                                transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
-                                disabled:hover:scale-100 disabled:cursor-not-allowed"
+                                 hover:from-blue-600 hover:to-blue-700 text-white font-medium
+                                 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50
+                                 disabled:hover:scale-100 disabled:cursor-not-allowed"
                       disabled={!newPlaylistName.trim()}
                     >
                       Create
