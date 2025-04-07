@@ -39,7 +39,7 @@ import Image from "next/image";
 import debounce from "lodash/debounce";
 
 // Hooks & Libraries
-import { useAudio } from "@/lib/hooks/useAudio";
+import { useAudio, getTrackUrl } from "@/lib/hooks/useAudio";
 import { setupMediaSession } from "@/lib/hooks/useMediaSession";
 import {
   storeQueue,
@@ -361,22 +361,38 @@ export function SpotifyClone() {
    */
   const playTrack = useCallback(
     (track: Track, autoPlay = true) => {
+      // 1) Update queue, previous, current
       setQueue((prev) => {
-        // Put track at front of queue
         if (prev[0]?.id === track.id) return prev;
         const filtered = prev.filter((t) => t.id !== track.id);
         return [track, ...filtered];
       });
-      // Move current track into previous
       setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
       setCurrentTrack(track);
-
-      void playTrackFromSource(track, 0, autoPlay);
-      if (autoPlay) setIsPlaying(true);
+  
+      // 2) Synchronous autoplay if user clicked
+      if (autoPlay && audioElement) {
+        // Use getTrackUrl with "NORMAL" for immediate playback
+        const normalUrl = getTrackUrl(track.id, "NORMAL");
+        audioElement.src = normalUrl;
+        audioElement.currentTime = 0;
+  
+        // Attempt immediate play
+        audioElement.play().then(() => {
+          setIsPlaying(true);
+        }).catch((err) => {
+          console.warn("Autoplay blocked:", err);
+        });
+      }
+  
+      // 3) Then do your fallback logic asynchronously
+      //    (switch to FLAC, OPUS, etc. behind the scenes)
+      setTimeout(() => {
+        void playTrackFromSource(track, 0, autoPlay);
+      }, 0);
     },
-    [currentTrack, playTrackFromSource, setIsPlaying]
+    [currentTrack, setIsPlaying, setQueue, setPreviousTracks, setCurrentTrack, playTrackFromSource]
   );
-
   /**
    * Toggle playback. If no track is loaded, do nothing.
    */
@@ -1146,20 +1162,7 @@ export function SpotifyClone() {
     }
     void loadRecommendedTracks();
   }, []);
-
-  useEffect(() => {
-    if (hasAutoplayPermission && isAudioContextStarted && currentTrack) {
-      void playTrackFromSource(currentTrack, getCurrentPlaybackTime(), true, undefined, false, true);
-      setIsPlaying(true);
-    }
-  }, [
-    hasAutoplayPermission,
-    isAudioContextStarted,
-    currentTrack,
-    playTrackFromSource,
-    getCurrentPlaybackTime,
-    setIsPlaying,
-  ]);
+  
 
   // ----------------------------------------------------------
   //                      Render

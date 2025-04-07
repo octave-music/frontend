@@ -12,7 +12,7 @@ import { Track } from "../types/types";
  * Determine file extension from chosen quality.
  * MAX => .flac, HIGH => .opus, NORMAL => .mp3, DATA_SAVER => .s4.opus
  */
-function getTrackUrl(trackId: string, audioQuality: string): string {
+export function getTrackUrl(trackId: string, audioQuality: string): string {
   let ext = ".mp3";
   switch (audioQuality) {
     case "MAX":
