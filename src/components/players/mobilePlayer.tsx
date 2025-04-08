@@ -49,10 +49,14 @@ import { toast } from "react-toastify";
 
 import { Track, Lyric } from "@/lib/types/types";
 
+// NEW IMPORT – to get autoplayBlocked + resumeAutoplay
+
 type AudioQuality = "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER";
 type RepeatMode = "off" | "all" | "one";
 
 interface MobilePlayerProps {
+  autoplayBlocked: boolean;
+  resumeAutoplay: () => void;
   currentTrack: Track;
   isPlaying: boolean;
   previousTracks: Track[];
@@ -83,10 +87,6 @@ interface MobilePlayerProps {
   audioQuality: AudioQuality;
   isDataSaver: boolean;
   changeAudioQuality: (quality: AudioQuality) => Promise<void>;
-}
-
-interface ProcessedLyric extends Lyric {
-  endTime: number;
 }
 
 /** Format a time in seconds => mm:ss. */
@@ -141,7 +141,8 @@ const Seekbar: React.FC<SeekbarProps> = ({
     setIsDragging(true);
     setShowTooltip(true);
     touchStartRef.current = clientX;
-    setLocalProgress(calculateProgress(clientX));
+    const newProg = calculateProgress(clientX);
+    setLocalProgress(isNaN(newProg) ? 0 : newProg);
   };
 
   const handleDragMove = useCallback(
@@ -313,9 +314,6 @@ const ActionButton: React.FC<{
   </motion.button>
 );
 
-/* ------------------------------------------------------
-   M O B I L E   P L A Y E R
------------------------------------------------------- */
 const MobilePlayer: React.FC<MobilePlayerProps> = ({
   currentTrack,
   isPlaying,
@@ -323,6 +321,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   setQueue,
   togglePlay,
   skipTrack,
+  autoplayBlocked,
+  resumeAutoplay,
   previousTrack,
   downloadTrack,
   seekPosition,
@@ -367,8 +367,9 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
 
   const controls = useAnimation();
 
-  /** Precompute lyric intervals. */
-  const processedLyrics = useMemo<ProcessedLyric[]>(() => {
+
+  // Precompute lyric intervals
+  const processedLyrics = useMemo(() => {
     return lyrics.map((lyric: Lyric, i: number) => ({
       ...lyric,
       endTime: lyrics[i + 1]?.time || duration,
@@ -396,8 +397,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }, 3000);
   };
 
+  // auto-scroll to active lyric if user isn't manually scrolling
   useEffect(() => {
-    // Auto-scroll to active lyric if user isn't manually scrolling
     if (!userScrolling && showLyrics && lyricsRef.current) {
       const container = lyricsRef.current;
       const activeLine = container.children[currentLyricIndex] as HTMLElement;
@@ -429,8 +430,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }
 
     let isCancelled = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const img: HTMLImageElement = new (window.Image as any)();
+    const img = new window.Image();
     img.crossOrigin = "Anonymous";
     img.src = currentTrack.album.cover_medium;
 
@@ -463,7 +463,6 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     const handleResize = () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        // Adjust thresholds to consider both width & height
         setCanShowActions(window.innerWidth > 380 && window.innerHeight > 600);
       }, 100);
     };
@@ -475,85 +474,18 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     };
   }, []);
 
-  /* More Options Items */
-  const moreOptionsItems = [
-    { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
-    { icon: Ban, label: "Dislike", onClick: () => console.log("Disliked track") },
-    { icon: Share2, label: "Share", onClick: () => console.log("Shared track") },
-    { icon: UserPlus, label: "Follow Artist", onClick: () => console.log("Followed Artist") },
-    { icon: Radio, label: "Start Radio", onClick: () => console.log("Radio") },
-    { icon: Library, label: "Add to Playlist", onClick: () => setShowAddToPlaylistModal(true) },
-    { icon: ListMusic, label: "Queue", onClick: () => setShowQueueUI(true) },
-    { icon: Share, label: "Copy Link", onClick: () => console.log("Copied link") },
-    { icon: Music, label: "Lyrics", active: showLyrics,  onClick: () => {
-      setShowQueueUI(false);
-      toggleLyricsView();
-    }, },
-    { icon: Flag, label: "Report", onClick: () => console.log("Reported track") },
-    { icon: Download, label: "Download", onClick: () => downloadTrack(currentTrack) },
-    { icon: Lock, label: "Audio Quality", onClick: () => setShowAudioMenu(true) },
-    { icon: AlertCircle, label: "Song Info", onClick: () => console.log("Song Info displayed") },
-    { icon: Mic2, label: "Karaoke Mode", onClick: () => console.log("Karaoke mode started") },
-  ];
-
-  /** Visible action buttons (if canShowActions is true). */
-  const getVisibleActionButtons = useCallback(() => {
-    if (!canShowActions) return [];
-    return [
-      { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
-      {
-        icon: Plus,
-        label: "Add to",
-        onClick: () => setShowAddToPlaylistModal(true),
-      },
-      {
-        icon: Download,
-        label: "Download",
-        onClick: () => downloadTrack(currentTrack),
-      },
-    ];
-  }, [canShowActions, currentTrack, isLiked, toggleLike, downloadTrack]);
-
-  /** Expand or collapse miniplayer => full view. */
-  const togglePlayer = () => {
-    if (isExpanded) {
-      // Collapse: allow exit animation to complete
-      setIsExpanded(false);
-      setTimeout(() => {
-        setIsPlayerOpen(false);
-      }, 300); // Adjust this timing to match your exit transition duration
+  /** 
+   * Replace double tap logic with "if we are more than 2s in, go to start, else previous track"
+   */
+  const handleBackPress = useCallback(() => {
+    if (seekPosition > 2) {
+      handleSeek(0);
     } else {
-      // Expand immediately
-      setIsExpanded(true);
-      setIsPlayerOpen(true);
-    }
-  };
-  
-  // Single vs double-click for "back" button
-  const lastTapRef = useRef<number>(0);
-  const DOUBLE_TAP_DELAY = 300; // in milliseconds
-  
-  const handleBackTap = useCallback(() => {
-    const now = Date.now();
-    // If a previous tap exists and the interval is less than the threshold…
-    if (lastTapRef.current && now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // Double tap detected – go to previous track.
       previousTrack();
-      lastTapRef.current = 0; // Reset for the next sequence.
-    } else {
-      // First tap – store the timestamp and schedule the single tap action.
-      lastTapRef.current = now;
-      setTimeout(() => {
-        if (lastTapRef.current) {
-          // If no second tap has occurred within the threshold, treat as single tap.
-          handleSeek(0);
-          lastTapRef.current = 0;
-        }
-      }, DOUBLE_TAP_DELAY);
     }
-  }, [previousTrack, handleSeek]);;
+  }, [seekPosition, previousTrack, handleSeek]);
 
-  // Single vs double-click for "forward" button
+  // Single/double click logic for forward
   const forwardClickCountRef = useRef(0);
   const handleForwardClick = useCallback(() => {
     forwardClickCountRef.current++;
@@ -574,7 +506,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }
   }, [duration, seekPosition, skipTrack, handleSeek]);
 
-  /** Dragging the miniplayer left/right => skip/previous track. */
+  // Minimplayer drag => skip or prev
   const handleMiniPlayerDragEnd = (info: PanInfo) => {
     const threshold = 100;
     if (info.offset.x > threshold) {
@@ -596,7 +528,6 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     }
   };
 
-  /** Swiping up => expand the player. */
   const handleMiniPlayerTouchStart = (e: React.TouchEvent) => {
     setMiniPlayerTouchStartY(e.touches[0].clientY);
   };
@@ -614,74 +545,153 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
     setMiniPlayerTouchStartY(null);
   };
 
-  /** Main cluster of playback controls in expanded mode. */
+  // Main cluster of controls in expanded mode
   const mainControlButtons = (
     <div className="w-full flex items-center justify-around mb-8 p-2 sm:px-4">
-  <button onClick={shuffleQueue} className="p-3 rounded-full text-white/60 hover:bg-white/10">
-    <Shuffle className="w-6 h-6" />
-  </button>
-  <button onClick={handleBackTap} className="p-2 rounded-full hover:bg-white/10">
-    <SkipBack className="w-6 h-6 text-white" />
-  </button>
-  <motion.button
-    className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90"
-    whileTap={{ scale: 0.95 }}
-    onClick={togglePlay}
-  >
-    {isPlaying ? (
-      <Pause className="w-8 h-8 text-black" />
-    ) : (
-      <Play className="w-8 h-8 text-black ml-1" />
-    )}
-  </motion.button>
-  <button onClick={handleForwardClick} className="p-2 rounded-full hover:bg-white/10">
-    <SkipForward className="w-6 h-6 text-white" />
-  </button>
-  <button
-    onClick={() => {
-      const modes: RepeatMode[] = ["off", "all", "one"];
-      const currentIndex = modes.indexOf(repeatMode);
-      const nextMode = modes[(currentIndex + 1) % modes.length];
-      setRepeatMode(nextMode);
-    }}
-    className="p-3 rounded-full"
-  >
-    {repeatMode === "one" ? (
-      <Repeat1 className="w-6 h-6 text-green-500" />
-    ) : (
-      <Repeat className={`w-6 h-6 ${repeatMode === "all" ? "text-green-500" : "text-white/60"}`} />
-    )}
-  </button>
-</div>
+      <button
+        onClick={shuffleQueue}
+        className="p-3 rounded-full text-white/60 hover:bg-white/10"
+      >
+        <Shuffle className="w-6 h-6" />
+      </button>
+      <button
+        onClick={handleBackPress}
+        className="p-2 rounded-full hover:bg-white/10"
+      >
+        <SkipBack className="w-6 h-6 text-white" />
+      </button>
+      <motion.button
+        className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90"
+        whileTap={{ scale: 0.95 }}
+        onClick={togglePlay}
+      >
+        {isPlaying ? (
+          <Pause className="w-8 h-8 text-black" />
+        ) : (
+          <Play className="w-8 h-8 text-black ml-1" />
+        )}
+      </motion.button>
+      <button
+        onClick={handleForwardClick}
+        className="p-2 rounded-full hover:bg-white/10"
+      >
+        <SkipForward className="w-6 h-6 text-white" />
+      </button>
+      <button
+        onClick={() => {
+          const modes: RepeatMode[] = ["off", "all", "one"];
+          const currentIndex = modes.indexOf(repeatMode);
+          const nextMode = modes[(currentIndex + 1) % modes.length];
+          setRepeatMode(nextMode);
+        }}
+        className="p-3 rounded-full"
+      >
+        {repeatMode === "one" ? (
+          <Repeat1 className="w-6 h-6 text-green-500" />
+        ) : (
+          <Repeat
+            className={`w-6 h-6 ${
+              repeatMode === "all" ? "text-green-500" : "text-white/60"
+            }`}
+          />
+        )}
+      </button>
+    </div>
   );
 
+  // Scale for smaller phone screens (like iPhone SE)
   useEffect(() => {
-    // Baseline dimensions for iPhone SE
     const baselineWidth = 375;
     const baselineHeight = 667;
-  
+
     const updateScale = () => {
       const availableWidth = window.innerWidth;
       const availableHeight = window.innerHeight;
-      // Compute scale factors for both dimensions
       const scaleW = availableWidth / baselineWidth;
       const scaleH = availableHeight / baselineHeight;
-      // Use the smaller scale factor (ensuring we never scale above 1)
       const newScale = Math.min(scaleW, scaleH, 1);
       setScaleFactor(newScale);
     };
-  
+
     updateScale();
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
   }, []);
 
+  // "More" menu items
+  const moreOptionsItems = [
+    { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
+    { icon: Ban, label: "Dislike", onClick: () => console.log("Disliked track") },
+    { icon: Share2, label: "Share", onClick: () => console.log("Shared track") },
+    { icon: UserPlus, label: "Follow Artist", onClick: () => console.log("Followed Artist") },
+    { icon: Radio, label: "Start Radio", onClick: () => console.log("Radio") },
+    {
+      icon: Library,
+      label: "Add to Playlist",
+      onClick: () => setShowAddToPlaylistModal(true),
+    },
+    { icon: ListMusic, label: "Queue", onClick: () => setShowQueueUI(true) },
+    { icon: Share, label: "Copy Link", onClick: () => console.log("Copied link") },
+    {
+      icon: Music,
+      label: "Lyrics",
+      active: showLyrics,
+      onClick: () => {
+        setShowQueueUI(false);
+        toggleLyricsView();
+      },
+    },
+    { icon: Flag, label: "Report", onClick: () => console.log("Reported track") },
+    {
+      icon: Download,
+      label: "Download",
+      onClick: () => downloadTrack(currentTrack),
+    },
+    { icon: Lock, label: "Audio Quality", onClick: () => setShowAudioMenu(true) },
+    { icon: AlertCircle, label: "Song Info", onClick: () => console.log("Song Info displayed") },
+    {
+      icon: Mic2,
+      label: "Karaoke Mode",
+      onClick: () => console.log("Karaoke mode started"),
+    },
+  ];
+
+  /** Visible action buttons (if canShowActions is true). */
+  const getVisibleActionButtons = useCallback(() => {
+    if (!canShowActions) return [];
+    return [
+      { icon: Heart, label: "Like", active: isLiked, onClick: toggleLike },
+      {
+        icon: Plus,
+        label: "Add to",
+        onClick: () => setShowAddToPlaylistModal(true),
+      },
+      {
+        icon: Download,
+        label: "Download",
+        onClick: () => downloadTrack(currentTrack),
+      },
+    ];
+  }, [canShowActions, currentTrack, isLiked, toggleLike, downloadTrack]);
+
+  // Expand or collapse
+  const togglePlayer = () => {
+    if (isExpanded) {
+      setIsExpanded(false);
+      setTimeout(() => {
+        setIsPlayerOpen(false);
+      }, 300);
+    } else {
+      setIsExpanded(true);
+      setIsPlayerOpen(true);
+    }
+  };
 
   return (
     <div className="px-6 flex flex-col items-center">
       {/* Container for miniplayer or expanded player */}
       <div className="fixed bottom-[calc(3rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-10">
-      {/* --- Miniplayer if not expanded --- */}
+        {/* --- Miniplayer if not expanded --- */}
         {!isExpanded && (
           <motion.div
             className="mx-2 rounded-xl overflow-visible mb-0"
@@ -737,7 +747,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleBackTap();
+                      handleBackPress();
                     }}
                   >
                     <SkipBack className="w-5 h-5 text-white" />
@@ -796,17 +806,15 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
         )}
 
         {/* --- Expanded Player --- */}
-        <AnimatePresence  mode="wait">
+        <AnimatePresence mode="wait">
           {isExpanded && (
             <motion.div
-              // UPDATED: Ensuring no scrolling in the expanded container
-              className="fixed inset-0 z-50 flex flex-col" // removed flex-grow from children
+              className="fixed inset-0 z-50 flex flex-col"
               style={{
                 background: "rgba(0,0,0,0.92)",
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 paddingBottom: "env(safe-area-inset-bottom)",
-                // no overflow settings here => no scroll
               }}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -814,427 +822,432 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
               transition={{ type: "spring", damping: 26, stiffness: 300 }}
             >
               <div
-               style={{
-                transform: `scale(${scaleFactor})`,
-                transformOrigin: "top center",
-                width: "100%",
-                height: "100%",
+                style={{
+                  transform: `scale(${scaleFactor})`,
+                  transformOrigin: "top center",
+                  width: "100%",
+                  height: "100%",
                 }}
               >
-              {/* Header: top row */}
-              <div className="flex items-center justify-between p-4">
-                <button
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                  onClick={togglePlayer}
-                >
-                  <ChevronDown className="w-6 h-6 text-white" />
-                </button>
-                <div className="flex items-center space-x-2">
-                  <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <Cast className="w-5 h-5 text-white/60" />
+                {/* Header */}
+                <div className="flex items-center justify-between p-4">
+                  <button
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    onClick={togglePlayer}
+                  >
+                    <ChevronDown className="w-6 h-6 text-white" />
                   </button>
-                  <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <Airplay className="w-5 h-5 text-white/60" />
-                  </button>
-                  {canShowActions ? (
-                    <button
-                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                      onClick={() => setShowQueueUI(true)}
-                    >
-                      <ListMusic className="w-5 h-5 text-white/60" />
+                  <div className="flex items-center space-x-2">
+                    <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                      <Cast className="w-5 h-5 text-white/60" />
                     </button>
-                  ) : (
-                    <>
+                    <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                      <Airplay className="w-5 h-5 text-white/60" />
+                    </button>
+                    {canShowActions ? (
                       <button
                         className="p-2 hover:bg-white/10 rounded-full transition-colors"
                         onClick={() => setShowQueueUI(true)}
                       >
                         <ListMusic className="w-5 h-5 text-white/60" />
                       </button>
-
-                      <button
-                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                        onClick={() => setShowMoreOptions(true)}
-                      >
-                        <MoreHorizontal className="w-5 h-5 text-white/60" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Body content */}
-              <div className="px-4 flex-1 flex flex-col items-center">
-                {/* If queue open */}
-                {showQueueUI ? (
-                  // UPDATED: Removed scrolling classes
-                  <motion.div
-                    className="w-full flex flex-col items-center"
-                    style={{
-                      paddingBottom: "calc(6rem + env(safe-area-inset-bottom))",
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-6 w-full">
-                      <div className="flex items-center">
+                    ) : (
+                      <>
                         <button
-                          onClick={() => setShowQueueUI(false)}
+                          className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                          onClick={() => setShowQueueUI(true)}
+                        >
+                          <ListMusic className="w-5 h-5 text-white/60" />
+                        </button>
+                        <button
+                          className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                          onClick={() => setShowMoreOptions(true)}
+                        >
+                          <MoreHorizontal className="w-5 h-5 text-white/60" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Body content */}
+                <div className="px-4 flex-1 flex flex-col items-center">
+                  {showQueueUI ? (
+                    /* -- Queue Panel -- */
+                    <motion.div
+                      className="w-full flex flex-col items-center"
+                      style={{
+                        paddingBottom: "calc(6rem + env(safe-area-inset-bottom))",
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-6 w-full">
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => setShowQueueUI(false)}
+                            className="hover:bg-white/10 p-2 rounded-full transition-colors"
+                          >
+                            <ArrowLeft className="w-6 h-6 text-white" />
+                          </button>
+                          <h2 className="text-lg font-semibold text-white ml-4">
+                            Up Next
+                          </h2>
+                        </div>
+                        <button
+                          onClick={() => setQueue([])}
+                          className="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-full hover:bg-white/20"
+                        >
+                          <ListX className="w-5 h-5 text-white" />
+                          <span className="text-sm text-white">Clear Queue</span>
+                        </button>
+                      </div>
+
+                      <div
+                        className="w-full flex flex-col items-start gap-4 overflow-y-auto"
+                        style={{ maxHeight: "calc(100vh - 10rem)" }}
+                      >
+                        {/* Show previous tracks */}
+                        {previousTracks.map((t, i) => (
+                          <motion.div
+                            key={`prev-${t.id}-${i}`}
+                            className="flex items-center space-x-4 p-2 rounded-lg opacity-50 hover:opacity-70 transition-opacity cursor-pointer"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => onQueueItemClick(t, -1 * (i + 1))}
+                          >
+                            <div className="w-12 h-12 rounded-lg overflow-hidden relative">
+                              <Image
+                                src={t.album.cover_medium}
+                                alt={t.title}
+                                fill
+                                sizes="(max-width: 768px) 48px, 96px"
+                                className="object-cover"
+                                priority
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-400 font-medium truncate">
+                                {t.title}
+                              </p>
+                              <p className="text-gray-500 text-sm truncate">
+                                {t.artist.name}
+                              </p>
+                            </div>
+                          </motion.div>
+                        ))}
+
+                        {/* Actual queue */}
+                        {queue.map((tr, i) => (
+                          <AnimatePresence key={`queue-${tr.id}-${i}`}>
+                            <motion.div className="relative w-full">
+                              <motion.div
+                                className="relative bg-black"
+                                drag="x"
+                                dragConstraints={{ left: 0, right: 0 }}
+                                dragElastic={0.2}
+                                onDragEnd={(event, info: PanInfo) => {
+                                  if (info.offset.x < -100) {
+                                    removeFromQueue(i);
+                                  }
+                                }}
+                              >
+                                <div
+                                  className={`flex items-center space-x-4 p-2 rounded-lg bg-black ${
+                                    tr.id === currentTrack.id
+                                      ? "bg-white/10"
+                                      : "hover:bg-white/10"
+                                  }`}
+                                  onClick={() => onQueueItemClick(tr, i)}
+                                >
+                                  <div className="w-12 h-12 relative rounded-lg overflow-hidden">
+                                    <Image
+                                      src={tr.album.cover_medium}
+                                      alt={tr.title}
+                                      fill
+                                      sizes="(max-width: 768px) 48px, 96px"
+                                      className="object-cover"
+                                      priority
+                                    />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white font-medium truncate">
+                                      {tr.title}
+                                    </p>
+                                    <p className="text-white/60 text-sm truncate">
+                                      {tr.artist.name}
+                                    </p>
+                                  </div>
+                                  <button
+                                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowMoreOptions(true);
+                                    }}
+                                  >
+                                    <MoreHorizontal className="w-5 h-5 text-white/60" />
+                                  </button>
+                                </div>
+                              </motion.div>
+                            </motion.div>
+                          </AnimatePresence>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : showLyrics ? (
+                    /* -- Lyrics Panel -- */
+                    <motion.div
+                      className="w-full flex flex-col"
+                      style={{
+                        height: "calc(100vh - 10vh)",
+                      }}
+                    >
+                      <div className="flex items-center mb-6">
+                        <button
+                          onClick={toggleLyricsView}
                           className="hover:bg-white/10 p-2 rounded-full transition-colors"
                         >
                           <ArrowLeft className="w-6 h-6 text-white" />
                         </button>
                         <h2 className="text-lg font-semibold text-white ml-4">
-                          Up Next
+                          Lyrics
                         </h2>
                       </div>
-                      <button
-                        onClick={() => setQueue([])}
-                        className="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-full hover:bg-white/20"
+                      <div
+                        className="space-y-6 overflow-y-auto"
+                        ref={lyricsRef}
+                        style={{ height: "calc(100vh - 10vh)", scrollBehavior: "smooth" }}
+                        onScroll={handleUserScroll}
+                        onTouchMove={handleUserScroll}
                       >
-                        <ListX className="w-5 h-5 text-white" />
-                        <span className="text-sm text-white">Clear Queue</span>
-                      </button>
-                    </div>
-
-                    <div
-                      className="w-full flex flex-col items-start gap-4 overflow-y-auto"
-                      style={{ maxHeight: "calc(100vh - 10rem)" }} // Adjust height as needed
-                    >                      {/* Show previous tracks */}
-                      {previousTracks.map((t, i) => (
-                        <motion.div
-                          key={`prev-${t.id}-${i}`}
-                          className="flex items-center space-x-4 p-2 rounded-lg opacity-50 hover:opacity-70 transition-opacity cursor-pointer"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => onQueueItemClick(t, -1 * (i + 1))}
-                        >
-                          <div className="w-12 h-12 rounded-lg overflow-hidden relative">
-                            <Image
-                              src={t.album.cover_medium}
-                              alt={t.title}
-                              fill
-                              sizes="(max-width: 768px) 48px, 96px"
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-gray-400 font-medium truncate">
-                              {t.title}
-                            </p>
-                            <p className="text-gray-500 text-sm truncate">
-                              {t.artist.name}
-                            </p>
-                          </div>
-                        </motion.div>
-                      ))}
-
-                      {/* Actual queue */}
-                      {queue.map((tr, i) => (
-                        <AnimatePresence key={`queue-${tr.id}-${i}`}>
-                          <motion.div className="relative w-full">
-                            <motion.div
-                              className="relative bg-black"
-                              drag="x"
-                              dragConstraints={{ left: 0, right: 0 }}
-                              dragElastic={0.2}
-                              onDragEnd={(event, info: PanInfo) => {
-                                if (info.offset.x < -100) {
-                                  removeFromQueue(i);
-                                }
-                              }}
-                            >
-                              <div
-                                className={`flex items-center space-x-4 p-2 rounded-lg bg-black ${
-                                  tr.id === currentTrack.id
-                                    ? "bg-white/10"
-                                    : "hover:bg-white/10"
-                                }`}
-                                onClick={() => onQueueItemClick(tr, i)}
+                        {processedLyrics.map((ly: Lyric & { endTime: number }, idx: number) => {
+                          const isActive = idx === currentLyricIndex;
+                          if (!isActive) {
+                            return (
+                              <motion.p
+                                key={idx}
+                                initial={{ opacity: 0.5 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="text-lg text-center text-white/40 hover:text-white"
+                                onClick={() => handleSeek(ly.time)}
                               >
-                                <div className="w-12 h-12 relative rounded-lg overflow-hidden">
-                                  <Image
-                                    src={tr.album.cover_medium}
-                                    alt={tr.title}
-                                    fill
-                                    sizes="(max-width: 768px) 48px, 96px"
-                                    className="object-cover"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white font-medium truncate">
-                                    {tr.title}
-                                  </p>
-                                  <p className="text-white/60 text-sm truncate">
-                                    {tr.artist.name}
-                                  </p>
-                                </div>
-                                <button
-                                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowMoreOptions(true);
-                                  }}
-                                >
-                                  <MoreHorizontal className="w-5 h-5 text-white/60" />
-                                </button>
-                              </div>
-                            </motion.div>
-                          </motion.div>
-                        </AnimatePresence>
-                      ))}
-                    </div>
-                  </motion.div>
-                ) : showLyrics ? (
-                  // UPDATED: Removed overflow-y-auto for lyrics
-                  <motion.div
-                    className="w-full flex flex-col"
-                    style={{
-                      height: "calc(100vh - 10vh)", // You can tweak
-                    }}
-                  >
-                    <div className="flex items-center mb-6">
-                      <button
-                        onClick={toggleLyricsView}
-                        className="hover:bg-white/10 p-2 rounded-full transition-colors"
-                      >
-                        <ArrowLeft className="w-6 h-6 text-white" />
-                      </button>
-                      <h2 className="text-lg font-semibold text-white ml-4">
-                        Lyrics
-                      </h2>
-                    </div>
-                    <div
-                      className="space-y-6 overflow-y-auto"
-                      ref={lyricsRef}
-                      style={{ height: "calc(100vh - 10vh)", scrollBehavior: "smooth" }}
-                      onScroll={handleUserScroll}
-                      onTouchMove={handleUserScroll}
-                    >
-                      {processedLyrics.map((ly: ProcessedLyric, idx: number) => {
-                        const isActive = idx === currentLyricIndex;
-                        if (!isActive) {
+                                {ly.text}
+                              </motion.p>
+                            );
+                          }
+                          const letters: string[] = ly.text.split("");
+                          const totalLetters = letters.length;
+                          const filled = Math.floor(lyricProgress * totalLetters);
                           return (
                             <motion.p
                               key={idx}
-                              initial={{ opacity: 0.5 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ duration: 0.3 }}
-                              className="text-lg text-center text-white/40 hover:text-white"
-                              onClick={() => handleSeek(ly.time)}
+                              className="text-lg text-center font-bold text-white"
+                              initial="hidden"
+                              animate="visible"
                             >
-                              {ly.text}
+                              {letters.map((letter: string, i2: number) => (
+                                <motion.span
+                                  key={i2}
+                                  initial={{ color: "rgba(255,255,255,0.4)" }}
+                                  animate={{
+                                    color:
+                                      i2 < filled
+                                        ? "rgba(255,255,255,1)"
+                                        : "rgba(255,255,255,0.4)",
+                                  }}
+                                  transition={{
+                                    duration: 0.2,
+                                    delay: i2 * 0.02,
+                                  }}
+                                >
+                                  {letter}
+                                </motion.span>
+                              ))}
                             </motion.p>
                           );
-                        }
-                        const letters: string[] = ly.text.split("");
-                        const totalLetters = letters.length;
-                        const filled = Math.floor(lyricProgress * totalLetters);
-                        return (
-                          <motion.p
-                            key={idx}
-                            className="text-lg text-center font-bold text-white"
-                            initial="hidden"
-                            animate="visible"
+                        })}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    /* -- Normal Expanded Player -- */
+                    <>
+                      {/* Artwork background blur */}
+                      <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                            filter: "blur(25px) brightness(1.2) saturate(1.3)",
+                            transform: "scale(1.8)",
+                            opacity: 0.95,
+                            zIndex: -1,
+                          }}
+                        />
+                        <div className="relative w-[60vw] min-w-[200px] aspect-square flex justify-center items-center">
+                          <motion.div
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={0.2}
+                            onDragEnd={(event, info) => handleMiniPlayerDragEnd(info)}
+                            className="relative z-10 w-full h-full"
                           >
-                            {letters.map((letter: string, i2: number) => (
-                              <motion.span
-                                key={i2}
-                                initial={{ color: "rgba(255,255,255,0.4)" }}
-                                animate={{
-                                  color:
-                                    i2 < filled
-                                      ? "rgba(255,255,255,1)"
-                                      : "rgba(255,255,255,0.4)",
-                                }}
-                                transition={{
-                                  duration: 0.2,
-                                  delay: i2 * 0.02,
-                                }}
-                              >
-                                {letter}
-                              </motion.span>
-                            ))}
-                          </motion.p>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                ) : (
-                  // Normal expanded player
-                  <>
-                    {/* Artwork background blur */}
-                    <div className="relative w-full h-[min(60vw,320px)] flex justify-center items-center mb-8">
-                          <div
-                            className="absolute inset-0"
-                            style={{
-                              backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${currentTrack.album.cover_medium})`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                              filter: "blur(25px) brightness(1.2) saturate(1.3)",
-                              transform: "scale(1.8)",
-                              opacity: 0.95,
-                              zIndex: -1,
-                            }}
-                          />
-                          <div className="relative w-[60vw] min-w-[200px] aspect-square flex justify-center items-center">
-                            <motion.div
-                              drag="x"
-                              dragConstraints={{ left: 0, right: 0 }}
-                              dragElastic={0.2}
-                              onDragEnd={(event, info) => handleMiniPlayerDragEnd(info)}
-                              className="relative z-10 w-full h-full"
-                            >
-                              <Image
-                                src={currentTrack.album.cover_medium || ""}
-                                alt={currentTrack.title || ""}
-                                fill
-                                sizes="(max-width: 768px) 60vw, 320px"
-                                className="rounded-lg shadow-xl object-cover"
-                                priority
-                              />
-                            </motion.div>
-                          </div>
+                            <Image
+                              src={currentTrack.album.cover_medium || ""}
+                              alt={currentTrack.title || ""}
+                              fill
+                              sizes="(max-width: 768px) 60vw, 320px"
+                              className="rounded-lg shadow-xl object-cover"
+                              priority
+                            />
+                          </motion.div>
                         </div>
+                      </div>
 
-
-                    {/* Title + Artist */}
-                    <div className="w-full text-center mb-4">
+                      {/* Title + Artist */}
+                      <div className="w-full text-center mb-4">
                         <h2 className="text-2xl font-bold text-white mb-1">
                           {currentTrack.title}
                         </h2>
                         <p className="text-white/60">{currentTrack.artist.name}</p>
                       </div>
-                    {/* Audio Quality Badge + Listen Count */}
-                    <div className="flex flex-col items-center space-y-1">
-                      <QualityBadge quality={audioQuality} onClick={() => setShowAudioMenu(true)} />
-                      <p className="text-[#FFD700] text-xs flex items-center space-x-1">
-                        <Guitar className="w-4 h-4" />
-                        <span>Listened {listenCount} times</span>
-                      </p>
-                    </div>
 
-                    {/* Seekbar */}
-                    <div className="w-full mb-8 mt-6 px-4">
-                      <Seekbar
-                        progress={seekPosition / duration}
-                        handleSeek={handleSeek}
-                        duration={duration}
-                      />
-                      <div className="flex justify-between text-sm text-white/60 mt-2">
-                        <span>{formatTimeMobile(seekPosition)}</span>
-                        <span>{formatTimeMobile(duration)}</span>
+                      {/* Audio Quality Badge + Listen Count */}
+                      <div className="flex flex-col items-center space-y-1">
+                        <QualityBadge
+                          quality={audioQuality}
+                          onClick={() => setShowAudioMenu(true)}
+                        />
+                        <p className="text-[#FFD700] text-xs flex items-center space-x-1">
+                          <Guitar className="w-4 h-4" />
+                          <span>Listened {listenCount} times</span>
+                        </p>
                       </div>
-                    </div>
 
-                  {/* Main playback controls */}
-                    {mainControlButtons}
-
-                    {/* Extra action buttons */}
-                    {getVisibleActionButtons().length > 0 && (
-                      <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
-                        {getVisibleActionButtons().map((btn, i) => (
-                          <ActionButton
-                            key={i}
-                            icon={btn.icon}
-                            label={btn.label}
-                            active={btn.active}
-                            onClick={btn.onClick}
-                          />
-                        ))}
-                        {/* "More" button for additional actions */}
-                        <div className="md:hidden">
-                          <ActionButton
-                            icon={MoreHorizontal}
-                            label="More"
-                            onClick={() => setShowMoreOptions(true)}
-                          />
+                      {/* Seekbar */}
+                      <div className="w-full mb-8 mt-6 px-4">
+                        <Seekbar
+                          progress={seekPosition / duration}
+                          handleSeek={handleSeek}
+                          duration={duration}
+                        />
+                        <div className="flex justify-between text-sm text-white/60 mt-2">
+                          <span>{formatTimeMobile(seekPosition)}</span>
+                          <span>{formatTimeMobile(duration)}</span>
                         </div>
                       </div>
-                    )}
-                  </>
-                )}
+
+                      {/* Main playback controls */}
+                      {mainControlButtons}
+
+                      {/* Extra action buttons */}
+                      {getVisibleActionButtons().length > 0 && (
+                        <div className="w-full flex flex-wrap justify-center gap-8 mb-4">
+                          {getVisibleActionButtons().map((btn, i) => (
+                            <ActionButton
+                              key={i}
+                              icon={btn.icon}
+                              label={btn.label}
+                              active={btn.active}
+                              onClick={btn.onClick}
+                            />
+                          ))}
+                          {/* "More" button for additional actions */}
+                          <div className="md:hidden">
+                            <ActionButton
+                              icon={MoreHorizontal}
+                              label="More"
+                              onClick={() => setShowMoreOptions(true)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Audio Quality Menu */}
-              {/* Updated Modal Container */}
-<AnimatePresence>
-  {showAudioMenu && (
-    <motion.div
-      className="fixed inset-0 z-50"
-      style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={() => setShowAudioMenu(false)}
-    >
-      <motion.div
-        className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
-        style={{ width: "100%", maxHeight: "80vh" }}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4">
-          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
-          <h3 className="text-lg font-bold text-white mb-4 text-center">
-            Audio Quality
-          </h3>
-          {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map((qual) => (
-            <button
-              key={qual}
-              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
-                audioQuality === qual ? "bg-white/10" : "hover:bg-white/5"
-              }`}
-              onClick={async () => {
-                if (isDataSaver && qual !== "DATA_SAVER") {
-                  toast.error(
-                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
-                  );
-                  return;
-                }
-                try {
-                  await changeAudioQuality(qual);
-                  toast.success(`Switched to ${qual} Quality`);
-                } catch (err) {
-                  console.error(err);
-                  toast.error("Failed to change audio quality");
-                } finally {
-                  setShowAudioMenu(false);
-                }
-              }}
-            >
-              <div className="flex flex-col items-start justify-center">
-                <p className="text-white font-semibold">{qual}</p>
-                <p className="text-sm text-white/60 mt-1">
-                  {qual === "MAX" && "HiFi Plus (24-bit, up to 192kHz)"}
-                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
-                  {qual === "NORMAL" && "High (320kbps)"}
-                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
-                </p>
-              </div>
-              {qual === audioQuality && (
-                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
+              <AnimatePresence>
+                {showAudioMenu && (
                   <motion.div
-                    className="w-3 h-3 bg-white rounded-full"
-                    layoutId="quality-indicator"
-                  />
-                </div>
-              )}
-            </button>
-          ))}
-          <button
-            className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
-            onClick={() => setShowAudioMenu(false)}
-          >
-            Cancel
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
-
+                    className="fixed inset-0 z-50"
+                    style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setShowAudioMenu(false)}
+                  >
+                    <motion.div
+                      className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
+                      style={{ width: "100%", maxHeight: "80vh" }}
+                      initial={{ y: "100%" }}
+                      animate={{ y: 0 }}
+                      exit={{ y: "100%" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-4">
+                        <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+                        <h3 className="text-lg font-bold text-white mb-4 text-center">
+                          Audio Quality
+                        </h3>
+                        {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map(
+                          (qual) => (
+                            <button
+                              key={qual}
+                              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
+                                audioQuality === qual ? "bg-white/10" : "hover:bg-white/5"
+                              }`}
+                              onClick={async () => {
+                                if (isDataSaver && qual !== "DATA_SAVER") {
+                                  toast.error(
+                                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
+                                  );
+                                  return;
+                                }
+                                try {
+                                  await changeAudioQuality(qual);
+                                  toast.success(`Switched to ${qual} Quality`);
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error("Failed to change audio quality");
+                                } finally {
+                                  setShowAudioMenu(false);
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col items-start justify-center">
+                                <p className="text-white font-semibold">{qual}</p>
+                                <p className="text-sm text-white/60 mt-1">
+                                  {qual === "MAX" && "HiFi Plus (24-bit, up to 192kHz)"}
+                                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
+                                  {qual === "NORMAL" && "High (320kbps)"}
+                                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
+                                </p>
+                              </div>
+                              {qual === audioQuality && (
+                                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
+                                  <motion.div
+                                    className="w-3 h-3 bg-white rounded-full"
+                                    layoutId="quality-indicator"
+                                  />
+                                </div>
+                              )}
+                            </button>
+                          )
+                        )}
+                        <button
+                          className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
+                          onClick={() => setShowAudioMenu(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* More Options Menu */}
               <AnimatePresence>
@@ -1247,7 +1260,6 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                     onClick={() => setShowMoreOptions(false)}
                   >
                     <motion.div
-                      // UPDATED: Removed overflow-y-auto for the menu
                       className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl max-h-[80%]"
                       initial={{ y: "100%" }}
                       animate={{ y: 0 }}
@@ -1281,11 +1293,26 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* NEW: If autoplay is blocked, show a “Resume Playback” UI */}
+      {autoplayBlocked && (
+        <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-50 flex items-center justify-center">
+          <div className="p-2 bg-red-600 text-white rounded-lg shadow-lg flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <span>Playback blocked by browser policy!</span>
+            <button
+              onClick={() => resumeAutoplay()}
+              className="px-2 py-1 bg-white text-red-700 font-semibold rounded"
+            >
+              Resume
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

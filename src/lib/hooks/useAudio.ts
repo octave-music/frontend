@@ -1,511 +1,554 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
+import { Track } from "../types/types";
 import {
   storeTrackBlob,
   getOfflineBlob,
   storeSetting,
 } from "../managers/idbWrapper";
-import audioElement from "../managers/audioManager";
-import { Track } from "../types/types";
 
-/**
- * Determine file extension from chosen quality.
- * MAX => .flac, HIGH => .opus, NORMAL => .mp3, DATA_SAVER => .s4.opus
- */
-export function getTrackUrl(trackId: string, audioQuality: string): string {
-  let ext = ".mp3";
-  switch (audioQuality) {
+/* ------------------------------------------------------------------
+   CONFIGURATION
+------------------------------------------------------------------ */
+// const CROSSFADE_DURATION = 2000; // in ms
+// const CROSSFADE_STEPS = 20;      // how many small volume steps
+
+function getFileExtension(quality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER") {
+  switch (quality) {
     case "MAX":
-      ext = ".flac";
-      break;
+      return ".flac";
     case "HIGH":
-      ext = ".opus";
-      break;
+      return ".opus";
     case "DATA_SAVER":
-      ext = ".s4.opus";
-      break;
+      return ".s4.opus";
     case "NORMAL":
     default:
-      ext = ".mp3";
-      break;
+      return ".mp3";
   }
-  return `https://api.octave.gold/api/track/${trackId}${ext}`;
 }
 
-/**
- * Ping a track URL (HEAD request) to warm up the server or caching layer.
- */
-async function pingTrackUrl(trackId: string, audioQuality: string): Promise<void> {
+export function getTrackUrl(
+  trackId: string,
+  audioQuality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"
+): string {
+  return `https://api.octave.gold/api/track/${trackId}${getFileExtension(audioQuality)}`;
+}
+
+/** Ping the URL with a HEAD request to warm up the CDN. */
+async function pingTrackUrl(
+  trackId: string,
+  audioQuality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"
+) {
   const url = getTrackUrl(trackId, audioQuality);
   try {
     await fetch(url, { method: "HEAD", cache: "no-store" });
-    console.log(`[pingTrackUrl] Ping succeeded for ${audioQuality} => ${url}`);
-  } catch (err) {
-    console.warn(`[pingTrackUrl] Ping failed for ${audioQuality} => ${url}`, err);
+  } catch {
+    // no-op
   }
 }
 
-/**
- * Helper: Fetch with retry logic.
- */
+/** Basic fetch with retry. */
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
   retries = 3,
-  retryDelay = 3000
-): Promise<Response> {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    console.log(`[fetchWithRetry] Starting attempt ${attempt}/${retries} for ${url}`);
-    if (options.signal && options.signal.aborted) {
-      throw new Error("Aborted");
-    }
+  retryDelay = 1500
+) {
+  let lastError: any;
+  for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url, { ...options, cache: "no-store" });
-      if (response.ok) {
-        console.log(`[fetchWithRetry] Attempt ${attempt} succeeded for ${url}.`);
-        return response;
-      } else {
-        console.warn(
-          `[fetchWithRetry] Attempt ${attempt} for ${url} returned status ${response.status}.`
-        );
-        if (attempt < retries) {
-          await new Promise((res) => setTimeout(res, retryDelay));
-          continue;
-        }
-        throw new Error(
-          `Failed to fetch ${url} after ${retries} attempts: status ${response.status}`
-        );
-      }
+      const resp = await fetch(url, { ...options, cache: "no-store" });
+      if (resp.ok) return resp;
+      lastError = new Error(`HTTP ${resp.status}`);
     } catch (err) {
-      console.warn(`[fetchWithRetry] Attempt ${attempt} for ${url} threw an error:`, err);
-      if (attempt < retries) {
-        await new Promise((res) => setTimeout(res, retryDelay));
-        continue;
-      }
-      throw err;
+      lastError = err;
     }
+    await new Promise((r) => setTimeout(r, retryDelay));
   }
-  throw new Error("Failed to fetch after retries (unexpected fall-through)");
+  throw lastError;
 }
 
 /**
- * Fetch the track for a requested quality.
- * For quality MAX, fallback order is HIGH -> NORMAL -> DATA_SAVER if MAX fails.
+ * Try to fetch the requested quality. If `MAX` fails, fallback to
+ * "HIGH → NORMAL → DATA_SAVER." If the requestedQuality is not MAX
+ * and fails, we throw an error instead of multiple fallbacks.
  */
 async function fetchWithFallback(
   trackId: string,
   requestedQuality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER",
-  abortSignal: AbortSignal
+  signal: AbortSignal
 ): Promise<{ blob: Blob; usedQuality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER" }> {
-  console.log("[fetchWithFallback] Attempting quality:", requestedQuality);
+  await pingTrackUrl(trackId, requestedQuality);
+
   const mainUrl = getTrackUrl(trackId, requestedQuality);
-
-  // 1) Ping the requested quality first
   try {
-    await pingTrackUrl(trackId, requestedQuality);
-  } catch (pingError) {
-    console.warn("[fetchWithFallback] Ping error (ignored):", pingError);
-  }
-
-  // 2) Real fetch
-  let mainResp: Response;
-  try {
-    mainResp = await fetchWithRetry(mainUrl, { signal: abortSignal });
-  } catch (err) {
-    console.warn("[fetchWithFallback] Main fetch error:", err);
-    mainResp = { ok: false, status: 0 } as Response;
-  }
-
-  if (mainResp.ok) {
-    console.log(`[fetchWithFallback] Fetched ${requestedQuality} successfully.`);
-    return { blob: await mainResp.blob(), usedQuality: requestedQuality };
-  }
-  console.warn(
-    `[fetchWithFallback] Main fetch for ${requestedQuality} failed with status ${mainResp.status}.`
-  );
-
-  // If requested was MAX, do fallback chain: HIGH -> NORMAL -> DATA_SAVER
-  if (requestedQuality === "MAX") {
-    const fallbackOrder: Array<"HIGH" | "NORMAL" | "DATA_SAVER"> = [
-      "HIGH",
-      "NORMAL",
-      "DATA_SAVER",
-    ];
-    for (const quality of fallbackOrder) {
-      try {
-        await pingTrackUrl(trackId, quality);
-      } catch (pingError) {
-        console.warn(`[fetchWithFallback] Ping for fallback ${quality} error:`, pingError);
-      }
-
-      try {
-        const url = getTrackUrl(trackId, quality);
-        const resp = await fetchWithRetry(url, { signal: abortSignal });
-        if (resp.ok) {
-          console.log(`[fetchWithFallback] Fallback succeeded with ${quality}.`);
-          return { blob: await resp.blob(), usedQuality: quality };
-        }
-      } catch (err) {
-        console.warn(`[fetchWithFallback] Fallback for ${quality} failed:`, err);
-        continue;
-      }
+    const mainResp = await fetchWithRetry(mainUrl, { signal }, 2, 1500);
+    if (mainResp.ok) {
+      return { blob: await mainResp.blob(), usedQuality: requestedQuality };
     }
-    throw new Error("All fallback attempts failed for MAX -> HIGH -> NORMAL -> DATA_SAVER");
+  } catch (err) {
+    // We'll fallback below only if requestedQuality === 'MAX'
   }
 
-  // Otherwise, fail if not MAX
-  throw new Error(`Failed to fetch track for ${requestedQuality} after 3 retries`);
+  // If requestedQuality != 'MAX', we do not fallback further.
+  if (requestedQuality !== "MAX") {
+    throw new Error(`Fetch with fallback failed for ${requestedQuality}`);
+  }
+
+  // Fallback order: HIGH -> NORMAL -> DATA_SAVER
+  const fallbackOrder: Array<"HIGH" | "NORMAL" | "DATA_SAVER"> = ["HIGH", "NORMAL", "DATA_SAVER"];
+  for (const q of fallbackOrder) {
+    await pingTrackUrl(trackId, q);
+    const url2 = getTrackUrl(trackId, q);
+    try {
+      const resp2 = await fetchWithRetry(url2, { signal }, 2, 1500);
+      if (resp2.ok) return { blob: await resp2.blob(), usedQuality: q };
+    } catch {
+      // keep going
+    }
+  }
+
+  throw new Error("All fallback attempts (MAX->HIGH->NORMAL->DATA_SAVER) failed");
 }
 
 /**
- * The main audio hook.
- *
- * By default, it uses manual 'ended' logic. If you want a simple single‐track loop,
- * we can set audioElement.loop = true for that mode and let the browser handle it.
+ * FIXED: Completely stop the old audio before attempting to play the new one
+ * This prevents any overlap between audio elements.
  */
+async function crossfade(
+  oldAudio: HTMLAudioElement,
+  newAudio: HTMLAudioElement,
+  finalVolume: number
+) {
+  // IMPROVEMENT: Force immediate stop of old audio BEFORE new audio starts
+  oldAudio.pause();
+  oldAudio.currentTime = 0;
+  
+  // Set the new audio's initial volume
+  newAudio.volume = finalVolume;
+  
+  // Clean up old audio element completely
+  oldAudio.src = "";
+  try {
+    // Force garbage collection of media resources
+    oldAudio.load();
+  } catch (e) {
+    // Ignore any errors during cleanup
+  }
+}
+
+/** 
+ * Global user interaction detection 
+ */
+let userInteractionDetected = false;
+
+if (typeof window !== 'undefined') {
+  const interactionEvents = ['click', 'touchstart', 'touchend', 'mousedown', 'keydown'];
+  const handleUserInteraction = () => {
+    userInteractionDetected = true;
+    interactionEvents.forEach(event => 
+      window.removeEventListener(event, handleUserInteraction));
+  };
+  interactionEvents.forEach(event => 
+    window.addEventListener(event, handleUserInteraction));
+}
+
+/* ------------------------------------------------------------------
+   useAudio HOOK
+------------------------------------------------------------------ */
 export function useAudio() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [currentTime, setCurrentTime] = useState(0);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
 
-  // Use NORMAL (mp3) unless user sets otherwise
-  const [audioQuality, setAudioQuality] =
-    useState<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER">("NORMAL");
-
+  const [audioQuality, setAudioQuality] = useState<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER">("NORMAL");
   const [isDataSaver, setIsDataSaver] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
-  // You can optionally store the "repeatMode" in here if needed,
-  // or just let the parent pass an onTrackEnd callback
-  const onTrackEndCallbackRef = useRef<(() => void) | null>(null);
+  const audioARef = useRef<HTMLAudioElement | null>(null);
+  const audioBRef = useRef<HTMLAudioElement | null>(null);
 
-  // ---------------------------------------------
-  // Setup audioElement event listeners
-  // ---------------------------------------------
+  const [activeRef, setActiveRef] = useState<"A" | "B">("A");
+  const onTrackEndCallbackRef = useRef<() => void>(() => {});
+  const autoplayQueueRef = useRef<Array<() => Promise<void>>>([]);
+  const processingAutoplayRef = useRef(false);
+
+  // Track switching lock mechanism
+  const trackSwitchInProgressRef = useRef(false);
+  
+  // Manage whether the browser blocked autoplay
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+
+  // Set up user interaction detection on mount
   useEffect(() => {
-    if (!audioElement) return;
+    setHasUserInteracted(userInteractionDetected);
 
-    const handleTimeUpdate = () => setCurrentTime(audioElement?.currentTime || 0);
-    const handleLoadedMetadata = () => setDuration(audioElement?.duration || 0);
+    const updateHasInteracted = () => {
+      setHasUserInteracted(true);
+      processAutoplayQueue();
+    };
 
-    // This event is triggered when playback ends, but if audioElement.loop = true,
-    // it typically won't fire. So only triggers for normal or repeat-all modes.
+    if (!userInteractionDetected) {
+      const events = ['click','touchstart','touchend','mousedown','keydown'];
+      events.forEach(event => window.addEventListener(event, updateHasInteracted, { once: true }));
+      return () => {
+        events.forEach(event => window.removeEventListener(event, updateHasInteracted));
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Create the two audio elements once
+  useEffect(() => {
+    if (!audioARef.current) {
+      audioARef.current = new Audio();
+      audioARef.current.preload = "auto";
+    }
+    if (!audioBRef.current) {
+      audioBRef.current = new Audio();
+      audioBRef.current.preload = "auto";
+    }
+    
+    const cleanupAudio = (audio: HTMLAudioElement) => {
+      if (audio) {
+        audio.pause();
+        audio.src = "";
+        audio.load();
+        audio.volume = 0;
+      }
+    };
+    
+    cleanupAudio(audioARef.current);
+    cleanupAudio(audioBRef.current);
+    
+    return () => {
+      cleanupAudio(audioARef.current!);
+      cleanupAudio(audioBRef.current!);
+    };
+  }, []);
+
+  const processAutoplayQueue = useCallback(async () => {
+    if (processingAutoplayRef.current) return;
+    
+    processingAutoplayRef.current = true;
+    while (autoplayQueueRef.current.length > 0) {
+      const playFn = autoplayQueueRef.current.shift();
+      if (playFn) {
+        try {
+          await playFn();
+        } catch (err) {
+          console.warn("[useAudio] Error processing autoplay queue:", err);
+        }
+      }
+    }
+    processingAutoplayRef.current = false;
+  }, []);
+
+  // Attempt to play audio, handling blocked scenarios
+  const safePlayAudio = useCallback(async (audio: HTMLAudioElement): Promise<boolean> => {
+    if (!audio) return false;
+    
+    // IMPROVEMENT: Make sure any pending play operation is reset
+    if (audio.readyState === 0) {
+      console.warn("[useAudio] Audio not ready to play yet");
+      return false;
+    }
+    
+    try {
+      await audio.play();
+      return true;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        console.warn("[useAudio] Autoplay blocked, waiting for user interaction");
+        setAutoplayBlocked(true);
+        return false;
+      }
+      console.error("[useAudio] Error playing audio:", err);
+      return false;
+    }
+  }, []);
+
+  const getActiveAudio = useCallback(() => {
+    return activeRef === "A" ? audioARef.current : audioBRef.current;
+  }, [activeRef]);
+
+  const getInactiveAudio = useCallback(() => {
+    return activeRef === "A" ? audioBRef.current : audioARef.current;
+  }, [activeRef]);
+
+  /** Attach ended listener only to active audio. Remove from inactive. */
+  useEffect(() => {
+    const activeAudio = getActiveAudio();
+    const inactiveAudio = getInactiveAudio();
+    if (!activeAudio || !inactiveAudio) return;
+
+    // IMPROVEMENT: Make sure the inactive audio is really stopped
+    inactiveAudio.onended = null;
+    inactiveAudio.pause();
+    inactiveAudio.currentTime = 0;
+
+    // attach to new
     const handleEnded = () => {
       if (onTrackEndCallbackRef.current) {
         onTrackEndCallbackRef.current();
       }
-      // Do NOT force setIsPlaying(false); parent logic might want to skip to next track, etc.
     };
-
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-
-    audioElement.addEventListener("timeupdate", handleTimeUpdate);
-    audioElement.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audioElement.addEventListener("ended", handleEnded);
-    audioElement.addEventListener("play", handlePlay);
-    audioElement.addEventListener("pause", handlePause);
+    activeAudio.onended = handleEnded;
 
     return () => {
-      if (!audioElement) return;
-      audioElement.removeEventListener("timeupdate", handleTimeUpdate);
-      audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audioElement.removeEventListener("ended", handleEnded);
-      audioElement.removeEventListener("play", handlePlay);
-      audioElement.removeEventListener("pause", handlePause);
+      activeAudio.onended = null;
     };
-  }, []);
+  }, [activeRef, getActiveAudio, getInactiveAudio]);
 
-  // ---------------------------------------------
-  // Stop playback
-  // ---------------------------------------------
-  const stop = useCallback(() => {
-    if (!audioElement) return;
-    audioElement.pause();
-    audioElement.removeAttribute("src");
-    audioElement.load();
-    setIsPlaying(false);
-    setCurrentTrack(null);
-  }, []);
-
-  /**
-   * Wait for audio to load enough data for playback.
-   */
-  const waitForLoadedData = (audio: HTMLAudioElement): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const loadedHandler = () => {
-        audio.removeEventListener("canplaythrough", loadedHandler);
-        audio.removeEventListener("error", errorHandler);
-        resolve();
-      };
-      const errorHandler = () => {
-        audio.removeEventListener("canplaythrough", loadedHandler);
-        audio.removeEventListener("error", errorHandler);
-        reject(new Error("Audio loading failed"));
-      };
-      audio.addEventListener("canplaythrough", loadedHandler);
-      audio.addEventListener("error", errorHandler);
-      audio.load();
-    });
-
-  /**
-   * Play a track, optionally from a time offset, with autoPlay.
-   * If user requests HIGH or MAX, we do a "NORMAL first" approach for quick start,
-   * then swap to high-quality once it's fetched.
-   */
+  /** The main function to load & crossfade a new track. */
   const playTrackFromSource = useCallback(
     async (
       track: Track,
       timeOffset = 0,
       autoPlay = false,
       qualityOverride?: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER",
-      forceFetch: boolean = false,
-      hasUserInteracted = false
+      forceFetch = false,
+      skipUserInteractionCheck = false
     ) => {
-      if (!audioElement) {
-        console.warn("[useAudio] No audioElement? cannot play");
+      if (!track) return;
+
+      // IMPROVEMENT: Better track switching lock with timeout protection
+      if (trackSwitchInProgressRef.current) {
+        console.warn("[useAudio] Track switch already in progress; ignoring new request");
         return;
       }
 
-      if (!hasUserInteracted && autoPlay) {
-        console.warn("User has not interacted yet. Autoplay likely blocked.");
-      }
+      // Set a timeout to release the lock in case of error
+      trackSwitchInProgressRef.current = true;
+      const lockTimeout = setTimeout(() => {
+        trackSwitchInProgressRef.current = false;
+      }, 5000); // Force timeout after 5 seconds
 
-      const requested: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER" =
-        isDataSaver ? "DATA_SAVER" : qualityOverride || audioQuality;
+      try {
+        const requested = isDataSaver ? "DATA_SAVER" : (qualityOverride || audioQuality);
 
-      // For HIGH or MAX, do "mp3-first" approach
-      if (requested !== "NORMAL") {
-        // 1) Ensure we have NORMAL
-        const normalKey = `${track.id}_NORMAL`;
-        let mp3Blob: Blob | null = (await getOfflineBlob(normalKey)) ?? null;
+        const oldAudio = getActiveAudio();
+        const newAudio = getInactiveAudio();
+        if (!oldAudio || !newAudio) {
+          return;
+        }
 
-        if (!mp3Blob) {
+        // IMPROVEMENT: Stop any current playback first
+        oldAudio.pause();
+        newAudio.pause();
+
+        // Fetch or retrieve from IDB
+        const key = `${track.id}_${requested}`;
+        let offlineBlob = (await getOfflineBlob(key)) ?? null;
+        if (!offlineBlob || forceFetch) {
           try {
-            const result = await fetchWithFallback(
-              track.id,
-              "NORMAL",
-              new AbortController().signal
-            );
-            mp3Blob = result.blob;
-            await storeTrackBlob(normalKey, mp3Blob);
-          } catch (error) {
-            console.error("[useAudio] NORMAL fetch failed:", error);
+            const ab = new AbortController();
+            const { blob, usedQuality } = await fetchWithFallback(track.id, requested, ab.signal);
+            offlineBlob = blob;
+            await storeTrackBlob(`${track.id}_${usedQuality}`, blob);
+          } catch (err) {
+            console.warn("[useAudio] Could not fetch track:", err);
             return;
           }
         }
 
-        // 2) Start immediate playback with mp3
-        {
-          const prevUrl = audioElement.src;
-          const mp3Url = URL.createObjectURL(mp3Blob);
-          audioElement.src = mp3Url;
-          if (prevUrl.startsWith("blob:")) {
-            URL.revokeObjectURL(prevUrl);
-          }
-          setCurrentTrack(track);
-          try {
-            await waitForLoadedData(audioElement);
-          } catch (loadError) {
-            console.error("[useAudio] Error during mp3 load:", loadError);
-          }
-          audioElement.currentTime = timeOffset;
-          if (autoPlay) {
-            try {
-              await audioElement.play();
-              setIsPlaying(true);
-            } catch (playErr) {
-              console.error("[useAudio] Play error with NORMAL:", playErr);
-            }
-          }
+        // IMPROVEMENT: Properly clean up the new audio before setting source
+        newAudio.pause();
+        newAudio.src = "";
+        newAudio.load();
+        
+        // Set the new source
+        newAudio.src = URL.createObjectURL(offlineBlob);
+        newAudio.volume = 0; // Start at zero volume
+        newAudio.currentTime = timeOffset;
+        
+        // IMPROVEMENT: Wait for metadata to load before continuing
+        if (newAudio.readyState === 0) {
+          await new Promise<void>((resolve) => {
+            const handleLoaded = () => {
+              newAudio.removeEventListener('loadedmetadata', handleLoaded);
+              resolve();
+            };
+            newAudio.addEventListener('loadedmetadata', handleLoaded, { once: true });
+            
+            // Fallback if metadata never loads
+            setTimeout(resolve, 2000);
+          });
         }
 
-        // 3) Check if user’s requested is in IDB
-        const requestedKey = `${track.id}_${requested}`;
-        let highQualityBlob = await getOfflineBlob(requestedKey);
-        if (highQualityBlob) {
-          console.log(`[useAudio] Found ${requested} offline; switching seamlessly.`);
-          const prevUrl2 = audioElement.src;
-          const highQualityUrl = URL.createObjectURL(highQualityBlob);
-          audioElement.src = highQualityUrl;
-          if (prevUrl2.startsWith("blob:")) {
-            URL.revokeObjectURL(prevUrl2);
+        // Switch the active reference BEFORE attempting to play
+        setActiveRef((prev) => (prev === "A" ? "B" : "A"));
+        
+        // Always crossfade to ensure the old audio is properly stopped
+        await crossfade(oldAudio, newAudio, volume);
+        
+        // Update track info
+        setCurrentTrack(track);
+        setDuration(newAudio.duration || 0);
+        
+        // Play if needed
+        if (autoPlay) {
+          const playSuccess = await safePlayAudio(newAudio);
+          if (playSuccess) {
+            setIsPlaying(true);
+          } else if (hasUserInteracted || skipUserInteractionCheck || userInteractionDetected) {
+            // Queue for later play
+            autoplayQueueRef.current.push(async () => {
+              const success = await safePlayAudio(newAudio);
+              if (success) setIsPlaying(true);
+            });
+            processAutoplayQueue();
           }
-          audioElement.currentTime = timeOffset;
-          if (!audioElement.paused) {
-            await audioElement.play().catch(console.error);
-          }
-          return;
         }
-
-        // 4) Fetch requested
-        try {
-          const result = await fetchWithFallback(
-            track.id,
-            requested,
-            new AbortController().signal
-          );
-          highQualityBlob = result.blob;
-          const storeKey = `${track.id}_${result.usedQuality}`;
-          await storeTrackBlob(storeKey, highQualityBlob);
-
-          // Switch seamlessly
-          const currentPos = audioElement.currentTime;
-          const prevUrl2 = audioElement.src;
-          const highQualityUrl = URL.createObjectURL(highQualityBlob);
-          audioElement.src = highQualityUrl;
-          if (prevUrl2.startsWith("blob:")) {
-            URL.revokeObjectURL(prevUrl2);
-          }
-          audioElement.currentTime = currentPos;
-          if (!audioElement.paused) {
-            await audioElement.play().catch(console.error);
-          }
-          console.log(`[useAudio] Switched to ${result.usedQuality} quality seamlessly.`);
-        } catch (error) {
-          console.error(
-            `[useAudio] Requested quality (${requested}) fetch failed:`,
-            error
-          );
-        }
-        return;
-      }
-
-      // Case 2: requested == NORMAL
-      const key = `${track.id}_NORMAL`;
-      let blob: Blob | null = null;
-
-      if (!forceFetch) {
-        blob = (await getOfflineBlob(key)) ?? null;
-      }
-
-      if (!blob) {
-        try {
-          const result = await fetchWithFallback(
-            track.id,
-            "NORMAL",
-            new AbortController().signal
-          );
-          blob = result.blob;
-          await storeTrackBlob(key, blob);
-        } catch (err) {
-          console.error("[useAudio] Failed to fetch NORMAL quality:", err);
-          return;
-        }
-      }
-
-      const blobUrl = URL.createObjectURL(blob);
-      audioElement.src = blobUrl;
-      setCurrentTrack(track);
-
-      try {
-        await waitForLoadedData(audioElement);
-      } catch (err) {
-        console.error(err);
-      }
-      audioElement.currentTime = timeOffset;
-
-      if (autoPlay && hasUserInteracted) {
-        try {
-          await audioElement.play();
-          setIsPlaying(true);
-        } catch (err) {
-          console.error("Playback error:", err);
-        }
+      } catch (error) {
+        console.error("[useAudio] Error in playTrackFromSource:", error);
+      } finally {
+        clearTimeout(lockTimeout);
+        trackSwitchInProgressRef.current = false;
       }
     },
-    [audioQuality, isDataSaver]
+    [
+      audioQuality,
+      isDataSaver,
+      volume,
+      getActiveAudio,
+      getInactiveAudio,
+      safePlayAudio,
+      hasUserInteracted,
+      processAutoplayQueue
+    ]
   );
 
-  // ---------------------------------------------
-  // pauseAudio
-  // ---------------------------------------------
+  /** Resume playback of the active audio. */
+  const resumeAudio = useCallback(async () => {
+    // IMPROVEMENT: Don't resume if track switch is in progress
+    if (trackSwitchInProgressRef.current) {
+      console.warn("[useAudio] Track switch in progress; ignoring resume request");
+      return;
+    }
+    
+    const audio = getActiveAudio();
+    if (!audio) return;
+    
+    const playSuccess = await safePlayAudio(audio);
+    if (playSuccess) {
+      setIsPlaying(true);
+    } else if (hasUserInteracted || userInteractionDetected) {
+      autoplayQueueRef.current.push(async () => {
+        const success = await safePlayAudio(audio);
+        if (success) setIsPlaying(true);
+      });
+      processAutoplayQueue();
+    }
+  }, [getActiveAudio, safePlayAudio, hasUserInteracted, processAutoplayQueue]);
+
+  /** Pause whichever audio is active. */
   const pauseAudio = useCallback(() => {
-    if (!audioElement) return;
-    audioElement.pause();
+    // IMPROVEMENT: Also pause the inactive audio to be safe
+    const activeAudio = getActiveAudio();
+    const inactiveAudio = getInactiveAudio();
+    
+    if (activeAudio) {
+      activeAudio.pause();
+    }
+    
+    if (inactiveAudio) {
+      inactiveAudio.pause();
+    }
+    
     setIsPlaying(false);
+  }, [getActiveAudio, getInactiveAudio]);
+
+  /** Toggle play/pause. */
+  const togglePlayPause = useCallback(() => {
+    // IMPROVEMENT: Don't toggle if track switch is in progress
+    if (trackSwitchInProgressRef.current) {
+      console.warn("[useAudio] Track switch in progress; ignoring toggle request");
+      return;
+    }
+    
+    if (isPlaying) {
+      pauseAudio();
+    } else {
+      resumeAudio();
+      if (!hasUserInteracted) {
+        setHasUserInteracted(true);
+        userInteractionDetected = true;
+      }
+    }
+  }, [isPlaying, pauseAudio, resumeAudio, hasUserInteracted]);
+
+  /** Stop everything and reset. */
+  const stop = useCallback(() => {
+    if (audioARef.current) {
+      audioARef.current.pause();
+      audioARef.current.src = "";
+      audioARef.current.load();
+    }
+    if (audioBRef.current) {
+      audioBRef.current.pause();
+      audioBRef.current.src = "";
+      audioBRef.current.load();
+    }
+    setIsPlaying(false);
+    setCurrentTrack(null);
   }, []);
 
-  // ---------------------------------------------
-  // handleSeek
-  // ---------------------------------------------
+  /** Seek the active track. */
   const handleSeek = useCallback((time: number) => {
-    if (!audioElement) return;
-    audioElement.currentTime = time;
-  }, []);
+    // IMPROVEMENT: Don't seek if track switch is in progress
+    if (trackSwitchInProgressRef.current) {
+      console.warn("[useAudio] Track switch in progress; ignoring seek request");
+      return;
+    }
+    
+    const audio = getActiveAudio();
+    if (audio) {
+      audio.currentTime = time;
+    }
+  }, [getActiveAudio]);
 
-  // ---------------------------------------------
-  // onVolumeChange
-  // ---------------------------------------------
-  const onVolumeChange = useCallback((newVolume: number) => {
-    if (!audioElement) return;
-    const clamped = Math.min(Math.max(newVolume, 0), 1);
-    audioElement.volume = clamped;
-    setVolume(clamped);
-    storeSetting("volume", String(clamped)).catch(console.error);
-  }, []);
-
-  // ---------------------------------------------
-  // setOnTrackEndCallback
-  // ---------------------------------------------
+  /** Parent can set a stable callback for "ended" events. */
   const setOnTrackEndCallback = useCallback((cb: () => void) => {
     onTrackEndCallbackRef.current = cb;
   }, []);
 
-  // ---------------------------------------------
-  // getCurrentPlaybackTime
-  // ---------------------------------------------
+  /** Volume slider. */
+  const onVolumeChange = useCallback((newVol: number) => {
+    const clamped = Math.max(0, Math.min(1, newVol));
+    setVolume(clamped);
+    const audio = getActiveAudio();
+    if (audio) {
+      audio.volume = clamped;
+    }
+    void storeSetting("volume", String(clamped));
+  }, [getActiveAudio]);
+
+  /** Return currentTime of the active audio. */
   const getCurrentPlaybackTime = useCallback(() => {
-    if (!audioElement) return 0;
-    return audioElement.currentTime;
-  }, []);
+    const a = getActiveAudio();
+    return a ? a.currentTime : 0;
+  }, [getActiveAudio]);
 
-  // ---------------------------------------------
-  // loadAudioBuffer
-  // For “Download for offline”.
-  // ---------------------------------------------
-  const loadAudioBuffer = useCallback(
-    async (trackId: string): Promise<Blob | null> => {
-      if (!navigator.onLine) {
-        console.warn("[useAudio] Can't fetch track while offline");
-        return null;
-      }
-      try {
-        const requested = isDataSaver ? "DATA_SAVER" : audioQuality;
-        const key = `${trackId}_${requested}`;
-        const existing = await getOfflineBlob(key);
-        if (existing) {
-          console.log("[useAudio.loadAudioBuffer] Reusing offline =>", key);
-          return existing;
-        }
-        await pingTrackUrl(trackId, requested).catch(() =>
-          console.warn("[useAudio.loadAudioBuffer] Ping error ignored")
-        );
+  /** For offline or downloading. */
+  const loadAudioBuffer = useCallback(async (trackId: string) => {
+    const finalQ = isDataSaver ? "DATA_SAVER" : audioQuality;
+    const key = `${trackId}_${finalQ}`;
+    const existing = await getOfflineBlob(key);
+    if (existing) return existing;
+    try {
+      const ab = new AbortController();
+      const { blob } = await fetchWithFallback(trackId, finalQ, ab.signal);
+      await storeTrackBlob(key, blob);
+      return blob;
+    } catch (err) {
+      console.error("[useAudio] loadAudioBuffer error:", err);
+      return null;
+    }
+  }, [audioQuality, isDataSaver]);
 
-        const result = await fetchWithFallback(
-          trackId,
-          requested,
-          new AbortController().signal
-        );
-        if (result.usedQuality !== audioQuality && !isDataSaver) {
-          console.log("[useAudio] fallback changed =>", result.usedQuality);
-          setAudioQuality(result.usedQuality);
-        }
-        const finalKey = `${trackId}_${result.usedQuality}`;
-        await storeTrackBlob(finalKey, result.blob);
-        return result.blob;
-      } catch (err) {
-        console.error("[useAudio] loadAudioBuffer() error:", err);
-        return null;
-      }
-    },
-    [audioQuality, isDataSaver]
-  );
-
-  // ---------------------------------------------
-  // toggleDataSaver
-  // ---------------------------------------------
+  // Toggling data saver
   const toggleDataSaver = useCallback(async (on: boolean) => {
     setIsDataSaver(on);
     await storeSetting("dataSaver", String(on));
@@ -514,35 +557,41 @@ export function useAudio() {
     }
   }, []);
 
-  // ---------------------------------------------
-  // changeAudioQuality
-  // ---------------------------------------------
-  const changeAudioQuality = useCallback(
-    async (newQuality: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER") => {
-      console.log("[useAudio] changeAudioQuality =>", newQuality);
-      if (!audioElement) {
-        console.warn("[useAudio] no audioElement => cannot change quality");
-        return;
-      }
-      // If dataSaver is ON, block switch away from DATA_SAVER
-      if (isDataSaver && newQuality !== "DATA_SAVER") {
-        console.warn("[useAudio] dataSaver ON => ignoring =>", newQuality);
-        return;
-      }
-      setAudioQuality(newQuality);
-      await storeSetting("audioQuality", newQuality);
-    },
-    [isDataSaver]
-  );
+  const changeAudioQuality = useCallback(async (newQ: "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER") => {
+    if (isDataSaver && newQ !== "DATA_SAVER") {
+      console.warn("[useAudio] DataSaver is ON. Must be DATA_SAVER or disable it first.");
+      return;
+    }
+    setAudioQuality(newQ);
+    await storeSetting("audioQuality", newQ);
+  }, [isDataSaver]);
 
-  /**
-   * For single‐track loop, you can externally call “setLoop(true)” if the app’s repeatMode is "one"
-   * This toggles the real HTMLAudioElement.loop property to true or false.
-   */
+  /** If we want "repeat one" => .loop = true on the active element. */
   const setLoop = useCallback((enable: boolean) => {
-    if (!audioElement) return;
-    audioElement.loop = enable;
-  }, []);
+    const a = getActiveAudio();
+    if (a) a.loop = enable;
+  }, [getActiveAudio]);
+
+  /** Force a user interaction flag to true */
+  const registerUserInteraction = useCallback(() => {
+    setHasUserInteracted(true);
+    userInteractionDetected = true;
+    processAutoplayQueue();
+  }, [processAutoplayQueue]);
+
+  // Function to manually resume if autoplay was blocked
+  const resumeAutoplay = useCallback(async () => {
+    setAutoplayBlocked(false);
+    const audio = getActiveAudio();
+    if (audio) {
+      try {
+        await audio.play();
+        setIsPlaying(!audio.paused);
+      } catch (err) {
+        console.error("[useAudio] resumeAutoplay error:", err);
+      }
+    }
+  }, [getActiveAudio]);
 
   return {
     isPlaying,
@@ -550,23 +599,34 @@ export function useAudio() {
     duration,
     volume,
     setVolume,
-    currentTime,
     currentTrack,
     audioQuality,
+    setAudioQuality,
     isDataSaver,
+    setIsDataSaver,
+    hasUserInteracted,
+
+    // The main crossfade method:
     playTrackFromSource,
+
     pauseAudio,
+    resumeAudio,
+    togglePlayPause,
     stop,
     handleSeek,
     onVolumeChange,
     getCurrentPlaybackTime,
     loadAudioBuffer,
-    setOnTrackEndCallback,
-    audioElement,
     toggleDataSaver,
     changeAudioQuality,
-    setAudioQuality,
-    setIsDataSaver,
-    setLoop, // <-- new helper to turn on/off the native loop property
+    setLoop,
+    getActiveAudio,
+    registerUserInteraction,
+
+    setOnTrackEndCallback,
+
+    // Let parents show a UI to handle blocked case
+    autoplayBlocked,
+    resumeAutoplay
   };
 }

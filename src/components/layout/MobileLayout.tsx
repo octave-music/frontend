@@ -635,6 +635,7 @@ const PlaylistView: React.FC<{
                       className="w-12 h-12 rounded-lg object-cover"
                       width={48}
                       height={48}
+                      priority
                     />
                     <div>
                       <p className="font-medium text-white">{track.title}</p>
@@ -767,6 +768,7 @@ const LibraryView: React.FC<{
               )}
               width={sidebarCollapsed ? 40 : 48}
               height={sidebarCollapsed ? 40 : 48}
+              priority
             />
             {!sidebarCollapsed && (
               <>
@@ -866,6 +868,7 @@ const HomeView: React.FC<{
                 className="w-10 h-10 rounded-md"
                 width={40}
                 height={40}
+                priority
               />
               <span className="font-medium text-sm">{pl.name}</span>
               <button

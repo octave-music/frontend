@@ -43,12 +43,14 @@ import {
   Fan,
   Share2,
   MoreHorizontal,
-  ChevronRight, MessageSquareText,
+  ChevronRight,
+  MessageSquareText,
   ListX,
   Guitar,
 } from "lucide-react";
 
 import { Track, Lyric } from "@/lib/types/types";
+
 
 import {
   DndContext,
@@ -71,6 +73,8 @@ type AudioQuality = 'MAX' | 'HIGH' | 'NORMAL' | 'DATA_SAVER';
 type RepeatMode = "off" | "all" | "one";
 
 interface DesktopPlayerProps {
+  autoplayBlocked: boolean;
+  resumeAutoplay: () => void;
   currentTrack: Track;
   isPlaying: boolean;
   previousTracks: Track[];
@@ -103,7 +107,7 @@ interface DesktopPlayerProps {
   isDataSaver: boolean;
   changeAudioQuality: (
     quality: AudioQuality
-  ) => Promise<void>; // or a synchronous function if you prefer
+  ) => Promise<void>;
 }
 
 /** Convert seconds => mm:ss. */
@@ -511,6 +515,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
               width={40}
               height={40}
               className={`rounded-lg shadow-lg transition-transform ${isDragging ? "scale-105" : ""}`}
+              priority
             />
           ) : (
             <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center">
@@ -613,6 +618,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
     </div>
   );
 };
+
 
 /* ----------------------------------------------
    D E T A I L S   P A N E L
@@ -745,6 +751,7 @@ const DetailsPanel: React.FC<DetailsProps> = ({
           width={500}
           height={500}
           className="w-full h-full object-cover"
+          priority
         />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-4">
           <motion.button
@@ -906,6 +913,7 @@ const DetailsPanel: React.FC<DetailsProps> = ({
   );
 };
 
+
 /* ----------------------------------------------
    S I D E B A R   O V E R L A Y   (Queue/Lyrics/Details)
 ---------------------------------------------- */
@@ -1029,6 +1037,8 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
     currentTrack,
     isPlaying,
     togglePlay,
+    autoplayBlocked,
+    resumeAutoplay,
     skipTrack,
     previousTrack,
     seekPosition,
@@ -1056,6 +1066,7 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
     toggleLyricsView,
     currentTrackIndex,
     removeFromQueue,
+    previousTracks,
   } = props;
 
   const [showSidebar, setShowSidebar] = useState(false);
@@ -1064,29 +1075,24 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
   
   const DOUBLE_CLICK_DELAY = 300; // adjust as needed
 
-// Example for DesktopPlayer or MobilePlayer:
-const backTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-const handleBackClick = useCallback(() => {
-  // If there’s already a timer, it means this is the second click.
-  if (backTimerRef.current) {
-    clearTimeout(backTimerRef.current);
-    backTimerRef.current = null;
-    // Double click: go to previous track
-    previousTrack();
-  } else {
-    // First click: set a timer for the single click action.
-    backTimerRef.current = setTimeout(() => {
-      // Single click action: restart current track
-      handleSeek(0);
+  // RELEVANT "double click" logic for back
+  const backTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const handleBackClick = useCallback(() => {
+    if (backTimerRef.current) {
+      clearTimeout(backTimerRef.current);
       backTimerRef.current = null;
-    }, DOUBLE_CLICK_DELAY);
-  }
-}, [handleSeek, previousTrack]);
+      // Double click => previousTrack
+      previousTrack();
+    } else {
+      backTimerRef.current = setTimeout(() => {
+        // Single click => restart current
+        handleSeek(0);
+        backTimerRef.current = null;
+      }, DOUBLE_CLICK_DELAY);
+    }
+  }, [handleSeek, previousTrack]);
 
-
-  // Access the audio hook for data saver checks, or we can just pass in onCycleAudioQuality prop
-
+  // HOOK for auto-scrolling lyrics, if needed
   const { lyricsRef, userScrolling, handleUserScroll, lyricProgress, processedLyrics } =
     useAutoScrollLyrics(showLyrics, currentLyricIndex, lyrics, duration, seekPosition);
 
@@ -1124,11 +1130,11 @@ const handleBackClick = useCallback(() => {
     setRepeatMode(modes[(idx + 1) % modes.length]);
   };
 
+
   return (
     <>
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-b from-black/60 to-black/90 backdrop-blur-xl border-t border-white/10">
         <div className="max-w-screen-2xl mx-auto px-4">
-          {/* If collapsed => minimal UI */}
           {isCollapsed ? (
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center flex-1">
@@ -1171,7 +1177,6 @@ const handleBackClick = useCallback(() => {
             </div>
           ) : (
             <>
-              {/* Full Seekbar */}
               <DesktopSeekbar
                 progress={duration > 0 ? seekPosition / duration : 0}
                 handleSeek={handleSeek}
@@ -1189,6 +1194,7 @@ const handleBackClick = useCallback(() => {
                           width={56}
                           height={56}
                           className="rounded-md object-cover"
+                          priority
                         />
                         <button
                           onClick={() => {
@@ -1331,6 +1337,16 @@ const handleBackClick = useCallback(() => {
                   >
                     <ChevronDown className="w-5 h-5" />
                   </button>
+
+                  {/* NEW: If blocked, show Resume Playback button */}
+                  {autoplayBlocked && (
+                    <button
+                      onClick={() => resumeAutoplay()}
+                      className="ml-3 px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500"
+                    >
+                      Resume Playback
+                    </button>
+                  )}
                 </div>
               </div>
             </>

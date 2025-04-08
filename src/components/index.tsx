@@ -37,9 +37,13 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import debounce from "lodash/debounce";
+import dynamic from 'next/dynamic'; // <-- IMPORT DYNAMIC HERE
+
 
 // Hooks & Libraries
-import { useAudio, getTrackUrl } from "@/lib/hooks/useAudio";
+import { useAudio } from "@/lib/hooks/useAudio"; // already imported in your snippet
+import useMediaQuery from "@/lib/hooks/useMediaQuery" // Make sure this path is correct
+
 import { setupMediaSession } from "@/lib/hooks/useMediaSession";
 import {
   storeQueue,
@@ -56,15 +60,20 @@ import {
   getRecommendedTracks,
 } from "../lib/managers/idbWrapper";
 import { handleFetchLyrics } from "@/lib/api/lyrics";
-import audioElement from "@/lib/managers/audioManager";
 import { getTopArtists } from "@/lib/api/lastfm";
 
-// Components
-import MobilePlayer from "./players/mobilePlayer";
-import DesktopPlayer from "./players/DesktopPlayer";
+// // Components
+// import MobilePlayer from "./players/mobilePlayer";
+// import DesktopPlayer from "./players/DesktopPlayer";
+// import Onboarding from "./onboarding/Onboarding";
+// import MobileLayout from "./layout/MobileLayout";
+// import DesktopLayout from "./layout/DesktopLayout";
+
+const MobileLayout = dynamic(() => import("./layout/MobileLayout"), { ssr: false });
+const DesktopLayout = dynamic(() => import("./layout/DesktopLayout"), { ssr: false });
+const MobilePlayer = dynamic(() => import("./players/mobilePlayer"), { ssr: false });
+const DesktopPlayer = dynamic(() => import("./players/DesktopPlayer"), { ssr: false });
 import Onboarding from "./onboarding/Onboarding";
-import MobileLayout from "./layout/MobileLayout";
-import DesktopLayout from "./layout/DesktopLayout";
 
 // Utilities & Helpers
 import { saveAs } from "file-saver";
@@ -129,26 +138,39 @@ export function SpotifyClone() {
   //                  References & Audio Setup
   // ----------------------------------------------------------
   const isMounted = useRef(false);
+  const isDesktopView = useMediaQuery('(min-width: 768px)');
 
   // Pull data & methods from the updated useAudio hook
   const {
+    /** State from hook */
     isPlaying,
     setIsPlaying,
+    currentTrack,
     duration,
     volume,
     setVolume,
-    getCurrentPlaybackTime,
-    pauseAudio,
-    handleSeek,
-    playTrackFromSource,
-    onVolumeChange,
-    loadAudioBuffer,
-    setOnTrackEndCallback,
     audioQuality,
     setAudioQuality,
     isDataSaver,
+    /** Functions from hook */
+    pauseAudio,
+    resumeAudio,
+    togglePlayPause,
+    stop,
+    handleSeek,
+    onVolumeChange,
+    getCurrentPlaybackTime,
+    loadAudioBuffer,
+    setOnTrackEndCallback,
     changeAudioQuality,
-    setLoop, // <-- new for toggling native loop
+    setLoop,
+    registerUserInteraction,
+    hasUserInteracted,
+    playTrackFromSource,
+
+    // NEW: Add these for autoplay-block handling
+    autoplayBlocked,    // NEW
+    resumeAutoplay,     // NEW
   } = useAudio();
 
   const { hasAutoplayPermission, isAudioContextStarted } = useAutoplayPermission({
@@ -174,7 +196,11 @@ export function SpotifyClone() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+
+  /**
+   * We now rely on the hook for the "currentTrack" state. The queue
+   * remains locally managed to coordinate track order.
+   */
   const [queue, setQueue] = useState<Track[]>([]);
   const [previousTracks, setPreviousTracks] = useState<Track[]>([]);
   const [jumpBackIn, setJumpBackIn] = useState<Track[]>([]);
@@ -230,7 +256,6 @@ export function SpotifyClone() {
 
   // Autoplay
   const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(false);
-  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   // ----------------------------------------------------------
   //                  Handlers & Utility Functions
@@ -357,7 +382,8 @@ export function SpotifyClone() {
   }, [showLyrics, currentTrack, fetchLyrics]);
 
   /**
-   * “Play Track” => set it as current, optionally auto-play
+   * “Play a single track” => sets it as current, optionally auto-play.
+   * This is a convenient wrapper to do queue logic + crossfade.
    */
   const playTrack = useCallback(
     (track: Track, autoPlay = true) => {
@@ -367,81 +393,83 @@ export function SpotifyClone() {
         const filtered = prev.filter((t) => t.id !== track.id);
         return [track, ...filtered];
       });
-      setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
-      setCurrentTrack(track);
-  
-      // 2) Synchronous autoplay if user clicked
-      if (autoPlay && audioElement) {
-        // Use getTrackUrl with "NORMAL" for immediate playback
-        const normalUrl = getTrackUrl(track.id, "NORMAL");
-        audioElement.src = normalUrl;
-        audioElement.currentTime = 0;
-  
-        // Attempt immediate play
-        audioElement.play().then(() => {
-          setIsPlaying(true);
-        }).catch((err) => {
-          console.warn("Autoplay blocked:", err);
-        });
+      if (currentTrack) {
+        setPreviousTracks((prev) => [currentTrack, ...prev]);
       }
-  
-      // 3) Then do your fallback logic asynchronously
-      //    (switch to FLAC, OPUS, etc. behind the scenes)
-      setTimeout(() => {
-        void playTrackFromSource(track, 0, autoPlay);
-      }, 0);
+
+      // 2) Optionally start playing now
+      if (autoPlay) {
+        setIsPlaying(true);
+      }
+
+      // 3) Actually load/crossfade the new track
+      void playTrackFromSource(track, 0, autoPlay);
     },
-    [currentTrack, setIsPlaying, setQueue, setPreviousTracks, setCurrentTrack, playTrackFromSource]
+    [currentTrack, setIsPlaying, setQueue, setPreviousTracks, playTrackFromSource]
   );
+
   /**
    * Toggle playback. If no track is loaded, do nothing.
    */
-  const togglePlay = useCallback(async () => {
-    if (!currentTrack || !audioElement) return;
-    if (isPlaying) {
-      audioElement.pause();
-      setIsPlaying(false);
-    } else {
-      await audioElement.play().catch(console.error);
-      setIsPlaying(true);
-    }
-  }, [currentTrack, isPlaying, setIsPlaying]);
+  const togglePlay = useCallback(() => {
+    if (!currentTrack) return;
+    togglePlayPause();
+  }, [currentTrack, togglePlayPause]);
 
+  /**
+   * Skip back to a previously played track.
+   */
   const previousTrackFunc = useCallback(() => {
-    if (!previousTracks.length || !audioElement) {
+    if (!previousTracks.length) {
       toast.warning("Cannot go to the previous track: no track in history.");
       return;
     }
     const lastTrack = previousTracks[0];
-    setPreviousTracks((prev) => prev.slice(1));
-    setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
-    setCurrentTrack(lastTrack);
-    void playTrackFromSource(lastTrack, 0, true);
-    setIsPlaying(true);
-  }, [previousTracks, playTrackFromSource, setIsPlaying]);
 
+    // Shift out that track from the “history”
+    setPreviousTracks((prev) => prev.slice(1));
+
+    // Insert it at the front of the queue
+    setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
+
+    // Crossfade to that last track
+    setIsPlaying(true);
+    void playTrackFromSource(lastTrack, 0, true);
+  }, [previousTracks, setPreviousTracks, setQueue, setIsPlaying, playTrackFromSource]);
+
+  /**
+   * Skip to the next track in the queue. If none remain, we stop.
+   */
   const skipTrack = useCallback(() => {
-    if (!currentTrack || queue.length <= 1 || !audioElement) {
+    if (!currentTrack || queue.length <= 1) {
       toast.warning("Cannot skip track: no next track available.");
       return;
     }
-    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
-    setQueue((q) => {
-      const [, ...rest] = q;
+
+    // Move current track to `previousTracks`
+    if (currentTrack) {
+      setPreviousTracks((prev) => [currentTrack, ...prev]);
+    }
+
+    // Shift queue & play the next track
+    setQueue((prevQueue) => {
+      const [, ...rest] = prevQueue;
       if (rest.length === 0) {
-        setCurrentTrack(null);
+        // Nothing to skip to
         setIsPlaying(false);
+        stop();
+        return [];
       } else {
-        setCurrentTrack(rest[0]);
-        void playTrackFromSource(rest[0], 0, true);
+        const nextTrack = rest[0];
         setIsPlaying(true);
+        void playTrackFromSource(nextTrack, 0, true);
+        return rest;
       }
-      return rest;
     });
-  }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
+  }, [currentTrack, queue, setPreviousTracks, setQueue, setIsPlaying, stop, playTrackFromSource]);
 
   /**
-   * If queue ends, we can fetch new recommendations or do nothing.
+   * If the queue is empty or we need new recommendations, fetch them.
    */
   const fetchNewRecommendations = useCallback(async () => {
     try {
@@ -491,47 +519,55 @@ export function SpotifyClone() {
   }, [setPlaylists, setQueue, setRecommendedTracks]);
 
   /**
-   * If the track ends, handle repeating or skipping logic.
-   * For "repeat one" => do nothing, because we rely on `audioElement.loop = true`.
-   * For "all" => skip or loop back if at the end.
-   * For "off" => skip if more tracks remain, else stop.
+   * Use the hook's track-end callback to handle repeat or skipping logic.
    */
-  const handleTrackEnd = useCallback(async (): Promise<void> => {
-    if (!currentTrack || !audioElement) return;
+  useEffect(() => {
+    setOnTrackEndCallback(() => {
+      if (repeatMode === "one") return;
 
-    switch (repeatMode) {
-      case "one":
-        // With audioElement.loop = true, it won't actually fire ended, so do nothing
-        return;
-
-      case "all": {
-        // Just skip to next; if at end, the skip logic re-inserts track or loops back
-        skipTrack();
-        break;
-      }
-
-      case "off":
-      default:
-        // If there's more than one track, skip. Otherwise, pause.
-        if (queue.length > 1) {
-          skipTrack();
+      if (queue.length > 1) {
+        if (currentTrack) {
+          setPreviousTracks((prev) => [currentTrack, ...prev]);
+        }
+        setQueue((q) => {
+          const [, ...rest] = q;
+          if (rest.length === 0) {
+            setIsPlaying(false);
+            return [];
+          } else {
+            const nextTrack = rest[0];
+            setIsPlaying(true);
+            void playTrackFromSource(nextTrack, 0, true);
+            return rest;
+          }
+        });
+      } else {
+        if (repeatMode === "all" && queue.length === 1) {
+          const single = queue[0];
+          setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
+          void playTrackFromSource(single, 0, true);
         } else {
           setIsPlaying(false);
-          audioElement.pause();
+          stop();
         }
-        break;
-    }
-  }, [currentTrack, repeatMode, skipTrack, queue, setIsPlaying]);
+      }
+    });
+  }, [
+    setOnTrackEndCallback,
+    repeatMode,
+    queue,
+    currentTrack,
+    playTrackFromSource,
+    stop,
+    setIsPlaying,
+    setQueue,
+    setPreviousTracks,
+  ]);
 
-  // Turn on/off the HTMLAudioElement.loop when repeatMode changes
+  // Keep loop in sync with repeatMode === 'one'
   useEffect(() => {
     setLoop(repeatMode === "one");
   }, [repeatMode, setLoop]);
-
-  // At init, set onTrackEnd callback
-  useEffect(() => {
-    setOnTrackEndCallback(handleTrackEnd);
-  }, [handleTrackEnd, setOnTrackEndCallback]);
 
   const handleUnpinPlaylist = (playlistToUnpin: Playlist) => {
     const updatedPlaylists = playlists.map((pl) =>
@@ -637,7 +673,6 @@ export function SpotifyClone() {
   const onQueueItemClick = useCallback(
     (track: Track, idx: number) => {
       if (idx < 0) {
-        // from previousTracks
         setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
         setQueue((q) => [track, ...q]);
       } else {
@@ -649,9 +684,10 @@ export function SpotifyClone() {
           return newQueue;
         });
       }
-      setCurrentTrack(track);
+      void playTrackFromSource(track, 0, true);
+      setIsPlaying(true);
     },
-    [currentTrack]
+    [currentTrack, setPreviousTracks, setQueue, setIsPlaying, playTrackFromSource]
   );
 
   const openAddToPlaylistModal = useCallback((tr: Track) => {
@@ -878,9 +914,8 @@ export function SpotifyClone() {
         setSearchResults(shuffled);
 
         if (shuffled.length) {
-          setCurrentTrack(shuffled[0]);
           setIsPlaying(true);
-          void playTrackFromSource(shuffled[0], 0, true);
+          void playTrackFromSource(shuffled[0], 0, true, undefined, false, true);
         }
 
         const firstFour = shuffled.slice(0, 4);
@@ -902,7 +937,7 @@ export function SpotifyClone() {
         console.log("Artist selection error:", err);
       }
     },
-    [playlists, handleOnboardingComplete, setIsPlaying, playTrackFromSource]
+    [playlists, handleOnboardingComplete, playTrackFromSource, setIsPlaying]
   );
 
   function handleSearch(newQ: string): void {
@@ -925,18 +960,19 @@ export function SpotifyClone() {
     return () => clearInterval(timer);
   }, []);
 
+  // Keep lyrics in sync with the current time
   useEffect(() => {
     let animFrame: number | null = null;
     function updateLyric() {
-      if (!audioElement) {
+      const time = getCurrentPlaybackTime();
+      if (!lyrics.length) {
         animFrame = requestAnimationFrame(updateLyric);
         return;
       }
-      const t = audioElement.currentTime;
       const idx = lyrics.findIndex((ly, i) => {
         const isLast = i === lyrics.length - 1;
         const nextTime = isLast ? Infinity : lyrics[i + 1].time;
-        return t >= ly.time && t < nextTime;
+        return time >= ly.time && time < nextTime;
       });
       if (idx !== -1 && idx !== currentLyricIndex) {
         setCurrentLyricIndex(idx);
@@ -947,7 +983,7 @@ export function SpotifyClone() {
     return () => {
       if (animFrame) cancelAnimationFrame(animFrame);
     };
-  }, [lyrics, currentLyricIndex]);
+  }, [lyrics, currentLyricIndex, getCurrentPlaybackTime]);
 
   useEffect(() => {
     const handleKeyDown = (e: { key: string }) => {
@@ -964,37 +1000,7 @@ export function SpotifyClone() {
       setAudioQuality("DATA_SAVER");
       void storeSetting("audioQuality", "DATA_SAVER");
     }
-
-    if (audioElement) {
-      audioElement.volume = volume;
-      audioElement.addEventListener("timeupdate", () => {
-        if (!audioElement) return;
-        setCurrentTime(audioElement.currentTime);
-        setSeekPosition(audioElement.currentTime);
-      });
-      audioElement.addEventListener("ended", handleTrackEnd);
-    }
-
-    return () => {
-      if (audioElement) {
-        audioElement.removeEventListener("timeupdate", () => {});
-        audioElement.removeEventListener("ended", handleTrackEnd);
-      }
-    };
-  }, [handleTrackEnd, setAudioQuality, volume]);
-
-  useEffect(() => {
-    if (!audioElement) return;
-    const handleEnded = () => {
-      handleTrackEnd();
-    };
-    audioElement.addEventListener("ended", handleEnded);
-    return () => {
-      if (audioElement) {
-        audioElement.removeEventListener("ended", handleEnded);
-      }
-    };
-  }, [handleTrackEnd]);
+  }, [setAudioQuality]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -1003,23 +1009,24 @@ export function SpotifyClone() {
     };
   }, []);
 
-  // MediaSession integration
+  // MediaSession integration – adapt to useAudio
   useEffect(() => {
-    const cleanup = setupMediaSession(currentTrack, isPlaying, {
-      getCurrentPlaybackTime: () => audioElement?.currentTime || 0,
-      handleSeek: (time) => {
-        if (audioElement) {
-          audioElement.currentTime = time;
-        }
-      },
-      playTrackFromSource,
-      pauseAudio,
-      previousTrackFunc,
-      skipTrack,
-      setIsPlaying,
-      audioRef: { current: audioElement },
-    });
-
+    const cleanup = setupMediaSession(
+      currentTrack || null,
+      isPlaying,
+      {
+        getCurrentPlaybackTime: () => getCurrentPlaybackTime(),
+        handleSeek: (time) => {
+          handleSeek(time);
+        },
+        playTrackFromSource,
+        pauseAudio,
+        previousTrackFunc,
+        skipTrack,
+        setIsPlaying,
+        audioRef: { current: null },
+      }
+    );
     return () => {
       cleanup();
     };
@@ -1031,8 +1038,11 @@ export function SpotifyClone() {
     previousTrackFunc,
     skipTrack,
     setIsPlaying,
+    getCurrentPlaybackTime,
+    handleSeek,
   ]);
 
+  // Save the current track to IDB whenever it changes
   useEffect(() => {
     if (currentTrack) {
       void storeSetting("currentTrack", JSON.stringify(currentTrack));
@@ -1091,15 +1101,14 @@ export function SpotifyClone() {
 
         if (savedTrack) {
           const track: Track = JSON.parse(savedTrack);
-          setCurrentTrack(track);
-          // If you want it not to start playing, set autoPlay = false
+          setIsPlaying(true);
           await playTrackFromSource(track, 0, true);
         }
       } catch (error) {
         console.error("Initialization error:", error);
       }
     })();
-  }, [fetchNewRecommendations, changeAudioQuality, playTrackFromSource, setVolume]);
+  }, [fetchNewRecommendations, changeAudioQuality, playTrackFromSource, setVolume, setIsPlaying]);
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1109,6 +1118,7 @@ export function SpotifyClone() {
     }
   }, [queue]);
 
+  // Keep `seekPosition` in sync with the playing track’s time
   useEffect(() => {
     let t: ReturnType<typeof setInterval>;
     if (isPlaying) {
@@ -1162,9 +1172,8 @@ export function SpotifyClone() {
     }
     void loadRecommendedTracks();
   }, []);
-  
 
-  // ----------------------------------------------------------
+    // ----------------------------------------------------------
   //                      Render
   // ----------------------------------------------------------
   return (
@@ -1195,254 +1204,281 @@ export function SpotifyClone() {
         </div>
       ) : (
         <div className="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
-          {/* Mobile Layout */}
-          <MobileLayout
-            greeting={greeting}
-            showSettingsMenu={showSettingsMenu}
-            setCurrentPlaylist={setCurrentPlaylist}
-            setShowSettingsMenu={setShowSettingsMenu}
-            showPwaModal={showPwaModal}
-            storeSetting={storeSetting}
-            changeAudioQuality={changeAudioQuality}
-            setShowPwaModal={setShowPwaModal}
-            view={view}
-            currentPlaylist={currentPlaylist}
-            setQueue={setQueue}
-            setCurrentTrack={setCurrentTrack}
-            setIsPlaying={setIsPlaying}
-            shuffleQueue={shuffleQueue}
-            downloadPlaylist={downloadPlaylist}
-            isDownloading={isDownloading}
-            downloadProgress={downloadProgress}
-            playlistSearchQuery={playlistSearchQuery}
-            setPlaylistSearchQuery={setPlaylistSearchQuery}
-            playlistSearchResults={playlistSearchResults}
-            handlePlaylistSearch={handlePlaylistSearch}
-            addTrackToPlaylist={addTrackToPlaylist}
-            playTrack={playTrack}
-            queue={queue}
-            previousTracks={previousTracks}
-            removeFromQueue={(track: Track) => {
-              const trackIndex = queue.findIndex((t) => t.id === track.id);
-              if (trackIndex !== -1) {
-                removeFromQueue(trackIndex);
-              }
-            }}
-            toggleLike={toggleLike}
-            isTrackLiked={isTrackLiked}
-            showLyrics={showLyrics}
-            toggleLyricsView={toggleLyricsView}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            searchResults={searchResults}
-            handleSearch={handleSearch}
-            audioQuality={audioQuality}
-            setAudioQuality={setAudioQuality}
-            isPlayerOpen={isPlayerOpen}
-            setView={(v: string) => {
-              setView(
-                v as SetStateAction<"home" | "search" | "playlist" | "settings" | "library">
-              );
-            }}
-            mounted={mounted}
-            lyrics={lyrics}
-            currentLyricIndex={currentLyricIndex}
-            repeatMode={repeatMode}
-            setRepeatMode={setRepeatMode}
-            seekPosition={seekPosition}
-            duration={duration}
-            listenCount={listenCount}
-            searchType={searchType}
-            setIsSearchOpen={setIsSearchOpen}
-            recentSearches={recentSearches}
-            setRecentSearches={setRecentSearches}
-            setPlaylistSearchResults={setPlaylistSearchResults}
-            setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
-            setShowCreatePlaylist={setShowCreatePlaylist}
-            sidebarCollapsed={sidebarCollapsed}
-            setSidebarCollapsed={setSidebarCollapsed}
-            addToQueue={addToQueue}
-            openAddToPlaylistModal={openAddToPlaylistModal}
-            handleContextMenu={handleContextMenu}
-            playlists={playlists}
-            setPlaylists={setPlaylists}
-            storePlaylist={storePlaylist}
-            deletePlaylistByName={deletePlaylistByName}
-            jumpBackIn={jumpBackIn}
-            recommendedTracks={recommendedTracks}
-            toggleLikeMobile={toggleLikeMobile}
-            setIsPlayerOpen={setIsPlayerOpen}
-            setContextMenuPosition={setContextMenuPosition}
-            setContextMenuOptions={setContextMenuOptions}
-            setShowContextMenu={setShowContextMenu}
-            isSearchOpen={isSearchOpen}
-            setSearchType={setSearchType}
-            openPlaylist={openPlaylist}
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            volume={volume}
-            onVolumeChange={onVolumeChange}
-            togglePlay={togglePlay}
-            skipTrack={skipTrack}
-            previousTrackFunc={previousTrackFunc}
-            handleSeek={handleSeek}
-            shuffleOn={shuffleOn}
-          />
 
-          {/* Mobile Player */}
-          <div className="md:hidden flex flex-col h-[100dvh]">
-            {mounted && currentTrack && (
-              <MobilePlayer
-                currentTrack={currentTrack}
-                currentTrackIndex={queue.findIndex((t) => t.id === currentTrack?.id)}
-                isPlaying={isPlaying}
-                audioQuality={audioQuality}
-                isDataSaver={isDataSaver}
-                changeAudioQuality={changeAudioQuality}
-                removeFromQueue={removeFromQueue}
-                downloadTrack={downloadTrack}
-                setQueue={setQueue}
-                togglePlay={togglePlay}
-                skipTrack={skipTrack}
-                previousTrack={previousTrackFunc}
-                seekPosition={seekPosition}
-                duration={duration}
-                listenCount={listenCount}
-                handleSeek={handleSeek}
-                isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
-                repeatMode={repeatMode}
-                setRepeatMode={setRepeatMode}
-                toggleLike={toggleLikeMobile}
-                lyrics={lyrics}
-                currentLyricIndex={currentLyricIndex}
-                queue={queue}
-                previousTracks={previousTracks}
-                shuffleOn={shuffleOn}
-                shuffleQueue={shuffleQueue}
-                showLyrics={showLyrics}
-                toggleLyricsView={toggleLyricsView}
-                onQueueItemClick={onQueueItemClick}
-                setIsPlayerOpen={setIsPlayerOpen}
-              />
-            )}
-          </div>
-
-          {/* Desktop Layout */}
-          <DesktopLayout
-            showContextMenu={showContextMenu}
-            setShowContextMenu={setShowContextMenu}
-            contextMenuPosition={contextMenuPosition}
-            setContextMenuPosition={setContextMenuPosition}
-            contextMenuOptions={contextMenuOptions}
-            setContextMenuOptions={setContextMenuOptions}
-            handleUnpinPlaylist={handleUnpinPlaylist}
-            sidebarCollapsed={sidebarCollapsed}
-            setSidebarCollapsed={setSidebarCollapsed}
-            playlists={playlists}
-            setPlaylists={setPlaylists}
-            setView={setView}
-            openPlaylist={openPlaylist}
-            storePlaylist={storePlaylist}
-            deletePlaylistByName={deletePlaylistByName}
-            view={view}
-            greeting={greeting}
-            mounted={mounted}
-            setShowPwaModal={setShowPwaModal}
-            showPwaModal={showPwaModal}
-            showUserMenu={showUserMenu}
-            setShowUserMenu={setShowUserMenu}
-            setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
-            currentPlaylist={currentPlaylist}
-            setCurrentPlaylist={setCurrentPlaylist}
-            playlistSearchQuery={playlistSearchQuery}
-            setPlaylistSearchQuery={setPlaylistSearchQuery}
-            handlePlaylistSearch={handlePlaylistSearch}
-            playlistSearchResults={playlistSearchResults}
-            setPlaylistSearchResults={setPlaylistSearchResults}
-            addTrackToPlaylist={addTrackToPlaylist}
-            setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
-            setShowCreatePlaylist={setShowCreatePlaylist}
-            setQueue={setQueue}
-            setCurrentTrack={setCurrentTrack}
-            setIsPlaying={setIsPlaying}
-            playTrack={playTrack}
-            addToQueue={addToQueue}
-            openAddToPlaylistModal={openAddToPlaylistModal}
-            toggleLike={toggleLike}
-            isTrackLiked={isTrackLiked}
-            handleContextMenu={handleContextMenu}
-            shuffleQueue={shuffleQueue}
-            downloadPlaylist={downloadPlaylist}
-            isDownloading={isDownloading}
-            downloadProgress={downloadProgress}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            searchType={searchType}
-            setSearchType={setSearchType}
-            handleSearch={handleSearch}
-            fetchSearchResults={fetchSearchResults}
-            searchResults={searchResults}
-            recentSearches={recentSearches}
-            setRecentSearches={setRecentSearches}
-            showQueue={showQueue}
-            queue={queue}
-            previousTracks={previousTracks}
-            onQueueItemClick={onQueueItemClick}
-            volume={volume}
-            onVolumeChange={onVolumeChange}
-            audioQuality={audioQuality}
-            setAudioQuality={setAudioQuality}
-            storeSetting={storeSetting}
-            jumpBackIn={jumpBackIn}
-            recommendedTracks={recommendedTracks}
-          />
-
-          {/* Desktop Footer */}
-          {mounted && (
-            <footer className="hidden md:block fixed bottom-0 left-0 right-0">
-              {currentTrack ? (
-                <DesktopPlayer
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  audioQuality={audioQuality}
-                  isDataSaver={isDataSaver}
-                  changeAudioQuality={changeAudioQuality}
-                  previousTracks={previousTracks}
-                  setQueue={setQueue}
-                  togglePlay={togglePlay}
-                  skipTrack={skipTrack}
-                  previousTrack={previousTrackFunc}
-                  seekPosition={seekPosition}
-                  duration={duration}
-                  handleSeek={handleSeek}
-                  isLiked={isTrackLiked(currentTrack)}
-                  repeatMode={repeatMode}
-                  setRepeatMode={setRepeatMode}
-                  toggleLike={toggleLikeDesktop}
-                  lyrics={lyrics}
-                  currentLyricIndex={currentLyricIndex}
-                  showLyrics={showLyrics}
-                  toggleLyricsView={toggleLyricsView}
-                  shuffleOn={shuffleOn}
-                  shuffleQueue={shuffleQueue}
-                  queue={queue}
-                  currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
-                  removeFromQueue={removeFromQueue}
-                  onQueueItemClick={onQueueItemClick}
-                  volume={volume}
-                  onVolumeChange={onVolumeChange}
-                  listenCount={listenCount}
-                  downloadTrack={downloadTrack}
-                />
-              ) : (
-                <div className="bg-gray-800 text-white p-4 text-center">
-                  No track is currently playing.
-                </div>
+          {/* --- Conditionally Render Layout AND Player based on Client-Side Check --- */}
+          {/* Only render the dynamically loaded components AFTER mounting */}
+          {mounted && ( // <-- Keep this check!
+            <>
+              {/* --- Mobile Layout & Player --- */}
+              {!isDesktopView && (
+                <>
+                  {/* MobileLayout is now dynamically loaded */}
+                  <MobileLayout
+                    greeting={greeting}
+                    showSettingsMenu={showSettingsMenu}
+                    setCurrentPlaylist={setCurrentPlaylist}
+                    setShowSettingsMenu={setShowSettingsMenu}
+                    showPwaModal={showPwaModal}
+                    storeSetting={storeSetting}
+                    changeAudioQuality={changeAudioQuality}
+                    setShowPwaModal={setShowPwaModal}
+                    view={view}
+                    currentPlaylist={currentPlaylist}
+                    setQueue={setQueue}
+                    setCurrentTrack={() => null} // Keep as no-op if useAudio handles it
+                    setIsPlaying={setIsPlaying}
+                    shuffleQueue={shuffleQueue}
+                    downloadPlaylist={downloadPlaylist}
+                    isDownloading={isDownloading}
+                    downloadProgress={downloadProgress}
+                    playlistSearchQuery={playlistSearchQuery}
+                    setPlaylistSearchQuery={setPlaylistSearchQuery}
+                    playlistSearchResults={playlistSearchResults}
+                    handlePlaylistSearch={handlePlaylistSearch}
+                    addTrackToPlaylist={addTrackToPlaylist}
+                    playTrack={playTrack}
+                    queue={queue}
+                    previousTracks={previousTracks}
+                    removeFromQueue={(track: Track) => {
+                      const trackIndex = queue.findIndex((t) => t.id === track.id);
+                      if (trackIndex !== -1) {
+                        removeFromQueue(trackIndex);
+                      }
+                    }}
+                    toggleLike={toggleLike}
+                    isTrackLiked={isTrackLiked}
+                    showLyrics={showLyrics}
+                    toggleLyricsView={toggleLyricsView}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    searchResults={searchResults}
+                    audioQuality={audioQuality}
+                    setAudioQuality={setAudioQuality}
+                    isPlayerOpen={isPlayerOpen}
+                    setView={(v: string) => {
+                      setView(
+                        v as SetStateAction<"home" | "search" | "playlist" | "settings" | "library">
+                      );
+                    }}
+                    mounted={mounted} // Pass mounted state if MobileLayout needs it
+                    lyrics={lyrics}
+                    currentLyricIndex={currentLyricIndex}
+                    repeatMode={repeatMode}
+                    setRepeatMode={setRepeatMode}
+                    seekPosition={seekPosition}
+                    duration={duration}
+                    listenCount={listenCount}
+                    searchType={searchType}
+                    setIsSearchOpen={setIsSearchOpen}
+                    recentSearches={recentSearches}
+                    setRecentSearches={setRecentSearches}
+                    setPlaylistSearchResults={setPlaylistSearchResults}
+                    setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
+                    setShowCreatePlaylist={setShowCreatePlaylist}
+                    sidebarCollapsed={sidebarCollapsed}
+                    setSidebarCollapsed={setSidebarCollapsed}
+                    addToQueue={addToQueue}
+                    openAddToPlaylistModal={openAddToPlaylistModal}
+                    handleContextMenu={handleContextMenu}
+                    playlists={playlists}
+                    setPlaylists={setPlaylists}
+                    storePlaylist={storePlaylist}
+                    deletePlaylistByName={deletePlaylistByName}
+                    jumpBackIn={jumpBackIn}
+                    recommendedTracks={recommendedTracks}
+                    toggleLikeMobile={toggleLikeMobile}
+                    setIsPlayerOpen={setIsPlayerOpen}
+                    setContextMenuPosition={setContextMenuPosition}
+                    setContextMenuOptions={setContextMenuOptions}
+                    setShowContextMenu={setShowContextMenu}
+                    isSearchOpen={isSearchOpen}
+                    setSearchType={setSearchType}
+                    openPlaylist={openPlaylist}
+                    // Pass useAudio props if MobileLayout needs them directly
+                    currentTrack={currentTrack}
+                    isPlaying={isPlaying}
+                    volume={volume}
+                    onVolumeChange={onVolumeChange}
+                    togglePlay={togglePlay}
+                    skipTrack={skipTrack}
+                    previousTrackFunc={previousTrackFunc}
+                    handleSearch={handleSearch}
+                    handleSeek={handleSeek}
+                    shuffleOn={shuffleOn}
+                  />
+                  {/* Conditionally Mount Mobile Player (also dynamic) */}
+                  {currentTrack && (
+                     <div className="flex flex-col h-[100dvh]"> {/* Wrapper might be redundant if MobileLayout handles full height */}
+                       {/* MobilePlayer is now dynamically loaded */}
+                       <MobilePlayer
+                         autoplayBlocked={autoplayBlocked}
+                         resumeAutoplay={resumeAutoplay}
+                         currentTrack={currentTrack}
+                         currentTrackIndex={queue.findIndex((t) => t.id === currentTrack?.id)}
+                         isPlaying={isPlaying}
+                         audioQuality={audioQuality}
+                         isDataSaver={isDataSaver}
+                         changeAudioQuality={changeAudioQuality}
+                         removeFromQueue={removeFromQueue}
+                         downloadTrack={downloadTrack}
+                         setQueue={setQueue}
+                         togglePlay={togglePlay}
+                         skipTrack={skipTrack}
+                         previousTrack={previousTrackFunc}
+                         seekPosition={seekPosition}
+                         duration={duration}
+                         listenCount={listenCount}
+                         handleSeek={handleSeek}
+                         isLiked={currentTrack ? isTrackLiked(currentTrack) : false}
+                         repeatMode={repeatMode}
+                         setRepeatMode={setRepeatMode}
+                         toggleLike={toggleLikeMobile}
+                         lyrics={lyrics}
+                         currentLyricIndex={currentLyricIndex}
+                         queue={queue}
+                         previousTracks={previousTracks}
+                         shuffleOn={shuffleOn}
+                         shuffleQueue={shuffleQueue}
+                         showLyrics={showLyrics}
+                         toggleLyricsView={toggleLyricsView}
+                         onQueueItemClick={onQueueItemClick}
+                         setIsPlayerOpen={setIsPlayerOpen}
+                       />
+                     </div>
+                  )}
+                </>
               )}
-            </footer>
-          )}
 
-          {/* Context Menu */}
+              {/* --- Desktop Layout & Player --- */}
+              {isDesktopView && (
+                <>
+                  {/* DesktopLayout is now dynamically loaded */}
+                  <DesktopLayout
+                    showContextMenu={showContextMenu}
+                    setShowContextMenu={setShowContextMenu}
+                    contextMenuPosition={contextMenuPosition}
+                    setContextMenuPosition={setContextMenuPosition}
+                    contextMenuOptions={contextMenuOptions}
+                    setContextMenuOptions={setContextMenuOptions}
+                    handleUnpinPlaylist={handleUnpinPlaylist}
+                    sidebarCollapsed={sidebarCollapsed}
+                    setSidebarCollapsed={setSidebarCollapsed}
+                    playlists={playlists}
+                    setPlaylists={setPlaylists}
+                    setView={setView}
+                    openPlaylist={openPlaylist}
+                    storePlaylist={storePlaylist}
+                    deletePlaylistByName={deletePlaylistByName}
+                    view={view}
+                    greeting={greeting}
+                    mounted={mounted} // Pass mounted state if DesktopLayout needs it
+                    setShowPwaModal={setShowPwaModal}
+                    showPwaModal={showPwaModal}
+                    showUserMenu={showUserMenu}
+                    setShowUserMenu={setShowUserMenu}
+                    setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
+                    currentPlaylist={currentPlaylist}
+                    setCurrentPlaylist={setCurrentPlaylist}
+                    playlistSearchQuery={playlistSearchQuery}
+                    setPlaylistSearchQuery={setPlaylistSearchQuery}
+                    handlePlaylistSearch={handlePlaylistSearch}
+                    playlistSearchResults={playlistSearchResults}
+                    setPlaylistSearchResults={setPlaylistSearchResults}
+                    addTrackToPlaylist={addTrackToPlaylist}
+                    setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
+                    setShowCreatePlaylist={setShowCreatePlaylist}
+                    setQueue={setQueue}
+                    setCurrentTrack={() => null} // Keep as no-op if useAudio handles it
+                    setIsPlaying={setIsPlaying}
+                    playTrack={playTrack}
+                    addToQueue={addToQueue}
+                    openAddToPlaylistModal={openAddToPlaylistModal}
+                    toggleLike={toggleLike}
+                    isTrackLiked={isTrackLiked}
+                    handleContextMenu={handleContextMenu}
+                    shuffleQueue={shuffleQueue}
+                    downloadPlaylist={downloadPlaylist}
+                    isDownloading={isDownloading}
+                    downloadProgress={downloadProgress}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    searchType={searchType}
+                    setSearchType={setSearchType}
+                    handleSearch={handleSearch}
+                    fetchSearchResults={fetchSearchResults}
+                    searchResults={searchResults}
+                    recentSearches={recentSearches}
+                    setRecentSearches={setRecentSearches}
+                    showQueue={showQueue}
+                    queue={queue}
+                    previousTracks={previousTracks}
+                    onQueueItemClick={onQueueItemClick}
+                    volume={volume}
+                    onVolumeChange={onVolumeChange}
+                    audioQuality={audioQuality}
+                    setAudioQuality={setAudioQuality}
+                    storeSetting={storeSetting}
+                    jumpBackIn={jumpBackIn}
+                    recommendedTracks={recommendedTracks}
+                    // Pass any other necessary props
+                  />
+                  {/* Conditionally Mount Desktop Player (also dynamic) */}
+                  {currentTrack && (
+                    <footer className="fixed bottom-0 left-0 right-0">
+                      {/* DesktopPlayer is now dynamically loaded */}
+                      <DesktopPlayer
+                        currentTrack={currentTrack}
+                        isPlaying={isPlaying}
+                        autoplayBlocked={autoplayBlocked}
+                        resumeAutoplay={resumeAutoplay}
+                        audioQuality={audioQuality}
+                        isDataSaver={isDataSaver}
+                        changeAudioQuality={changeAudioQuality}
+                        previousTracks={previousTracks}
+                        setQueue={setQueue}
+                        togglePlay={togglePlay}
+                        skipTrack={skipTrack}
+                        previousTrack={previousTrackFunc}
+                        seekPosition={seekPosition}
+                        duration={duration}
+                        handleSeek={handleSeek}
+                        isLiked={isTrackLiked(currentTrack)}
+                        repeatMode={repeatMode}
+                        setRepeatMode={setRepeatMode}
+                        toggleLike={toggleLikeDesktop}
+                        lyrics={lyrics}
+                        currentLyricIndex={currentLyricIndex}
+                        showLyrics={showLyrics}
+                        toggleLyricsView={toggleLyricsView}
+                        shuffleOn={shuffleOn}
+                        shuffleQueue={shuffleQueue}
+                        queue={queue}
+                        currentTrackIndex={queue.findIndex((x) => x.id === currentTrack.id)}
+                        removeFromQueue={removeFromQueue}
+                        onQueueItemClick={onQueueItemClick}
+                        volume={volume}
+                        onVolumeChange={onVolumeChange}
+                        listenCount={listenCount}
+                        downloadTrack={downloadTrack}
+                      />
+                    </footer>
+                  )}
+                  {/* Placeholder for Desktop when NO track is playing */}
+                  {!currentTrack && (
+                     <footer className="fixed bottom-0 left-0 right-0">
+                       <div className="bg-gray-800 text-white p-4 text-center">
+                         No track is currently playing.
+                       </div>
+                     </footer>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          {/* --- End of Conditional Layout/Player Area --- */}
+
+
+          {/* --- Modals, Context Menu, etc. --- */}
           {showContextMenu && contextMenuOptions && (
             <Portal>
               <motion.div
@@ -1565,7 +1601,7 @@ export function SpotifyClone() {
                 </div>
                 <div className="relative mb-6">
                   <select
-                    value={selectedPlaylistForAdd || "Unkown Value"}
+                    value={selectedPlaylistForAdd || ""} // Use empty string for default/unselected
                     onChange={(e) => setSelectedPlaylistForAdd(e.target.value)}
                     className="w-full pl-10 pr-10 py-3 rounded-xl bg-gray-800 text-white border border-gray-700
                                focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none
@@ -1661,7 +1697,7 @@ export function SpotifyClone() {
                     <span className="flex items-center justify-center">
                       Delete
                       <ArrowRight
-                        className="w-4 h-4 ml-2 transition-transform duration-300 
+                        className="w-4 h-4 ml-2 transition-transform duration-300
                                    group-hover:translate-x-1"
                       />
                     </span>
@@ -1785,6 +1821,21 @@ export function SpotifyClone() {
               </div>
             </div>
           )}
+
+          {/* Autoplay Blocked UI */}
+          {autoplayBlocked && (
+            <div className="fixed bottom-20 right-4 z-[999999] p-3 bg-red-600 text-white rounded-lg shadow-lg">
+              <p className="text-sm mb-2">Autoplay was blocked. Click to resume:</p>
+              <button
+                onClick={() => resumeAutoplay()}
+                className="px-3 py-1 rounded bg-white text-red-800 font-semibold hover:opacity-90 transition"
+              >
+                Resume Playback
+              </button>
+            </div>
+          )}
+          {/* --- End of Modals --- */}
+
         </div>
       )}
     </>

@@ -1,12 +1,48 @@
-import withPWA from 'next-pwa';
+// next.config.mjs
 import withBundleAnalyzer from '@next/bundle-analyzer';
 
+// We remove next-pwa if you want your own custom sw.js:
+const disablePWA = true; // set true to rely on your custom SW
+
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+let baseConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  
-  // Improved image optimization and caching
+
+  // Add headers configuration for cache control
+  async headers() {
+    return [
+      {
+        // Apply to all routes
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
+        ],
+      },
+      {
+        // Specific for manifest.json
+        source: '/manifest.json',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, max-age=0',
+          },
+        ],
+      },
+    ];
+  },
+
   images: {
     remotePatterns: [
       {
@@ -27,8 +63,8 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
-  // Webpack optimizations
   webpack(config, { dev }) {
+    // This alias is optional. If you want to keep it, ensure the path is correct
     config.resolve.alias['@'] = new URL('./src', import.meta.url).pathname;
 
     if (!dev) {
@@ -39,29 +75,18 @@ const nextConfig = {
       };
     }
 
+    // Example: compress images at build time
     config.module.rules.push({
       test: /\.(png|jpe?g|gif|svg|webp)$/i,
       use: [
         {
           loader: 'image-webpack-loader',
           options: {
-            mozjpeg: {
-              progressive: true,
-              quality: 65,
-            },
-            optipng: {
-              enabled: true,
-            },
-            pngquant: {
-              quality: [0.65, 0.90],
-              speed: 4,
-            },
-            gifsicle: {
-              interlaced: false,
-            },
-            webp: {
-              quality: 75,
-            },
+            mozjpeg: { progressive: true, quality: 65 },
+            optipng: { enabled: true },
+            pngquant: { quality: [0.65, 0.9], speed: 4 },
+            gifsicle: { interlaced: false },
+            webp: { quality: 75 },
           },
         },
       ],
@@ -70,77 +95,27 @@ const nextConfig = {
     return config;
   },
 
-  // Performance optimizations
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ['lodash', 'date-fns'],
     scrollRestoration: true,
   },
 
-  // Compression
   compress: true,
-
-  // Cache optimization
   onDemandEntries: {
     maxInactiveAge: 60 * 60 * 1000,
     pagesBufferLength: 5,
   },
-
-  // Build optimization
   poweredByHeader: false,
-  generateEtags: true,
+  generateEtags: false, // Disable ETags to prevent caching based on content hash
 };
 
-// PWA configuration
-const withPWAConfig = withPWA({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-  runtimeCaching: [
-    {
-      urlPattern: /^https:\/\/(api\.deezer\.com|cdn-images\.dzcdn\.net)/,
-      handler: 'CacheFirst',
-      options: {
-        cacheName: 'image-cache',
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 7 * 24 * 60 * 60,
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
-    },
-    {
-      urlPattern: /\.(png|jpg|jpeg|svg|gif|webp)$/,
-      handler: 'CacheFirst',
-      options: {
-        cacheName: 'static-image-assets',
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 24 * 60 * 60,
-        },
-      },
-    },
-    {
-      urlPattern: /\.(js|css|json)$/,
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'static-resources',
-        expiration: {
-          maxEntries: 50,
-          maxAgeSeconds: 24 * 60 * 60,
-        },
-      },
-    },
-  ],
-});
-
-// Bundle analyzer configuration
 const withBundleAnalyzerConfig = withBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 });
 
-// Apply all configurations
-export default withBundleAnalyzerConfig(withPWAConfig(nextConfig));
+let finalConfig = baseConfig;
+
+// If you wanted to keep next-pwa, you'd import it here and wrap.
+// But we disable it entirely so your custom sw.js can be used.
+export default withBundleAnalyzerConfig(finalConfig);
