@@ -151,6 +151,7 @@ export const SpotifyToDeezer: React.FC<SpotifyToDeezerProps> = ({ onClose, onPla
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               className="object-cover"
+              priority
             />
 
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
@@ -172,6 +173,7 @@ export const SpotifyToDeezer: React.FC<SpotifyToDeezerProps> = ({ onClose, onPla
                     width={40}
                     height={40}
                     className="rounded"
+                    priority
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-white truncate">{track.title}</p>

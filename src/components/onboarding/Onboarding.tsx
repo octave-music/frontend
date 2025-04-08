@@ -222,6 +222,7 @@ function ArtistSelection({
                     width={200}
                     height={200}
                     className="w-full h-full object-cover"
+                    priority
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 
                     opacity-0 group-hover:opacity-100 transition-opacity duration-300 
@@ -254,6 +255,7 @@ function ArtistSelection({
                     width={200}  // Adjust based on your actual medium image size
                     height={200}
                     className="w-full h-full object-cover"
+                    priority
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0A0E18]/90 via-[#0A0E18]/40 to-transparent 
                     opacity-0 group-hover:opacity-100 transition-opacity duration-300 

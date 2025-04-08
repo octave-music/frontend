@@ -35,7 +35,8 @@
     {
       "src": "/images/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/images/android-chrome-192x192.png",
@@ -80,11 +81,14 @@
   "edge_side_panel": {
     "enabled": false
   },
-  "file_handlers": {
-    "audio/*": {
-      "action": "/audio-handler"
+  "file_handlers": [
+  {
+    "action": "/audio-handler",
+    "accept": {
+      "audio/*": [".mp3", ".wav", ".ogg", ".flac"]
     }
-  },
+  }
+],
   "handle_links": {
     "default": "chrome"
   },

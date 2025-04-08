@@ -880,6 +880,7 @@ function PlaylistView({
                       width={48}
                       height={48}
                       className="rounded-lg object-cover"
+                      priority
                     />
                     <div>
                       <p className="font-medium text-white">{track.title}</p>

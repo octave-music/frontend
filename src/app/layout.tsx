@@ -1,10 +1,12 @@
 // app/layout.tsx
+
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import ServiceWorkerRegistration from "@/components/service/ServiceWorkerRegistration";
 import SplashScreen from "@/components/common/SplashScreen";
 
+// We keep your local fonts:
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -12,7 +14,6 @@ const geistSans = localFont({
   display: "swap",
   preload: true,
 });
-
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
@@ -67,7 +68,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -86,7 +86,6 @@ export const metadata: Metadata = {
       },
     ],
   },
-
   twitter: {
     card: "summary_large_image",
     title: "Octave Streaming",
@@ -96,6 +95,7 @@ export const metadata: Metadata = {
     site: "@OctaveStreaming",
   },
 
+  // icons already placed in /images
   icons: {
     icon: [
       { url: "/images/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -152,7 +152,6 @@ export const metadata: Metadata = {
     email: false,
     address: false,
   },
-
   category: "music",
 
   other: {
@@ -176,9 +175,10 @@ export default function RootLayout({ children }: Readonly<RootLayoutProps>) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background min-h-[100dvh] overscroll-none`}
       >
+        {/* Register SW if not overshadowed by next-pwa */}
         <ServiceWorkerRegistration />
         <SplashScreen />
-
+        
         <main className="relative flex min-h-[100dvh] flex-col">
           {children}
         </main>
