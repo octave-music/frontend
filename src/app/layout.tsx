@@ -153,11 +153,6 @@ export const metadata: Metadata = {
     address: false,
   },
 
-  verification: {
-    google: "your-google-site-verification",
-    yandex: "your-yandex-verification",
-  },
-
   category: "music",
 
   other: {

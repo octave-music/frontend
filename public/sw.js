@@ -16,17 +16,9 @@ const CACHE_NAME = `octave-cache-v${CACHE_VERSION}`;
 // List core assets to cache at install time
 const CORE_ASSETS = [
   '/',
-  '/index.html',
-  '/favicon.ico',
-  '/styles.css', // Add your actual CSS files
-  '/bundle.js',  // Add your actual JS bundles
-  // Add other static assets like images, fonts, etc.
+  'workbox-4754cb34.js',
+  'sw.js',
 ];
-
-// Helper function to determine if a request is for an audio track
-const isAudioRequest = (url) => {
-  return url.pathname.startsWith('/api/track/') && url.pathname.endsWith('.mp3');
-};
 
 // INSTALL
 self.addEventListener('install', (event) => {
@@ -62,21 +54,36 @@ self.addEventListener('activate', (event) => {
 
 // FETCH
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Exclude audio track requests from service worker handling
-  if (isAudioRequest(url)) {
-    console.log('[Service Worker] Bypassing cache for audio track:', url.href);
-    return;
-  }
+  /* --- completely ignore Deezer-Worker requests ---------------- */
+    if (url.hostname.includes('deezer-worker.justvinixy.workers.dev')) {
+      // Let the network handle it (our front-end does its own caching / IDB)
+      return;
+    }
 
-  // Define different strategies based on request URL
+
+  // Exclude audio track requests from service worker handling
+  if (url.pathname.startsWith('/api/track/') && url.pathname.endsWith('.mp3')) {
+     console.log('[Service Worker] Bypassing cache for audio track:', url.href);
+     return;
+   }
+
+  // Cache CSS, images, fonts dynamically
   if (url.origin === self.location.origin) {
-    // Static assets: Use Cache-First strategy
+    if (url.pathname === '/globals.css') {
+      event.respondWith(cacheAsset(event, '/globals.css'));
+      return;
+    }
+
+    if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/fonts/')) {
+      event.respondWith(cacheAsset(event));
+      return;
+    }
+
+    // For other static assets (HTML, etc.), use Cache-First strategy
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -84,11 +91,9 @@ self.addEventListener('fetch', (event) => {
         }
         return fetch(event.request)
           .then((networkResponse) => {
-            // Only cache valid responses
             if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
               return networkResponse;
             }
-            // Clone and store in cache
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, responseToCache);
@@ -97,40 +102,58 @@ self.addEventListener('fetch', (event) => {
           })
           .catch((err) => {
             console.warn('[Service Worker] Fetch failed:', err);
-            // Optionally return a fallback resource
             if (event.request.destination === 'document') {
-              return caches.match('/offline.html'); // Ensure you have an offline.html
+              return caches.match('/offline.html');
             }
             return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
           });
       })
     );
-  } else if (url.origin.startsWith('https://api.yourdomain.com')) {
-    // API requests: Use Network-First strategy
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          // Optionally cache API responses
-          return networkResponse;
-        })
-        .catch(() => {
-          // Optionally serve from cache if available
-          return caches.match(event.request);
-        })
-    );
   } else {
-    // Other requests: Default to Network-First
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(event.request);
-        })
-    );
+    // Handle API requests with Network-First strategy
+    if (url.origin.startsWith('https://api.octave.gold')) {
+      event.respondWith(
+        fetch(event.request)
+          .then((networkResponse) => {
+            return networkResponse;
+          })
+          .catch(() => {
+            return caches.match(event.request);
+          })
+      );
+    } else {
+      // Default to Network-First for other requests
+      event.respondWith(
+        fetch(event.request)
+          .then((networkResponse) => {
+            return networkResponse;
+          })
+          .catch(() => {
+            return caches.match(event.request);
+          })
+      );
+    }
   }
 });
+
+// Cache static assets (images, fonts, globals.css)
+const cacheAsset = (event, asset = event.request.url) => {
+  return caches.match(asset).then((cachedResponse) => {
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+    return fetch(event.request).then((networkResponse) => {
+      if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+        return networkResponse;
+      }
+      const responseToCache = networkResponse.clone();
+      caches.open(CACHE_NAME).then((cache) => {
+        cache.put(asset, responseToCache);
+      });
+      return networkResponse;
+    });
+  });
+};
 
 // PUSH NOTIFICATIONS
 self.addEventListener('push', (event) => {
@@ -156,13 +179,11 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Try to focus an existing window
       for (const client of clientList) {
         if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise, open a new window
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
@@ -172,7 +193,6 @@ self.addEventListener('notificationclick', (event) => {
 
 // MESSAGE
 self.addEventListener('message', (event) => {
-  // Example: Skip waiting when receiving a specific message
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }

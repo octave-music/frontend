@@ -179,10 +179,10 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+  
 }
 
 /* Custom Scrollbar */
@@ -326,6 +326,7 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 
 @keyframes marquee {
   0% {
