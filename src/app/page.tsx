@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { SpotifyClone } from "../components/index";
+import { Main } from "../components/index";
 import { StrictMode } from "react";
 
 export const metadata: Metadata = {
@@ -39,7 +39,7 @@ export default function SpotifyPage() {
   return (
     <StrictMode>
       <main className="min-h-[100dvh] bg-black overscroll-none">
-        <SpotifyClone />
+        <Main />
       </main>
     </StrictMode>
   );

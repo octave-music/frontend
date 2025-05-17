@@ -106,12 +106,18 @@ interface DesktopPlayerProps {
 }
 
 /** Convert seconds => mm:ss. */
-function formatTimeDesktop(seconds: number): string {
-  if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+function fmtTime(raw?: number): string {
+  /* ❶ convert to a guaranteed finite number */
+  const n = Number.isFinite(raw) && raw! > 0 ? raw! : 0;
+
+  /* ❷ now `n` is always a plain number → no TS errors */
+  const m  = Math.floor(n / 60);
+  const ss = Math.floor(n % 60).toString().padStart(2, "0");
+
+  return `${m}:${ss}`;
 }
+
+
 
 
 /* ----------------------------------------------
@@ -171,12 +177,6 @@ const DesktopSeekbar: React.FC<DesktopSeekbarProps> = ({
     };
   }, [isDragging, handleMove, handleMoveEnd]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     handleMove(e.clientX);
@@ -187,7 +187,7 @@ const DesktopSeekbar: React.FC<DesktopSeekbarProps> = ({
   return (
     <div className="flex items-center w-full space-x-3 px-4 py-2">
       <span className="text-neutral-400 text-xs min-w-[40px] text-right">
-        {formatTime(displayProgress * duration)}
+        {fmtTime(displayProgress * duration)}
       </span>
       
       <div
@@ -230,7 +230,7 @@ const DesktopSeekbar: React.FC<DesktopSeekbarProps> = ({
       </div>
 
       <span className="text-neutral-400 text-xs min-w-[40px] text-right">
-        {formatTime(duration)}
+        {fmtTime(duration)}
       </span>
     </div>
   );
@@ -777,7 +777,7 @@ const DetailsPanel: React.FC<DetailsProps> = ({
         <div className="flex items-center gap-2 text-sm text-neutral-500">
           <span>{currentTrack.album.title}</span>
           <span>•</span>
-          <span>{new Date(duration * 1000).toISOString().substr(14, 5)}</span>
+          <span>{fmtTime(duration)}</span>
           <span>•</span>
           <span>{listenCount?.toLocaleString()} plays</span>
         </div>

@@ -107,7 +107,7 @@ function getDynamicGreeting(): string {
  * - Playlist management
  * - Searching, playback, queue, context menu, etc.
  */
-export function SpotifyClone() {
+export function Main() {
   // ----------------------------------------------------------
   //                  References & Audio Setup
   // ----------------------------------------------------------
@@ -207,7 +207,6 @@ export function SpotifyClone() {
   const [showArtistSelection, setShowArtistSelection] = useState(false);
 
   // Autoplay
-  const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   // ----------------------------------------------------------
@@ -232,6 +231,19 @@ export function SpotifyClone() {
       });
     }
   }, [selectedPlaylist]);
+
+  useEffect(() => {
+    const interactionEvents: Array<keyof DocumentEventMap> = ['mousedown', 'keydown', 'touchstart'];
+    const listener = () => {
+      setHasUserInteracted(true);
+      // Clean up: remove listeners after first interaction
+      interactionEvents.forEach(event => document.removeEventListener(event, listener));
+    };
+    interactionEvents.forEach(event => document.addEventListener(event, listener));
+    return () => {
+      interactionEvents.forEach(event => document.removeEventListener(event, listener));
+    };
+  }, []); // Runs once on mount
 
   // On app load, ensure "Liked Songs" exists
   useEffect(() => {
@@ -347,29 +359,11 @@ export function SpotifyClone() {
       });
       setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
       setCurrentTrack(track);
+
+      void playTrackFromSource(track, 0, autoPlay /* userGesture */);
   
-      // 2) Synchronous autoplay if user clicked
-      if (autoPlay && audioElement) {
-        // Use getTrackUrl with "NORMAL" for immediate playback
-        const normalUrl = getTrackUrl(track.id, "NORMAL");
-        audioElement.src = normalUrl;
-        audioElement.currentTime = 0;
-  
-        // Attempt immediate play
-        audioElement.play().then(() => {
-          setIsPlaying(true);
-        }).catch((err) => {
-          console.warn("Autoplay blocked:", err);
-        });
-      }
-  
-      // 3) Then do your fallback logic asynchronously
-      //    (switch to FLAC, OPUS, etc. behind the scenes)
-      setTimeout(() => {
-        void playTrackFromSource(track, 0, autoPlay);
-      }, 0);
     },
-    [currentTrack, setIsPlaying, setQueue, setPreviousTracks, setCurrentTrack, playTrackFromSource]
+    [currentTrack, setQueue, setPreviousTracks, setCurrentTrack, playTrackFromSource]
   );
   /**
    * Toggle playback. If no track is loaded, do nothing.
