@@ -18,15 +18,12 @@ export function getTrackUrl(id: string, q: string): string {
     default:           return `https://deezer-worker.justvinixy.workers.dev/320/?track=${id}`;
   }
 }
-function getFallbackUrl(id: string, q: string): string {
-  const ext = q === "MAX"        ? ".flac"
-           : q === "HIGH"       ? ".opus"
-           : q === "DATA_SAVER" ? ".s4.opus" : ".mp3";
-  return `https://api.octave.gold/api/track/${id}${ext}`;
+function getFallbackUrl(id: string): string {
+  return `https://api.octave.gold/api/track/${id}.mp3`;
 }
 
 /* ───────── Worker failure budget ──────────────────────────────── */
-const FAILURE_BUDGET = 20;
+const FAILURE_BUDGET = 5;
 let   workerFailures = 0;
 const workerAllowed  = () => workerFailures < FAILURE_BUDGET;
 const bumpFailure    = () => { workerFailures++; };
@@ -141,42 +138,70 @@ export function useAudio() {
 
   /* core loader */
   const playTrackFromSource = useCallback(
-  async (
-    track: Track,
-    startAt = 0,
-    autoPlay = true,
-    qualityOverride?: "MAX"|"HIGH"|"NORMAL"|"DATA_SAVER",
-    forceFetch = false,
-    userGesture = true
-  ) => {
-    if (!audioElement) return;
+async (
+  track: Track,
+  startAt = 0,
+  autoPlay = true,
+  qualityOverride?: "MAX"|"HIGH"|"NORMAL"|"DATA_SAVER",
+  forceFetch = false,
+  userGesture = true
+) => {
+  if (!audioElement) return;
 
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
+  // Cancel any previous fetch operations
+  if (abortRef.current) {
+    abortRef.current.abort();
+    abortRef.current = null;
+  }
+  
+  // Create a new abort controller with proper error handling
+  const ac = new AbortController();
+  abortRef.current = ac;
 
-    const wanted: "MAX"|"HIGH"|"NORMAL"|"DATA_SAVER" =
-      isDataSaver ? "DATA_SAVER" : (qualityOverride || audioQuality);
+  // Add a check to see if we're aborted early
+  const checkAborted = () => {
+    if (ac.signal.aborted) {
+      throw new Error("Operation cancelled");
+    }
+  };
 
+  const wanted: "MAX"|"HIGH"|"NORMAL"|"DATA_SAVER" =
+    isDataSaver ? "DATA_SAVER" : (qualityOverride || audioQuality);
+
+  try {
     /* ---- LOW quality first ------------------------------------ */
+    checkAborted();
     const lowKey = `${track.id}_DATA_SAVER`;
-    let lowBlob= !forceFetch ? await getOfflineBlob(lowKey) : null;
+    let lowBlob = !forceFetch ? await getOfflineBlob(lowKey) : null;
 
     if (!lowBlob) {
       const url = workerAllowed()
         ? getTrackUrl(track.id, "DATA_SAVER")
-        : getFallbackUrl(track.id, "DATA_SAVER");
+        : getFallbackUrl(track.id);
       try {
+        checkAborted();
         const r = await getWithRetry(url, ac.signal);
         resetFailures();
         lowBlob = await r.blob();
       } catch (err) {
-        bumpFailure();
-        const r = await getWithRetry(getFallbackUrl(track.id,"DATA_SAVER"), ac.signal);
-        lowBlob = await r.blob();
+        // Make sure it's not an abort error before bumping failure
+        if (!ac.signal.aborted) {
+          bumpFailure();
+          checkAborted();
+          const r = await getWithRetry(getFallbackUrl(track.id), ac.signal);
+          lowBlob = await r.blob();
+        } else {
+          throw err; // Re-throw abort errors
+        }
       }
-      storeTrackBlob(lowKey, lowBlob).catch(()=>{});
+      
+      if (!ac.signal.aborted) {
+        storeTrackBlob(lowKey, lowBlob).catch(()=>{});
+      }
     }
+
+    // Another abort check before playing
+    checkAborted();
 
     /* play low quality */
     const prev = audioElement.src;
@@ -188,56 +213,79 @@ export function useAudio() {
     if (wanted === "DATA_SAVER") return;
 
     /* ---- background upgrade ----------------------------------- */
-      (async () => {
-        try {
-          const hiKey = `${track.id}_${wanted}`;
-          let  hiBlob = !forceFetch ? await getOfflineBlob(hiKey) : null;
+    (async () => {
+      try {
+        const hiKey = `${track.id}_${wanted}`;
+        let hiBlob = !forceFetch ? await getOfflineBlob(hiKey) : null;
 
-          if (!hiBlob) {
-            /* ── try Deezer-Worker once (with small retry loop) ── */
-            const url = workerAllowed()
-              ? getTrackUrl(track.id, wanted)
-              : null;                       // worker disabled => skip upgrade
+        if (!hiBlob) {
+          /* ── try Deezer-Worker once (with small retry loop) ── */
+          const url = workerAllowed()
+            ? getTrackUrl(track.id, wanted)
+            : null;                       // worker disabled => skip upgrade
 
-            if (!url) return;               // stick with 128 kb/s
+          if (!url) return;               // stick with 128 kb/s
 
-            try {
-              const r = await getWithRetry(url, ac.signal, 3); // same util, 3 attempts
-              resetFailures();
-              hiBlob = await r.blob();
-              storeTrackBlob(hiKey, hiBlob).catch(() => {});
-            } catch (err) {
+          try {
+            // Check if we've been aborted before making network requests
+            if (ac.signal.aborted) return;
+            
+            const r = await getWithRetry(url, ac.signal, 3); // same util, 3 attempts
+            resetFailures();
+            hiBlob = await r.blob();
+            
+            // Check if we've been aborted before storing
+            if (ac.signal.aborted) return;
+            
+            storeTrackBlob(hiKey, hiBlob).catch(() => {});
+          } catch (err) {
+            // Only bump failures if it's not an abort
+            if (!ac.signal.aborted) {
               bumpFailure();                // count the failure but DO NOT fallback
               console.warn(`no ${wanted} available from Worker – staying on 128`, err);
-              return;                       // quit upgrade silently
             }
+            return;                       // quit upgrade silently
           }
+        }
 
-          if (ac.signal.aborted) return;
+        if (ac.signal.aborted) return;
 
-          /* ── switch (MSE first, plain swap fallback) ─────────────────── */
-          const mime =
-            wanted === "MAX"  ? "audio/flac" :
-            wanted === "HIGH" ? 'audio/ogg; codecs="opus"' :
-                                "audio/mpeg";
+        /* ── switch (MSE first, plain swap fallback) ─────────────────── */
+        const mime =
+          wanted === "MAX"  ? "audio/flac" :
+          wanted === "HIGH" ? 'audio/ogg; codecs="opus"' :
+                              "audio/mpeg";
 
+        // Make sure we're still playing the same track before swapping
+        // This is the key part - confirm we haven't navigated away
+        if (audioElement.src && audioElement.src.includes(track.id)) {
           const wasPlaying = !audioElement.paused;
           const resumeAt   = audioElement.currentTime;
 
           try {
             await streamViaMSE(audioElement, mime, hiBlob, resumeAt, wasPlaying);
-          } catch {
-            const old = audioElement.src;
-            audioElement.src = URL.createObjectURL(hiBlob);
-            audioElement.currentTime = resumeAt;
-            if (wasPlaying) await audioElement.play().catch(() => {});
-            if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+          } catch (err) {
+            // Check again that we're still on the same track
+            if (!ac.signal.aborted && audioElement.src && audioElement.src.includes(track.id)) {
+              const old = audioElement.src;
+              audioElement.src = URL.createObjectURL(hiBlob);
+              audioElement.currentTime = resumeAt;
+              if (wasPlaying) await audioElement.play().catch(() => {});
+              if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+            }
           }
-        } catch (err) {
-          if (!ac.signal.aborted) console.warn("upgrade failed:", err);
         }
-      })();
-  }, [audioQuality, isDataSaver]);
+      } catch (err) {
+        if (!ac.signal.aborted) console.warn("upgrade failed:", err);
+      }
+    })();
+  } catch (err) {
+    // Only log non-abort errors
+    if (!ac.signal.aborted) {
+      console.error("Error in playTrackFromSource:", err);
+    }
+  }
+}, [audioQuality, isDataSaver]);
 
   /* pause / stop */
   const pauseAudio = useCallback(()=>{
@@ -258,7 +306,7 @@ export function useAudio() {
     if (cached) return cached;
     const url = workerAllowed()
       ? getTrackUrl(id, audioQuality)
-      : getFallbackUrl(id, audioQuality);
+      : getFallbackUrl(id);
     const blob = await (await fetch(url)).blob();
     await storeTrackBlob(key, blob);
     return blob;

@@ -21,3 +21,4 @@ export function safeLocalStorageSetItem(key: string, value: string) {
     console.error("Local storage not available:", err);
   }
 }
+
