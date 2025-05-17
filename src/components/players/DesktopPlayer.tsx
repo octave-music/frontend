@@ -7,7 +7,6 @@ import Image from "next/image";
 import {
   Heart,
   Play,
-  Search,
   Pause,
   Volume2,
   GripVertical,

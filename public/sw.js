@@ -18,13 +18,7 @@ const CORE_ASSETS = [
   '/',
   'workbox-4754cb34.js',
   'sw.js',
-  'globals.css',  // Add your globals.css file here
 ];
-
-// Helper function to determine if a request is for an audio track
-const isAudioRequest = (url) => {
-  return url.pathname.startsWith('/api/track/') && url.pathname.endsWith('.mp3');
-};
 
 // INSTALL
 self.addEventListener('install', (event) => {
@@ -60,17 +54,22 @@ self.addEventListener('activate', (event) => {
 
 // FETCH
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
+  /* --- completely ignore Deezer-Worker requests ---------------- */
+    if (url.hostname.includes('deezer-worker.justvinixy.workers.dev')) {
+      // Let the network handle it (our front-end does its own caching / IDB)
+      return;
+    }
+
+
   // Exclude audio track requests from service worker handling
-  if (isAudioRequest(url)) {
-    console.log('[Service Worker] Bypassing cache for audio track:', url.href);
-    return;
-  }
+  if (url.pathname.startsWith('/api/track/') && url.pathname.endsWith('.mp3')) {
+     console.log('[Service Worker] Bypassing cache for audio track:', url.href);
+     return;
+   }
 
   // Cache CSS, images, fonts dynamically
   if (url.origin === self.location.origin) {

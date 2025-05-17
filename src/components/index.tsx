@@ -2,22 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-/**
- * ------------------------------------------------------------
- *  FILE: index.tsx
- *  DESCRIPTION:
- *  This file serves as the main entry point for the SpotifyClone
- *  component. It unifies the Mobile Layout and Desktop Layout
- *  for the entire application:
- *
- *  - Handles initialization, state management, and event logic
- *  - Contains Onboarding, Search, Playlist, Context Menu, Player,
- *    and PWA Install Modals
- *  - Separates MOBILE LAYOUT and DESKTOP LAYOUT to improve clarity
- *  - Strict TypeScript typing, ESLint, and Prettier compatible
- * ------------------------------------------------------------
- */
-
 import React, {
   useState,
   useEffect,
@@ -84,7 +68,6 @@ import {
   Artist,
   BeforeInstallPromptEvent,
 } from "@/lib/types/types";
-import useAutoplayPermission from "@/lib/managers/autoPlay";
 
 declare global {
   interface Window {
@@ -150,11 +133,6 @@ export function SpotifyClone() {
     changeAudioQuality,
     setLoop, // <-- new for toggling native loop
   } = useAudio();
-
-  const { hasAutoplayPermission, isAudioContextStarted } = useAutoplayPermission({
-    storageType: "local",
-    debugMode: true,
-  });
 
   // ----------------------------------------------------------
   //                  Core App State
