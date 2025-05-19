@@ -100,23 +100,30 @@ export function useAudio() {
 
   /* element listeners */
   useEffect(() => {
-    if (!audioElement) return;
-    const el = audioElement;
-    const mm = () => setDuration(el.duration || 0);
-    const e  = () => onTrackEndRef.current?.();
-    const p  = () => setIsPlaying(true);
-    const q  = () => setIsPlaying(false);
-    el.addEventListener("loadedmetadata", mm);
-    el.addEventListener("ended",          e);
-    el.addEventListener("play",           p);
-    el.addEventListener("pause",          q);
-    return () => {
-      el.removeEventListener("loadedmetadata", mm);
-      el.removeEventListener("ended",          e);
-      el.removeEventListener("play",           p);
-      el.removeEventListener("pause",          q);
-    };
-  }, []);
+  if (!audioElement) return;
+  const el = audioElement;
+
+  const setDur = () => {
+    /* take the first finite duration we see */
+    if (Number.isFinite(el.duration)) setDuration(el.duration);
+  };
+
+  /* ───────── listeners ───────── */
+  el.addEventListener("loadedmetadata", setDur);
+  el.addEventListener("durationchange",  setDur);   // ← NEW
+  el.addEventListener("play",  () => setIsPlaying(true));
+  el.addEventListener("pause", () => setIsPlaying(false));
+  el.addEventListener("ended", () => onTrackEndRef.current?.());
+
+  return () => {
+    el.removeEventListener("loadedmetadata", setDur);
+    el.removeEventListener("durationchange",  setDur);   // ← NEW
+    el.removeEventListener("play",  () => setIsPlaying(true));
+    el.removeEventListener("pause", () => setIsPlaying(false));
+    el.removeEventListener("ended", () => onTrackEndRef.current?.());
+  };
+}, []);
+
 
   /* utils */
   const getCurrentPlaybackTime = useCallback(

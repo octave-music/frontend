@@ -356,3 +356,23 @@ body {
       transform: translateY(0);
     }
   }
+
+  /* globals.css  (or tailwind ↦ @layer utilities)  */
+.scrollbar-fade {
+  scrollbar-color: transparent transparent;           /* Firefox */
+}
+/* desktop lyrics scroll – fade bar */
+.scrollbar-fade::-webkit-scrollbar {
+  width: 6px;          /* make it tiny */
+}
+.scrollbar-fade::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-fade::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.15);
+  border-radius: 4px;
+  transition: background .3s;
+}
+.scrollbar-fade:hover::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.30);   /* visible only on hover */
+}

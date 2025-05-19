@@ -201,6 +201,7 @@ export function Main() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyrics, setLyrics] = useState<Lyric[]>([]);
   const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
+  const [lyricsLoading,   setLyricsLoading] = useState(false);
 
   // Onboarding
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -331,12 +332,15 @@ export function Main() {
   );
 
   const fetchLyrics = useCallback(async (track: Track) => {
+    setLyricsLoading(true);
     try {
       const fetchedLyrics = await handleFetchLyrics(track);
       setLyrics(fetchedLyrics);
     } catch (err) {
       console.log("Lyrics error:", err);
       setLyrics([]);
+    } finally {
+      setLyricsLoading(false);
     }
   }, []);
 
@@ -1272,6 +1276,7 @@ export function Main() {
                 isDataSaver={isDataSaver}
                 changeAudioQuality={changeAudioQuality}
                 removeFromQueue={removeFromQueue}
+                lyricsLoading={lyricsLoading}
                 downloadTrack={downloadTrack}
                 setQueue={setQueue}
                 togglePlay={togglePlay}
@@ -1376,6 +1381,7 @@ export function Main() {
                 <DesktopPlayer
                   currentTrack={currentTrack}
                   isPlaying={isPlaying}
+                  lyricsLoading={lyricsLoading}
                   audioQuality={audioQuality}
                   isDataSaver={isDataSaver}
                   changeAudioQuality={changeAudioQuality}
