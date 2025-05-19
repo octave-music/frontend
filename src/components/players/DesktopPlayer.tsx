@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import "simplebar-react/dist/simplebar.min.css";
 import Image from "next/image";
@@ -72,6 +72,7 @@ type RepeatMode = "off" | "all" | "one";
 interface DesktopPlayerProps {
   currentTrack: Track;
   isPlaying: boolean;
+  lyricsLoading: boolean;
   previousTracks: Track[];
   previousTrack: () => void;
   togglePlay: () => void;
@@ -107,16 +108,11 @@ interface DesktopPlayerProps {
 
 /** Convert seconds => mm:ss. */
 function fmtTime(raw?: number): string {
-  /* ❶ convert to a guaranteed finite number */
-  const n = Number.isFinite(raw) && raw! > 0 ? raw! : 0;
-
-  /* ❷ now `n` is always a plain number → no TS errors */
-  const m  = Math.floor(n / 60);
-  const ss = Math.floor(n % 60).toString().padStart(2, "0");
-
-  return `${m}:${ss}`;
+  const t = Number.isFinite(raw) && raw! > 0 ? raw! : 0;   // guards ∞ / NaN
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
 }
-
 
 
 
@@ -238,85 +234,93 @@ const DesktopSeekbar: React.FC<DesktopSeekbarProps> = ({
 
 
 /* ----------------------------------------------
-   A U T O   S C R O L L   H O O K   (lyrics)
+   useAutoScrollLyrics  (DESKTOP)
 ---------------------------------------------- */
 function useAutoScrollLyrics(
   showLyrics: boolean,
-  currentLyricIndex: number,
+  currentIdx: number,
   lyrics: Lyric[],
   duration: number,
-  seekPosition: number
+  seekPosition: number,
 ) {
-  const [userScrolling, setUserScrolling] = useState(false);
-  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isAutoScrollingRef = useRef(false);
-  const lyricsRef = useRef<HTMLDivElement>(null);
+  const [userScrolling, setUserScrolling] = React.useState(false);
+  const autoRef     = React.useRef(false);
+  const timeoutRef  = React.useRef<NodeJS.Timeout | null>(null);
+  const lyricsRef   = React.useRef<HTMLDivElement>(null);
 
-  const processedLyrics = useMemo(() => {
-    return lyrics.map((lyric, i) => ({
-      ...lyric,
-      endTime: lyrics[i + 1]?.time ?? duration,
-    }));
-  }, [lyrics, duration]);
+  /* add synthetic “endTime” for each line */
+  const processedLyrics = React.useMemo(
+    () =>
+      lyrics.map((l, i) => ({
+        ...l,
+        endTime: lyrics[i + 1]?.time ?? duration,
+      })),
+    [lyrics, duration],
+  );
 
-  const getLyricProgress = () => {
-    if (currentLyricIndex === -1 || !processedLyrics[currentLyricIndex]) {
-      return 0;
-    }
-    const current = processedLyrics[currentLyricIndex];
-    const start = current.time;
-    const end = current.endTime ?? duration;
-    const segmentDuration = end - start;
-    const elapsed = seekPosition - start;
-    return Math.min(Math.max(elapsed / segmentDuration, 0), 1);
-  };
-  const lyricProgress = getLyricProgress();
+  /* how far we are through the *current* line (0-1) */
+  const lyricProgress = React.useMemo(() => {
+    const ln = processedLyrics[currentIdx];
+    if (!ln) return 0;
+    const seg = ln.endTime - ln.time || 1;
+    return Math.max(0, Math.min(1, (seekPosition - ln.time) / seg));
+  }, [seekPosition, processedLyrics, currentIdx]);
 
-  const handleUserScroll = () => {
-    if (isAutoScrollingRef.current) return;
+  /* user scroll handler */
+  const handleUserScroll = React.useCallback(() => {
+    if (autoRef.current) return;          // ignore programmatic scrolls
     setUserScrolling(true);
-    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
-    userScrollTimeoutRef.current = setTimeout(() => {
-      setUserScrolling(false);
-    }, 3000);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setUserScrolling(false), 3000);
+  }, []);
+
+  /* autoscroll whenever the active line changes */
+  React.useLayoutEffect(() => {
+    if (!showLyrics || userScrolling || !lyricsRef.current) return;
+
+    const lineEl =
+      lyricsRef.current.children[0]?.children?.[currentIdx] as
+        | HTMLElement
+        | undefined;
+    if (!lineEl) return;
+
+    autoRef.current = true;
+
+    const target =
+      lineEl.offsetTop -
+      lyricsRef.current.clientHeight / 2 +
+      lineEl.offsetHeight / 2;
+
+    lyricsRef.current.scrollTo({ top: target, behavior: 'smooth' });
+
+    const id = setTimeout(() => (autoRef.current = false), 600);
+    return () => clearTimeout(id);
+  }, [showLyrics, userScrolling, currentIdx, processedLyrics]);
+
+  return {
+    lyricsRef,
+    userScrolling,
+    handleUserScroll,
+    lyricProgress,
+    processedLyrics,
   };
-
-  // auto-scroll to active lyric
-  useEffect(() => {
-    if (!showLyrics || !lyricsRef.current) return;
-    if (!userScrolling) {
-      const container = lyricsRef.current;
-      const currentLyricEl = container.children[currentLyricIndex] as HTMLElement;
-      if (currentLyricEl) {
-        isAutoScrollingRef.current = true;
-        const offsetTop = currentLyricEl.offsetTop;
-        const offsetHeight = currentLyricEl.offsetHeight;
-        const containerHeight = container.clientHeight;
-        const scrollPos = offsetTop - containerHeight / 2 + offsetHeight / 2;
-        container.scrollTo({ top: scrollPos, behavior: "smooth" });
-        // Release auto-scrolling flag after a shorter delay for smooth transition:
-        setTimeout(() => {
-          isAutoScrollingRef.current = false;
-        }, 600);
-      }
-    }
-  }, [currentLyricIndex, showLyrics, userScrolling, processedLyrics]);  
-
-  return { lyricsRef, userScrolling, handleUserScroll, lyricProgress, processedLyrics };
 }
 
+
+
 /* ----------------------------------------------
-   L Y R I C S   P A N E L
+   L Y R I C S   P A N E L  (DESKTOP)
 ---------------------------------------------- */
 const LyricsPanel: React.FC<{
   currentTrack: Track;
   currentLyricIndex: number;
-  handleSeek: (time: number) => void;
+  handleSeek: (t: number) => void;
   lyricsRef: React.RefObject<HTMLDivElement>;
-  processedLyrics: Array<Lyric & { endTime?: number }>;
+  processedLyrics: Array<Lyric & { endTime: number }>;
   lyricProgress: number;
   userScrolling: boolean;
-  handleUserScroll: (e: React.UIEvent<HTMLDivElement>) => void
+  handleUserScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  lyricsLoading: boolean;
 }> = ({
   currentTrack,
   currentLyricIndex,
@@ -326,72 +330,79 @@ const LyricsPanel: React.FC<{
   lyricProgress,
   userScrolling,
   handleUserScroll,
+  lyricsLoading,
 }) => {
-  if (!currentTrack) {
-    return (
-      <p className="text-neutral-400 text-center p-4">No track selected.</p>
-    );
-  }
-  if (processedLyrics.length === 0) {
-    return (
-      <p className="text-neutral-400 text-center p-4">No lyrics available.</p>
-    );
-  }
+  /* guards */
+  if (!currentTrack)
+    return <p className="text-neutral-400 text-center p-4">No track selected.</p>;
 
+  if (lyricsLoading)
+    return <p className="text-neutral-400 text-center p-4">Fetching lyrics…</p>;
+
+  if (processedLyrics.length === 0)
+    return <p className="text-neutral-400 text-center p-4">No lyrics available.</p>;
+
+  /* panel */
   return (
     <div
-      className="p-4 h-full overflow-y-auto no-scrollbar"
       ref={lyricsRef}
       onScroll={handleUserScroll}
-
+      className="flex-1 overflow-y-auto p-6 scrollbar-fade"
+      /* keep it independent from parents that might be overflow-hidden */
+      style={{ maxHeight: "calc(100vh - 200px)" }}
     >
       <div className="space-y-4">
-        {processedLyrics.map((lyric, index) => {
-          const isActive = index === currentLyricIndex;
-          if (!isActive) {
+        {processedLyrics.map((line, idx) => {
+          const active = idx === currentLyricIndex;
+
+          /* inactive line */
+          if (!active)
             return (
               <p
-                key={index}
-                onClick={() => handleSeek(lyric.time)}
-                className="text-lg cursor-pointer transition-all duration-300 text-neutral-400 hover:text-white/90 opacity-70"
+                key={idx}
+                onClick={() => handleSeek(line.time)}
+                className="text-lg text-neutral-400 hover:text-white/90 cursor-pointer opacity-70 transition-colors"
               >
-                {lyric.text}
+                {line.text}
               </p>
             );
-          }
-          // highlight letters
-          const letters = lyric.text.split("");
-          const totalLetters = letters.length;
-          const filled = Math.floor(lyricProgress * totalLetters);
 
+          /* active line (per-letter fade-in) */
           return (
             <p
-              key={index}
-              onClick={() => handleSeek(lyric.time)}
-              className="text-lg cursor-pointer font-medium text-white leading-relaxed"
+              key={idx}
+              onClick={() => handleSeek(line.time)}
+              className="text-lg font-bold text-center leading-relaxed cursor-pointer"
             >
-              {letters.map((letter, idx2) => (
+              {line.text.split("").map((ch, i) => (
                 <span
-                  key={idx2}
-                  className={`transition-colors duration-300 ${
-                    idx2 < filled ? "text-white" : "text-neutral-400"
-                  }`}
+                  key={i}
+                  style={{
+                    color:
+                      i < Math.floor(lyricProgress * line.text.length)
+                        ? "rgba(255,255,255,1)"
+                        : "rgba(255,255,255,.35)",
+                    transition: "color .08s linear",
+                  }}
                 >
-                  {letter}
+                  {ch}
                 </span>
               ))}
             </p>
           );
         })}
       </div>
+
       {userScrolling && (
         <p className="text-sm text-neutral-500 mt-4 italic text-center">
-          Scrolling manually. Auto-scroll will resume shortly...
+          Scrolling manually. Auto-scroll will resume shortly…
         </p>
       )}
     </div>
   );
 };
+
+
 
 /* ----------------------------------------------
    Q U E U E   P A N E L
@@ -997,8 +1008,8 @@ const SidebarOverlay: React.FC<SidebarOverlayProps> = ({
             </div>
 
             {/* Content Panel */}
-            <div className="flex-1 overflow-y-auto no-scrollbar">
-              <div className="p-6">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="flex-1 p-6 flex flex-col min-h-0 overflow-hidden">
                 <motion.div
                   key={tab}
                   initial={{ opacity: 0, y: 20 }}
@@ -1055,6 +1066,7 @@ export default function DesktopPlayer(props: DesktopPlayerProps) {
     toggleLyricsView,
     currentTrackIndex,
     removeFromQueue,
+    lyricsLoading
   } = props;
 
   const [showSidebar, setShowSidebar] = useState(false);
@@ -1084,10 +1096,23 @@ const handleBackClick = useCallback(() => {
 }, [handleSeek, previousTrack]);
 
 
+
   // Access the audio hook for data saver checks, or we can just pass in onCycleAudioQuality prop
 
-  const { lyricsRef, userScrolling, handleUserScroll, lyricProgress, processedLyrics } =
-    useAutoScrollLyrics(showLyrics, currentLyricIndex, lyrics, duration, seekPosition);
+  const {
+  lyricsRef,
+  userScrolling,
+  handleUserScroll,
+  lyricProgress,
+  processedLyrics,
+} = useAutoScrollLyrics(
+  showLyrics && tab === 'lyrics',     // <- ensure it only runs when visible
+  currentLyricIndex,
+  lyrics,
+  duration,
+  seekPosition
+);
+
 
   // The TABS for the overlay
   const TABS: Array<{ id: SidebarTab; label: string; icon: any }> = [
@@ -1122,6 +1147,7 @@ const handleBackClick = useCallback(() => {
     const idx = modes.indexOf(repeatMode);
     setRepeatMode(modes[(idx + 1) % modes.length]);
   };
+
 
   return (
     <>
@@ -1357,6 +1383,7 @@ const handleBackClick = useCallback(() => {
         lyricsPanel={
           <LyricsPanel
             currentTrack={currentTrack}
+            lyricsLoading={lyricsLoading}
             currentLyricIndex={currentLyricIndex}
             handleSeek={handleSeek}
             lyricsRef={lyricsRef}

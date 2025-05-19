@@ -56,6 +56,7 @@ interface MobilePlayerProps {
   currentTrack: Track;
   isPlaying: boolean;
   previousTracks: Track[];
+  lyricsLoading: boolean;
   setQueue: React.Dispatch<React.SetStateAction<Track[]>>;
   togglePlay: () => void;
   skipTrack: () => void | Promise<void>;
@@ -90,11 +91,11 @@ interface ProcessedLyric extends Lyric {
 }
 
 /** Format a time in seconds => mm:ss. */
-function formatTimeMobile(seconds: number): string {
-  if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+function fmtTime(raw?: number): string {
+  const t = Number.isFinite(raw) && raw! > 0 ? raw! : 0;   // guards ∞ / NaN
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
 }
 
 /* ------------------------------------------------------
@@ -347,6 +348,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   onQueueItemClick,
   setIsPlayerOpen,
   listenCount,
+  lyricsLoading
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
@@ -677,6 +679,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
   }, []);
 
 
+
+
   return (
     <div className="px-6 flex flex-col items-center">
       {/* Container for miniplayer or expanded player */}
@@ -1003,7 +1007,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                       </h2>
                     </div>
                     <div
-                      className="space-y-6 overflow-y-auto"
+                      className="space-y-6 overflow-y-auto flex-1 min-h-0"
                       ref={lyricsRef}
                       style={{ height: "calc(100vh - 10vh)", scrollBehavior: "smooth" }}
                       onScroll={handleUserScroll}
@@ -1121,8 +1125,8 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                         duration={duration}
                       />
                       <div className="flex justify-between text-sm text-white/60 mt-2">
-                        <span>{formatTimeMobile(seekPosition)}</span>
-                        <span>{formatTimeMobile(duration)}</span>
+                        <span>{fmtTime(seekPosition)}</span>
+                        <span>{fmtTime(duration)}</span>
                       </div>
                     </div>
 
@@ -1156,84 +1160,83 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
               </div>
 
               {/* Audio Quality Menu */}
-              {/* Updated Modal Container */}
-<AnimatePresence>
-  {showAudioMenu && (
-    <motion.div
-      className="fixed inset-0 z-50"
-      style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={() => setShowAudioMenu(false)}
-    >
-      <motion.div
-        className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
-        style={{ width: "100%", maxHeight: "80vh" }}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4">
-          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
-          <h3 className="text-lg font-bold text-white mb-4 text-center">
-            Audio Quality
-          </h3>
-          {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map((qual) => (
-            <button
-              key={qual}
-              className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
-                audioQuality === qual ? "bg-white/10" : "hover:bg-white/5"
-              }`}
-              onClick={async () => {
-                if (isDataSaver && qual !== "DATA_SAVER") {
-                  toast.error(
-                    "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
-                  );
-                  return;
-                }
-                try {
-                  await changeAudioQuality(qual);
-                  toast.success(`Switched to ${qual} Quality`);
-                } catch (err) {
-                  console.error(err);
-                  toast.error("Failed to change audio quality");
-                } finally {
-                  setShowAudioMenu(false);
-                }
-              }}
-            >
-              <div className="flex flex-col items-start justify-center">
-                <p className="text-white font-semibold">{qual}</p>
-                <p className="text-sm text-white/60 mt-1">
-                  {qual === "MAX" && "HiFi Plus (24-bit, up to 192kHz)"}
-                  {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
-                  {qual === "NORMAL" && "High (320kbps)"}
-                  {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
-                </p>
-              </div>
-              {qual === audioQuality && (
-                <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
-                  <motion.div
-                    className="w-3 h-3 bg-white rounded-full"
-                    layoutId="quality-indicator"
-                  />
-                </div>
-              )}
-            </button>
-          ))}
-          <button
-            className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
-            onClick={() => setShowAudioMenu(false)}
-          >
-            Cancel
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
+          <AnimatePresence>
+            {showAudioMenu && (
+              <motion.div
+                className="fixed inset-0 z-50"
+                style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowAudioMenu(false)}
+              >
+                <motion.div
+                  className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl"
+                  style={{ width: "100%", maxHeight: "80vh" }}
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-4">
+                    <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+                    <h3 className="text-lg font-bold text-white mb-4 text-center">
+                      Audio Quality
+                    </h3>
+                    {(["MAX", "HIGH", "NORMAL", "DATA_SAVER"] as AudioQuality[]).map((qual) => (
+                      <button
+                        key={qual}
+                        className={`w-full flex items-center justify-between p-4 rounded-lg mb-2 transition-all ${
+                          audioQuality === qual ? "bg-white/10" : "hover:bg-white/5"
+                        }`}
+                        onClick={async () => {
+                          if (isDataSaver && qual !== "DATA_SAVER") {
+                            toast.error(
+                              "Data Saver is ON. Disable it or set to NORMAL/HIGH/MAX offline!"
+                            );
+                            return;
+                          }
+                          try {
+                            await changeAudioQuality(qual);
+                            toast.success(`Switched to ${qual} Quality`);
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Failed to change audio quality");
+                          } finally {
+                            setShowAudioMenu(false);
+                          }
+                        }}
+                      >
+                        <div className="flex flex-col items-start justify-center">
+                          <p className="text-white font-semibold">{qual}</p>
+                          <p className="text-sm text-white/60 mt-1">
+                            {qual === "MAX" && "HiFi Plus (24-bit, up to 192kHz)"}
+                            {qual === "HIGH" && "HiFi (16-bit, 44.1kHz)"}
+                            {qual === "NORMAL" && "High (320kbps)"}
+                            {qual === "DATA_SAVER" && "Data Saver (128kbps)"}
+                          </p>
+                        </div>
+                        {qual === audioQuality && (
+                          <div className="w-6 h-6 rounded-full bg-[#1a237e] flex items-center justify-center">
+                            <motion.div
+                              className="w-3 h-3 bg-white rounded-full"
+                              layoutId="quality-indicator"
+                            />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                    <button
+                      className="w-full py-4 text-white/60 hover:text-white transition-all mt-4 text-center"
+                      onClick={() => setShowAudioMenu(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
 
               {/* More Options Menu */}
