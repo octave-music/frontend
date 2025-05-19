@@ -1164,7 +1164,7 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
             {showAudioMenu && (
               <motion.div
                 className="fixed inset-0 z-50"
-                style={{ background: "rgba(0,0,0,0.8)", pointerEvents: "auto" }}
+                style={{ background: "rgba(0,0,0,0.8)", pointerEvents: showAudioMenu ? "auto" : "none",  }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -1196,16 +1196,23 @@ const MobilePlayer: React.FC<MobilePlayerProps> = ({
                             );
                             return;
                           }
+
+                          // 👉  Close the sheet immediately so the overlay goes away
+                          setShowAudioMenu(false);
+
+                          // Do the heavy work in the background
                           try {
                             await changeAudioQuality(qual);
-                            toast.success(`Switched to ${qual} Quality`);
+                            toast.success(`Switched to ${qual} quality`);
                           } catch (err) {
                             console.error(err);
                             toast.error("Failed to change audio quality");
-                          } finally {
-                            setShowAudioMenu(false);
+
+                            // optional: re-open the sheet so the user can pick again
+                            // setShowAudioMenu(true);
                           }
                         }}
+
                       >
                         <div className="flex flex-col items-start justify-center">
                           <p className="text-white font-semibold">{qual}</p>
