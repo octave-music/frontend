@@ -1,185 +1,148 @@
+/* ------------------------------------------------------------------
+   useMediaSession.ts – v3
+   -------------------------------------------------------------
+   ✔  “Next / Previous” behave like native remotes:
+      • single click on a headset / notification button
+        → **ALWAYS** skips to next / previous track
+      • no more awkward “double-tap needed” bug
+   ✔  keeps smart-rewind ( ⏮ after 5 s == restart ) in the UI
+   ✔  still updates position state every 250 ms
+   ✔  defensive error-handling & clean teardown
+------------------------------------------------------------------ */
+
 import { Track } from "../types/types";
 
 interface MediaSessionHandlers {
   getCurrentPlaybackTime: () => number;
   handleSeek: (time: number) => void;
-  playTrackFromSource: (track: Track, startTime?: number) => Promise<void>;
+  playTrackFromSource: (track: Track, start?: number) => Promise<void>;
   pauseAudio: () => void;
   previousTrackFunc: () => void;
   skipTrack: () => void;
-  setIsPlaying: (playing: boolean) => void;
+  setIsPlaying: (p: boolean) => void;
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 }
 
+/** Initialise / refresh MediaSession; returns a disposer. */
 export function setupMediaSession(
   currentTrack: Track | null,
   isPlaying: boolean,
-  handlers: MediaSessionHandlers
+  h: MediaSessionHandlers,
 ) {
+  /* ───────── guards ───────── */
   if (
     typeof window === "undefined" ||
     !("mediaSession" in navigator) ||
     !currentTrack ||
-    !handlers.audioRef.current
-  ) {
+    !h.audioRef.current
+  )
     return () => {};
-  }
 
+  /* ───────── local helpers ───────── */
   const setPositionStateIfValid = () => {
-    if (
-      handlers.audioRef.current &&
-      handlers.audioRef.current.duration &&
-      handlers.audioRef.current.currentTime <=
-        handlers.audioRef.current.duration
-    ) {
-      try {
-        navigator.mediaSession.setPositionState({
-          duration: handlers.audioRef.current.duration,
-          playbackRate: handlers.audioRef.current.playbackRate,
-          position: handlers.audioRef.current.currentTime,
-        });
-      } catch (e) {
-        console.warn("Failed to set position state:", e);
-      }
+    const a = h.audioRef.current;
+    if (!a || !isFinite(a.duration) || a.duration === 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: a.duration,
+        playbackRate: a.playbackRate,
+        position: Math.min(a.currentTime, a.duration),
+      });
+    } catch {
+      /* some browsers (e.g. Firefox) don’t support it – safely ignore */
     }
   };
 
-  try {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.title,
-      artist: currentTrack.artist.name,
-      album: currentTrack.album.title,
-      artwork: [
-        {
-          src: currentTrack.album.cover_small,
-          sizes: "56x56",
-          type: "image/jpeg",
-        },
-        {
-          src: currentTrack.album.cover_medium,
-          sizes: "128x128",
-          type: "image/jpeg",
-        },
-        {
-          src: currentTrack.album.cover_big,
-          sizes: "256x256",
-          type: "image/jpeg",
-        },
-        {
-          src: currentTrack.album.cover_xl,
-          sizes: "512x512",
-          type: "image/jpeg",
-        },
-      ],
-    });
+  /* ───────── metadata ───────── */
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title:  currentTrack.title,
+    artist: currentTrack.artist.name,
+    album:  currentTrack.album.title,
+    artwork: [
+      { src: currentTrack.album.cover_small,  sizes: "56x56",  type: "image/jpeg" },
+      { src: currentTrack.album.cover_medium, sizes: "128x128", type: "image/jpeg" },
+      { src: currentTrack.album.cover_big,    sizes: "256x256", type: "image/jpeg" },
+      { src: currentTrack.album.cover_xl,     sizes: "512x512", type: "image/jpeg" },
+    ],
+  });
 
-    if (navigator.mediaSession.metadata) {
-      // @ts-expect-error - This is a non-standard property that might work in some browsers
-      navigator.mediaSession.metadata.applicationName = "Octave Streaming";
+  // (non-standard) app name – nice in Android’s output switcher
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-expect-error
+  navigator.mediaSession.metadata.applicationName = "Octave Streaming";
+
+  navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+  /* ───────── action handlers ───────── */
+
+  // play / pause are straightforward
+  navigator.mediaSession.setActionHandler("play", async () => {
+    if (h.audioRef.current?.paused) {
+      await h.audioRef.current.play().catch(() => {/* swallow */});
+      h.setIsPlaying(true);
+      navigator.mediaSession.playbackState = "playing";
     }
+  });
 
-    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  navigator.mediaSession.setActionHandler("pause", () => {
+    if (!h.audioRef.current?.paused) {
+      h.audioRef.current!.pause();
+      h.setIsPlaying(false);
+      navigator.mediaSession.playbackState = "paused";
+    }
+  });
 
-    navigator.mediaSession.setActionHandler("play", () => {
-      if (!isPlaying && currentTrack && handlers.audioRef.current) {
-        void handlers.audioRef.current.play();
-        handlers.setIsPlaying(true);
-        navigator.mediaSession.playbackState = "playing";
-      }
-    });
+  /* ===  MAIN CHANGE  ===================================================
+     head-set / car-display “next ◄► previous” should *always* skip,
+     never depend on currentTime-heuristics (that’s a UI concern).
+  ===================================================================== */
+  navigator.mediaSession.setActionHandler("nexttrack", () => h.skipTrack());
+  navigator.mediaSession.setActionHandler("previoustrack", () => h.previousTrackFunc());
 
-    navigator.mediaSession.setActionHandler("pause", () => {
-      if (isPlaying && handlers.audioRef.current) {
-        handlers.audioRef.current.pause();
-        handlers.setIsPlaying(false);
-        navigator.mediaSession.playbackState = "paused";
-      }
-    });
+  // 10-second seek steps (or custom offset supplied by the browser)
+  navigator.mediaSession.setActionHandler("seekbackward", ({ seekOffset }) => {
+    const a = h.audioRef.current;
+    if (!a) return;
+    a.currentTime = Math.max(a.currentTime - (seekOffset ?? 10), 0);
+    setPositionStateIfValid();
+  });
+  navigator.mediaSession.setActionHandler("seekforward", ({ seekOffset }) => {
+    const a = h.audioRef.current;
+    if (!a) return;
+    a.currentTime = Math.min(a.currentTime + (seekOffset ?? 10), a.duration || Infinity);
+    setPositionStateIfValid();
+  });
 
-    // Modified handler for "nexttrack" to mimic UI behavior:
-    navigator.mediaSession.setActionHandler("nexttrack", () => {
-      const audio = handlers.audioRef.current;
-      if (!audio) return;
-      // If currentTime is not near the end (threshold of 5 sec), jump near the end first.
-      if (audio.currentTime < (audio.duration || 0) - 5) {
-        audio.currentTime = (audio.duration || 0) - 1;
-        setPositionStateIfValid();
-      } else {
-        handlers.skipTrack();
-      }
-    });
+  // precise seek
+  navigator.mediaSession.setActionHandler("seekto", ({ seekTime, fastSeek }) => {
+    const a = h.audioRef.current;
+    if (!a || seekTime == null) return;
+    if (fastSeek && "fastSeek" in a) {
+      a.fastSeek(seekTime);
+    } else {
+      a.currentTime = Math.min(Math.max(seekTime, 0), a.duration || 0);
+    }
+    setPositionStateIfValid();
+  });
 
-    // Modified handler for "previoustrack" to mimic UI behavior:
-    navigator.mediaSession.setActionHandler("previoustrack", () => {
-      const audio = handlers.audioRef.current;
-      if (!audio) return;
-      // If currentTime is more than 5 sec, reset to start first.
-      if (audio.currentTime > 5) {
-        audio.currentTime = 0;
-        setPositionStateIfValid();
-      } else {
-        handlers.previousTrackFunc();
-      }
-    });
+  /* ───────── keep positionState fresh (Chrome’s scrubber) ───────── */
+  const interval = setInterval(setPositionStateIfValid, 250);
 
-    // Added improved handler for seekbackward.
-    navigator.mediaSession.setActionHandler("seekbackward", (details) => {
-      const audio = handlers.audioRef.current;
-      if (!audio) return;
-      const offset = details?.seekOffset || 10;
-      audio.currentTime = Math.max(audio.currentTime - offset, 0);
-      setPositionStateIfValid();
-    });
+  /* keep state in sync when tab regains focus (iOS Safari quirk) */
+  const visHandler = () => {
+    navigator.mediaSession.playbackState = h.audioRef.current?.paused
+      ? "paused"
+      : "playing";
+    setPositionStateIfValid();
+  };
+  document.addEventListener("visibilitychange", visHandler);
 
-    // Added improved handler for seekforward.
-    navigator.mediaSession.setActionHandler("seekforward", (details) => {
-      const audio = handlers.audioRef.current;
-      if (!audio) return;
-      const offset = details?.seekOffset || 10;
-      audio.currentTime = Math.min(audio.currentTime + offset, audio.duration || 0);
-      setPositionStateIfValid();
-    });
-
-    navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (details.seekTime != null && handlers.audioRef.current) {
-        const audio = handlers.audioRef.current;
-        const clampedSeekTime = Math.min(details.seekTime, audio.duration || 0);
-        if (Math.abs(audio.currentTime - clampedSeekTime) > 0.1) {
-          handlers.handleSeek(clampedSeekTime);
-        }
-
-        // Only force playback if we aren't manually paused.
-        if (!audio.paused) {
-          void audio.play();
-        }
-
-        setPositionStateIfValid();
-      }
-    });
-
-    const updatePositionState = () => {
-      setPositionStateIfValid();
-    };
-
-    const positionInterval = setInterval(updatePositionState, 250);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && handlers.audioRef.current) {
-        const actualState = handlers.audioRef.current.paused ? "paused" : "playing";
-        if (navigator.mediaSession.playbackState !== actualState) {
-          navigator.mediaSession.playbackState = actualState;
-        }
-        setPositionStateIfValid();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      clearInterval(positionInterval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-
-      const actions: MediaSessionAction[] = [
+  /* ───────── teardown ───────── */
+  return () => {
+    clearInterval(interval);
+    document.removeEventListener("visibilitychange", visHandler);
+    (
+      [
         "play",
         "pause",
         "previoustrack",
@@ -187,18 +150,11 @@ export function setupMediaSession(
         "seekto",
         "seekforward",
         "seekbackward",
-      ];
-
-      actions.forEach((action) => {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch (e) {
-          console.warn(`Failed to clear handler for ${action}:`, e);
-        }
-      });
-    };
-  } catch (error) {
-    console.error("MediaSession API encountered an error:", error);
-    return () => {};
-  }
+      ] as MediaSessionAction[]
+    ).forEach((action) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, null);
+      } catch {/* ignore – some browsers throw */ }
+    });
+  };
 }

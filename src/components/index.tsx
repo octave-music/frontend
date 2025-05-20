@@ -23,7 +23,7 @@ import Image from "next/image";
 import debounce from "lodash/debounce";
 
 // Hooks & Libraries
-import { useAudio, getTrackUrl } from "@/lib/hooks/useAudio";
+import { useAudio, } from "@/lib/hooks/useAudio";
 import { setupMediaSession } from "@/lib/hooks/useMediaSession";
 import {
   storeQueue,
@@ -44,11 +44,11 @@ import audioElement from "@/lib/managers/audioManager";
 import { getTopArtists } from "@/lib/api/lastfm";
 
 // Components
-import MobilePlayer from "./players/mobilePlayer";
-import DesktopPlayer from "./players/DesktopPlayer";
+import MobilePlayer from "./players/Mobile/mobilePlayer";
+import DesktopPlayer from "./players/Desktop/DesktopPlayer";
 import Onboarding from "./onboarding/Onboarding";
-import MobileLayout from "./layout/MobileLayout";
-import DesktopLayout from "./layout/DesktopLayout";
+import MobileLayout from "./layout/Mobile/MobileLayout";
+import DesktopLayout from "./layout/Desktop/DesktopLayout";
 
 // Utilities & Helpers
 import { saveAs } from "file-saver";
@@ -214,6 +214,32 @@ export function Main() {
   //                  Handlers & Utility Functions
   // ----------------------------------------------------------
 
+  const sanitizeTrack = useCallback((track: Track): Track => {
+  return {
+    id: track.id || `unknown-${Date.now()}`,
+    title: track.title || "Unknown Title",
+    artist: {
+      name: track.artist?.name || "Unknown Artist",
+    },
+    album: {
+      title: track.album?.title || "Unknown Album",
+      cover_medium: track.album?.cover_medium || "/images/defaultPlaylistImage.png",
+      cover_small: track.album?.cover_small || "/images/defaultPlaylistImage.png",
+      cover_big: track.album?.cover_big || "/images/defaultPlaylistImage.png",
+      cover_xl: track.album?.cover_xl || "/images/defaultPlaylistImage.png",
+    },
+  };
+}, []);
+
+const dedupeById = useCallback((arr: Track[]): Track[] => {
+  const seen = new Map<string, Track>();
+  for (const t of arr) {
+    const clean = sanitizeTrack(t);
+    if (!seen.has(clean.id)) seen.set(clean.id, clean);
+  }
+  return Array.from(seen.values());
+}, [sanitizeTrack]);
+
   const confirmDeletePlaylist = useCallback((playlist: Playlist) => {
     setSelectedPlaylist(playlist);
     setShowDeleteConfirmation(true);
@@ -308,28 +334,34 @@ export function Main() {
   );
 
   const fetchSearchResults = useMemo(
-    () =>
-      debounce(async (query: string) => {
-        setIsSearching(true);
-        try {
-          const resp = await fetch(
-            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
-          );
-          const data = await resp.json();
-          if (data && data.results) {
-            setSearchResults(data.results as Track[]);
-          } else {
-            setSearchResults([]);
-          }
-        } catch (error) {
-          console.log("Search error:", error);
+  () =>
+    debounce(async (query: string) => {
+      setIsSearching(true);
+      try {
+        const resp = await fetch(
+          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(query)}`
+        );
+        const data = await resp.json();
+
+        if (data && Array.isArray(data.results)) {
+          // 1️⃣ Sanitize every track
+          const cleaned = (data.results as Track[]).map(sanitizeTrack);
+          // 2️⃣ Remove any duplicate IDs
+          const unique = dedupeById(cleaned);
+          setSearchResults(unique);
+        } else {
           setSearchResults([]);
-        } finally {
-          setIsSearching(false);
         }
-      }, 300),
-    []
-  );
+      } catch (error) {
+        console.error("Search error:", error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300),
+  [sanitizeTrack, dedupeById]  // ← make sure to include both helpers in deps
+);
+
 
   const fetchLyrics = useCallback(async (track: Track) => {
     setLyricsLoading(true);
@@ -353,22 +385,44 @@ export function Main() {
   /**
    * “Play Track” => set it as current, optionally auto-play
    */
-  const playTrack = useCallback(
-    (track: Track, autoPlay = true) => {
-      // 1) Update queue, previous, current
-      setQueue((prev) => {
-        if (prev[0]?.id === track.id) return prev;
-        const filtered = prev.filter((t) => t.id !== track.id);
-        return [track, ...filtered];
-      });
-      setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
-      setCurrentTrack(track);
+ const playTrack = useCallback(
+  (rawTrack: Track, autoPlay = true) => {
+    // first, sanitize the incoming track
+    const track = sanitizeTrack(rawTrack);
 
-      void playTrackFromSource(track, 0, autoPlay /* userGesture */);
-  
-    },
-    [currentTrack, setQueue, setPreviousTracks, setCurrentTrack, playTrackFromSource]
-  );
+    setQueue((prev) => {
+      // 1. sanitize everything in the old queue
+      const prevClean = prev.map(sanitizeTrack);
+
+      // 2. If it’s already at the front, just return as-is
+      if (prevClean[0]?.id === track.id) {
+        return prevClean;
+      }
+
+      // 3. remove any existing copies of this track
+      const without = prevClean.filter((t) => t.id !== track.id);
+
+      // 4. prepend the new one
+      const combined = [track, ...without];
+
+      // 5. dedupe _again_ just in case, then return
+      return dedupeById(combined);
+    });
+
+    setPreviousTracks((prev) => {
+      const prevClean = prev.map(sanitizeTrack);
+      const toAdd = currentTrack ? sanitizeTrack(currentTrack) : null;
+      return toAdd
+        ? dedupeById([toAdd, ...prevClean])
+        : prevClean;
+    });
+
+    setCurrentTrack(track);
+    void playTrackFromSource(track, 0, autoPlay);
+  },
+  [currentTrack, dedupeById, playTrackFromSource, sanitizeTrack]
+);
+
   /**
    * Toggle playback. If no track is loaded, do nothing.
    */
@@ -384,87 +438,134 @@ export function Main() {
   }, [currentTrack, isPlaying, setIsPlaying]);
 
   const previousTrackFunc = useCallback(() => {
-    if (!previousTracks.length || !audioElement) {
-      toast.warning("Cannot go to the previous track: no track in history.");
-      return;
+  if (!previousTracks.length || !audioElement) {
+    toast.warning("Cannot go to the previous track: no track in history.");
+    return;
+  }
+
+  // sanitize the track you’re about to restore
+  const lastRaw = previousTracks[0];
+  const lastTrack = sanitizeTrack(lastRaw);
+
+  // pop it off the “previous” list, sanitize & dedupe the remainder
+  setPreviousTracks((prev) => {
+    const cleanPrev = prev.map(sanitizeTrack);
+    const withoutFirst = cleanPrev.slice(1);
+    return dedupeById(withoutFirst);
+  });
+
+  // put it at the front of your queue, sanitize & dedupe that too
+  setQueue((q) => {
+    const cleanQueue = q.map(sanitizeTrack);
+    // filter out any existing copies of this same id
+    const filtered = cleanQueue.filter((t) => t.id !== lastTrack.id);
+    // prepend and dedupe
+    return dedupeById([lastTrack, ...filtered]);
+  });
+
+  setCurrentTrack(lastTrack);
+  void playTrackFromSource(lastTrack, 0, true);
+  setIsPlaying(true);
+}, [previousTracks, sanitizeTrack, playTrackFromSource, setIsPlaying, dedupeById]);
+
+
+const skipTrack = useCallback(() => {
+  if (!currentTrack || queue.length <= 1 || !audioElement) {
+    toast.warning("Cannot skip track: no next track available.");
+    return;
+  }
+
+  // sanitize the outgoing “current”
+  const sanitizedCurrent = sanitizeTrack(currentTrack);
+
+  // push onto previousTracks, sanitize & dedupe
+  setPreviousTracks(prev => {
+    const cleaned = prev.map(sanitizeTrack);
+    const withNew = [sanitizedCurrent, ...cleaned];
+    return dedupeById(withNew);
+  });
+
+  // advance the queue: sanitize, drop first, then dedupe
+  setQueue(prevQueue => {
+    const cleanedQueue = prevQueue.map(sanitizeTrack);
+    const [, ...rest] = cleanedQueue;
+
+    if (rest.length === 0) {
+      // no next → stop playing
+      setCurrentTrack(null);
+      setIsPlaying(false);
+      return [];
     }
-    const lastTrack = previousTracks[0];
-    setPreviousTracks((prev) => prev.slice(1));
-    setQueue((q) => [lastTrack, ...q.filter((tk) => tk.id !== lastTrack.id)]);
-    setCurrentTrack(lastTrack);
-    void playTrackFromSource(lastTrack, 0, true);
+
+    // sanitize the new head
+    const next = sanitizeTrack(rest[0]);
+    setCurrentTrack(next);
+    void playTrackFromSource(next, 0, true);
     setIsPlaying(true);
-  }, [previousTracks, playTrackFromSource, setIsPlaying]);
 
-  const skipTrack = useCallback(() => {
-    if (!currentTrack || queue.length <= 1 || !audioElement) {
-      toast.warning("Cannot skip track: no next track available.");
-      return;
-    }
-    setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
-    setQueue((q) => {
-      const [, ...rest] = q;
-      if (rest.length === 0) {
-        setCurrentTrack(null);
-        setIsPlaying(false);
-      } else {
-        setCurrentTrack(rest[0]);
-        void playTrackFromSource(rest[0], 0, true);
-        setIsPlaying(true);
-      }
-      return rest;
-    });
-  }, [currentTrack, queue, setIsPlaying, playTrackFromSource]);
+    // dedupe & return
+    return dedupeById(rest);
+  });
+}, [currentTrack, queue.length, sanitizeTrack, dedupeById, playTrackFromSource, setIsPlaying]);
 
-  /**
-   * If queue ends, we can fetch new recommendations or do nothing.
-   */
+
   const fetchNewRecommendations = useCallback(async () => {
-    try {
-      setPlaylists((prevPlaylists) => {
-        const liked = prevPlaylists.find((p) => p.name === "Liked Songs");
-        if (!liked) {
-          const newPL: Playlist = {
-            name: "Liked Songs",
-            image: "/images/liked-songs.webp",
-            tracks: [],
-          };
-          void storePlaylist(newPL);
-          return [...prevPlaylists, newPL];
-        }
-        return prevPlaylists;
-      });
-
-      const updatedPlaylists = await getAllPlaylists();
-      const liked = updatedPlaylists.find((p) => p.name === "Liked Songs");
-      if (!liked) throw new Error("Failed to create 'Liked Songs' playlist.");
-
-      const topArtists: string[] = await getTopArtists(6);
-      const trackPromises = topArtists.map(async (artistName: string) => {
-        const response = await fetch(
-          `${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(artistName)}`
-        );
-        const data = await response.json();
-        return data.results?.[0] || null;
-      });
-      const artists = (await Promise.all(trackPromises)).filter(Boolean);
-      const tracksByArtistPromises = artists.map(async (artist) => {
-        const response = await fetch(
-          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
-        );
-        const data = await response.json();
-        return data.results?.slice(0, 6) || [];
-      });
-      const tracksByArtist = await Promise.all(tracksByArtistPromises);
-      const allTracks = tracksByArtist.flat();
-      const shuffledTracks = allTracks.sort(() => Math.random() - 0.5);
-
-      setQueue((prevQueue) => [...prevQueue, ...shuffledTracks]);
-      setRecommendedTracks(shuffledTracks);
-    } catch (error) {
-      console.error("Error fetching new recommendations:", error);
+  try {
+    // 1) Ensure “Liked Songs” exists
+    setPlaylists(prev =>
+      prev.some(p => p.name === "Liked Songs")
+        ? prev
+        : [...prev, { name: "Liked Songs", image: "/images/liked-songs.webp", tracks: [], pinned: true }]
+    );
+    // persist if created
+    if (!(await getAllPlaylists()).some(p => p.name === "Liked Songs")) {
+      await storePlaylist({ name: "Liked Songs", image: "/images/liked-songs.webp", tracks: [], pinned: true });
     }
-  }, [setPlaylists, setQueue, setRecommendedTracks]);
+
+    // 2) Grab top-artists & their tracks
+    const topArtists = await getTopArtists(6);
+    const artistObjs = (
+      await Promise.all(
+        topArtists.map(async name => {
+          const { results } = await fetch(`${API_BASE_URL}/api/search/artists?query=${encodeURIComponent(name)}`)
+            .then(r => r.json());
+          return results?.[0] ?? null;
+        })
+      )
+    ).filter(Boolean) as Artist[];
+
+    const tracksByArtist = await Promise.all(
+      artistObjs.map(async artist => {
+        const { results } = await fetch(`${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`)
+          .then(r => r.json());
+        return (results as Track[]).slice(0, 6);
+      })
+    );
+    const allTracks = tracksByArtist.flat();
+    const shuffled = allTracks.sort(() => Math.random() - 0.5);
+
+    // 3) Update your queue: sanitize, combine with existing, then dedupe
+    setQueue(prevQueue => {
+      const prevClean = prevQueue.map(sanitizeTrack);
+      const incoming = shuffled.map(sanitizeTrack);
+      return dedupeById([...prevClean, ...incoming]);
+    });
+
+    // 4) Update recommendedTracks the same way, _and_ persist them
+    const recClean = dedupeById(shuffled.map(sanitizeTrack));
+    setRecommendedTracks(recClean);
+    await storeRecommendedTracks(recClean);
+  } catch (err) {
+    console.error("Error fetching new recommendations:", err);
+  }
+}, [
+  sanitizeTrack,
+  dedupeById,
+  setPlaylists,
+  setQueue,
+  setRecommendedTracks
+]);
+
 
   /**
    * If the track ends, handle repeating or skipping logic.
@@ -517,29 +618,6 @@ export function Main() {
     updatedPlaylists.forEach((pl) => storePlaylist(pl));
   };
 
-  async function onCycleAudioQuality() {
-    if (isDataSaver) {
-      toast.error("Data Saver is ON. Disable it to switch audio quality.");
-      return;
-    }
-    try {
-      const qualities: Array<"MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"> = [
-        "MAX",
-        "HIGH",
-        "NORMAL",
-        "DATA_SAVER",
-      ];
-      const currentIndex = qualities.indexOf(audioQuality);
-      const nextQ = qualities[(currentIndex + 1) % qualities.length];
-
-      await changeAudioQuality(nextQ);
-      toast.success(`Switched audio quality to ${nextQ}`);
-    } catch (err: any) {
-      console.error("Could not change audio quality:", err);
-      toast.error(err?.message || "Could not change audio quality");
-    }
-  }
-
   const isTrackLiked = useCallback(
     (track: Track): boolean => {
       const liked = playlists.find((p) => p.name === "Liked Songs");
@@ -549,22 +627,6 @@ export function Main() {
     [playlists]
   );
 
-  const sanitizeTrack = (track: Track): Track => {
-    return {
-      id: track.id || "unknown-id",
-      title: track.title || "Unknown Title",
-      artist: {
-        name: track.artist?.name || "Unknown Artist",
-      },
-      album: {
-        title: track.album?.title || "Unknown Album",
-        cover_medium: track.album?.cover_medium || "/images/defaultPlaylistImage.png",
-        cover_small: track.album?.cover_small || "/images/defaultPlaylistImage.png",
-        cover_big: track.album?.cover_big || "/images/defaultPlaylistImage.png",
-        cover_xl: track.album?.cover_xl || "/images/defaultPlaylistImage.png",
-      },
-    };
-  };
 
   const toggleLike = useCallback(
     (rawTrack: Track) => {
@@ -586,7 +648,7 @@ export function Main() {
       setPlaylists(updatedPlaylists);
       void storePlaylist(updatedLikedPlaylist);
     },
-    [playlists]
+    [playlists, sanitizeTrack]
   );
 
   const toggleLikeDesktop = useCallback(() => {
@@ -597,38 +659,74 @@ export function Main() {
     if (currentTrack) toggleLike(currentTrack);
   }, [currentTrack, toggleLike]);
 
-  const addToQueue = useCallback((tr: Track | Track[]) => {
-    setQueue((prev) => {
-      const arr = Array.isArray(tr) ? tr : [tr];
-      const filtered = arr.filter((item) => !prev.some((pk) => pk.id === item.id));
-      return [...prev, ...filtered];
-    });
-    toast.success("Added track to queue!");
-  }, []);
+  const addToQueue = useCallback((raw: Track | Track[]) => {
+  // 1. sanitize incoming
+  const incoming = (Array.isArray(raw) ? raw : [raw]).map(sanitizeTrack);
 
-  const removeFromQueue = useCallback((idx: number) => {
-    setQueue((q) => q.filter((_, i) => i !== idx));
-  }, []);
+  setQueue(prev => {
+    // 2. sanitize existing queue
+    const cleanPrev = prev.map(sanitizeTrack);
+    // 3. combine then dedupe
+    return dedupeById([ ...cleanPrev, ...incoming ]);
+  });
 
-  const onQueueItemClick = useCallback(
-    (track: Track, idx: number) => {
+  toast.success("Added track to queue!");
+}, [sanitizeTrack, dedupeById]);
+
+
+const removeFromQueue = useCallback((idx: number) => {
+  setQueue(prev => {
+    // sanitize & remove by index
+    const filtered = prev
+      .map(sanitizeTrack)
+      .filter((_, i) => i !== idx);
+    // dedupe the result (mostly a no‐op)
+    return dedupeById(filtered);
+  });
+}, [sanitizeTrack, dedupeById]);
+
+
+const onQueueItemClick = useCallback(
+  (rawTrack: Track, idx: number) => {
+    const track = sanitizeTrack(rawTrack);
+
+    // Update previousTracks
+    setPreviousTracks(prev => {
+      const cleanPrev = prev.map(sanitizeTrack);
+
       if (idx < 0) {
-        // from previousTracks
-        setPreviousTracks((prev) => prev.filter((_, i) => i !== -idx - 1));
-        setQueue((q) => [track, ...q]);
+        // clicked an item from `previousTracks`
+        const removeAt = -idx - 1;
+        cleanPrev.splice(removeAt, 1);
+        return dedupeById(cleanPrev);
       } else {
-        setPreviousTracks((prev) => (currentTrack ? [currentTrack, ...prev] : prev));
-        setQueue((q) => {
-          const newQueue = [...q];
-          newQueue.splice(idx, 1);
-          newQueue.unshift(track);
-          return newQueue;
-        });
+        // clicked an item from the queue → push currentTrack into history
+        if (currentTrack) {
+          return dedupeById([ sanitizeTrack(currentTrack), ...cleanPrev ]);
+        }
+        return cleanPrev;
       }
-      setCurrentTrack(track);
-    },
-    [currentTrack]
-  );
+    });
+
+    // Update queue
+    setQueue(prev => {
+      const cleanPrev = prev.map(sanitizeTrack);
+
+      // remove the clicked item if it was in the queue
+      const filtered =
+        idx >= 0
+          ? cleanPrev.filter((_, i) => i !== idx)
+          : cleanPrev;
+
+      // then prepend the clicked track
+      return dedupeById([ track, ...filtered ]);
+    });
+
+    setCurrentTrack(track);
+  },
+  [sanitizeTrack, dedupeById, currentTrack]
+);
+
 
   const openAddToPlaylistModal = useCallback((tr: Track) => {
     setContextMenuTrack(tr);
@@ -807,15 +905,29 @@ export function Main() {
   );
 
   const shuffleQueue = useCallback(() => {
-    const copyQueue = [...queue];
-    for (let i = copyQueue.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copyQueue[i], copyQueue[j]] = [copyQueue[j], copyQueue[i]];
-    }
-    setQueue(copyQueue);
-    setShuffleOn(!shuffleOn);
-    void storeSetting("shuffleOn", JSON.stringify(!shuffleOn));
-  }, [queue, shuffleOn]);
+  // 1. sanitize your current queue
+  const cleanQueue = queue.map(sanitizeTrack);
+
+  // 2. perform Fisher–Yates shuffle on a copy
+  const shuffled = [...cleanQueue];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  // 3. dedupe in case sanitizeTrack normalization introduced any dupes
+  const deduped = dedupeById(shuffled);
+
+  // 4. update state
+  setQueue(deduped);
+
+  setShuffleOn(prev => {
+    const next = !prev;
+    void storeSetting("shuffleOn", JSON.stringify(next));
+    return next;
+  });
+}, [queue, sanitizeTrack, dedupeById]);
+
 
   const toggleLyricsView = useCallback(() => {
     setShowLyrics((prev) => !prev);
@@ -829,57 +941,77 @@ export function Main() {
   }, []);
 
   const handleArtistSelectionComplete = useCallback(
-    async (artists: Artist[]) => {
-      try {
-        await storeSetting("favoriteArtists", JSON.stringify(artists));
-        setShowArtistSelection(false);
+  async (artists: Artist[]) => {
+    try {
+      // 1️⃣ Persist favorite artists
+      await storeSetting("favoriteArtists", JSON.stringify(artists));
+      setShowArtistSelection(false);
 
-        const fetchPromises = artists.map(async (artist) => {
-          const response = await fetch(
-            `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
-          );
-          const data = await response.json();
-          return (data.results || []).slice(0, 5);
-        });
+      // 2️⃣ Fetch up to 5 tracks per artist
+      const fetchPromises = artists.map(async (artist) => {
+        const resp = await fetch(
+          `${API_BASE_URL}/api/search/tracks?query=${encodeURIComponent(artist.name)}`
+        );
+        const data = await resp.json();
+        return Array.isArray(data.results) ? data.results.slice(0, 5) : [];
+      });
+      const artistTracksArrays = await Promise.all(fetchPromises);
+      const allRawTracks = artistTracksArrays.flat();
 
-        const artistTracks = await Promise.all(fetchPromises);
-        const allTracks = artistTracks.flat();
-        const shuffled = allTracks.sort(() => Math.random() - 0.5);
-        setRecommendedTracks(shuffled);
-        await storeRecommendedTracks(shuffled);
+      // 3️⃣ Sanitize, shuffle, then dedupe
+      const sanitized = allRawTracks.map(sanitizeTrack);
+      const shuffled = [...sanitized].sort(() => Math.random() - 0.5);
+      const deduped = dedupeById(shuffled);
 
-        setQueue(shuffled);
-        await storeQueue(shuffled);
+      // 4️⃣ Update recommended tracks
+      setRecommendedTracks(deduped);
+      await storeRecommendedTracks(deduped);
 
-        setSearchResults(shuffled);
+      // 5️⃣ Update queue
+      setQueue(deduped);
+      await storeQueue(deduped);
 
-        if (shuffled.length) {
-          setCurrentTrack(shuffled[0]);
-          setIsPlaying(true);
-          void playTrackFromSource(shuffled[0], 0, true);
-        }
+      // 6️⃣ Update search results
+      setSearchResults(deduped);
 
-        const firstFour = shuffled.slice(0, 4);
-        setJumpBackIn(firstFour);
-
-        if (!playlists.some((p) => p.name === "Liked Songs")) {
-          const newPL: Playlist = {
-            name: "Liked Songs",
-            image: "/images/liked-songs.webp",
-            tracks: [],
-          };
-          const updated = [...playlists, newPL];
-          setPlaylists(updated);
-          await Promise.all(updated.map((pl) => storePlaylist(pl)));
-        }
-
-        handleOnboardingComplete();
-      } catch (err) {
-        console.log("Artist selection error:", err);
+      // 7️⃣ Kick off playback on the first track
+      if (deduped.length > 0) {
+        setCurrentTrack(deduped[0]);
+        setIsPlaying(true);
+        void playTrackFromSource(deduped[0], 0, true);
       }
-    },
-    [playlists, handleOnboardingComplete, setIsPlaying, playTrackFromSource]
-  );
+
+      // 8️⃣ “Jump back in” = first 4
+      setJumpBackIn(deduped.slice(0, 4));
+
+      // 9️⃣ Ensure “Liked Songs” exists
+      if (!playlists.some((pl) => pl.name === "Liked Songs")) {
+        const liked: Playlist = {
+          name: "Liked Songs",
+          image: "/images/liked-songs.webp",
+          tracks: [],
+        };
+        const updated = [...playlists, liked];
+        setPlaylists(updated);
+        await Promise.all(updated.map((pl) => storePlaylist(pl)));
+      }
+
+      // 🔟 Finally, finish onboarding
+      handleOnboardingComplete();
+    } catch (err) {
+      console.error("Artist selection error:", err);
+    }
+  },
+  [
+    sanitizeTrack,
+    dedupeById,
+    playlists,
+    handleOnboardingComplete,
+    setIsPlaying,
+    playTrackFromSource,
+  ]
+);
+
 
   function handleSearch(newQ: string): void {
     if (newQ.trim().length > 3) {
@@ -1017,65 +1149,91 @@ export function Main() {
 
   // Main init: load from IDB
   useEffect(() => {
-    void (async function init() {
-      try {
-        // 1. Attempt to load recommended
-        const savedRecommended = await getRecommendedTracks();
-        if (savedRecommended && savedRecommended.length > 0) {
-          setRecommendedTracks(savedRecommended);
-        }
+  void (async function init() {
+    try {
+      // 1️⃣ Load saved recommendations and queue + all other IDB settings in one go
+      const [
+        savedRecommendedRaw,
+        savedQueueRaw,
+        volumeSetting,
+        shuffleSetting,
+        qualitySetting,
+        playlistsRaw,
+        recentlyPlayedRaw,
+        onboardFlag,
+        currentTrackRaw,
+      ] = await Promise.all([
+        getRecommendedTracks(),
+        getQueue(),
+        getSetting("volume"),
+        getSetting("shuffleOn"),
+        getSetting("audioQuality"),
+        getAllPlaylists(),
+        getRecentlyPlayed(),
+        getSetting("onboardingDone"),
+        getSetting("currentTrack"),
+      ]);
 
-        // 2. Attempt to load queue
-        const savedQueue = await getQueue();
-
-        // 3. Parallel IDB settings
-        const [
-          vol,
-          sOn,
-          qual,
-          pls,
-          rec,
-          onboard,
-          savedTrack,
-        ] = await Promise.all([
-          getSetting("volume"),
-          getSetting("shuffleOn"),
-          getSetting("audioQuality"),
-          getAllPlaylists(),
-          getRecentlyPlayed(),
-          getSetting("onboardingDone"),
-          getSetting("currentTrack"),
-        ]);
-
-        if (vol) setVolume(parseFloat(vol));
-        if (sOn) setShuffleOn(JSON.parse(sOn));
-        if (qual) {
-          await changeAudioQuality(qual as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER");
-        }
-
-        if (pls) setPlaylists(pls);
-        if (rec) setJumpBackIn(rec);
-        if (!onboard) setShowOnboarding(true);
-
-        if (savedQueue && savedQueue.length > 0) {
-          setQueue(savedQueue);
-        } else if (savedRecommended && savedRecommended.length > 0) {
-          setQueue(savedRecommended);
-        } else {
-          await fetchNewRecommendations();
-        }
-
-        if (savedTrack) {
-          const track: Track = JSON.parse(savedTrack);
-          setCurrentTrack(track);
-          // If you want it not to start playing, set autoPlay = false
-          await playTrackFromSource(track, 0, true);
-        }
-      } catch (error) {
-        console.error("Initialization error:", error);
+      // 2️⃣ Apply volume, shuffle & audioQuality
+      if (volumeSetting) setVolume(parseFloat(volumeSetting));
+      if (shuffleSetting) setShuffleOn(JSON.parse(shuffleSetting));
+      if (qualitySetting) {
+        await changeAudioQuality(
+          qualitySetting as "MAX" | "HIGH" | "NORMAL" | "DATA_SAVER"
+        );
       }
-    })();
-  }, [fetchNewRecommendations, changeAudioQuality, playTrackFromSource, setVolume]);
+
+      // 3️⃣ Playlists & “jump back in” (recently played)
+      if (Array.isArray(playlistsRaw)) {
+        setPlaylists(playlistsRaw);
+      }
+      if (Array.isArray(recentlyPlayedRaw)) {
+        setJumpBackIn(recentlyPlayedRaw);
+      }
+
+      // 4️⃣ Onboarding flag
+      if (!onboardFlag) {
+        setShowOnboarding(true);
+      }
+
+      // 5️⃣ If we have a saved queue, sanitize & dedupe it; otherwise fallback
+      if (Array.isArray(savedQueueRaw) && savedQueueRaw.length > 0) {
+        const cleanedQueue = dedupeById(savedQueueRaw.map(sanitizeTrack));
+        setQueue(cleanedQueue);
+      } else if (Array.isArray(savedRecommendedRaw) && savedRecommendedRaw.length > 0) {
+        const cleanedRec = dedupeById(savedRecommendedRaw.map(sanitizeTrack));
+        setQueue(cleanedRec);
+      } else {
+        // no stored queue or recommendations → fetch fresh
+        await fetchNewRecommendations();
+      }
+
+      // 6️⃣ If we have saved recommendations, sanitize & dedupe them
+      if (Array.isArray(savedRecommendedRaw) && savedRecommendedRaw.length > 0) {
+        const cleanedRec = dedupeById(savedRecommendedRaw.map(sanitizeTrack));
+        setRecommendedTracks(cleanedRec);
+      }
+
+      // 7️⃣ Restore “currentTrack” if any
+      if (currentTrackRaw) {
+        const parsed: Track = JSON.parse(currentTrackRaw);
+        const track = sanitizeTrack(parsed);
+        setCurrentTrack(track);
+        // auto-play on init
+        await playTrackFromSource(track, 0, true);
+      }
+    } catch (error) {
+      console.error("Initialization error:", error);
+    }
+  })();
+}, [
+  fetchNewRecommendations,
+  changeAudioQuality,
+  playTrackFromSource,
+  setVolume,
+  sanitizeTrack,
+  dedupeById,
+]);
 
   useEffect(() => {
     if (queue.length > 0) {
@@ -1128,7 +1286,8 @@ export function Main() {
       try {
         const savedTracks = await getRecommendedTracks();
         if (savedTracks && savedTracks.length > 0) {
-          setRecommendedTracks(savedTracks);
+          const clean = savedTracks.map(sanitizeTrack)
+          setRecommendedTracks(dedupeById(clean));
         } else {
           setRecommendedTracks([]);
         }
@@ -1137,7 +1296,7 @@ export function Main() {
       }
     }
     void loadRecommendedTracks();
-  }, []);
+  }, [dedupeById, sanitizeTrack]);
   
 
   // ----------------------------------------------------------
@@ -1330,14 +1489,12 @@ export function Main() {
             setShowUserMenu={setShowUserMenu}
             setShowSpotifyToDeezerModal={setShowSpotifyToDeezerModal}
             currentPlaylist={currentPlaylist}
-            setCurrentPlaylist={setCurrentPlaylist}
             playlistSearchQuery={playlistSearchQuery}
             setPlaylistSearchQuery={setPlaylistSearchQuery}
             handlePlaylistSearch={handlePlaylistSearch}
             playlistSearchResults={playlistSearchResults}
             setPlaylistSearchResults={setPlaylistSearchResults}
             addTrackToPlaylist={addTrackToPlaylist}
-            setShowSearchInPlaylistCreation={setShowSearchInPlaylistCreation}
             setShowCreatePlaylist={setShowCreatePlaylist}
             setQueue={setQueue}
             setCurrentTrack={setCurrentTrack}
