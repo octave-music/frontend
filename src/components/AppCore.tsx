@@ -472,9 +472,16 @@ export function AppCore() {
       else searches.forEach(s => addRecentSearch(s));
   };
 
-  if (showOnboarding && !initialLoadAttempted) { // Prioritize showing onboarding if flag is set and load not yet attempted
-    return <OnboardingModal show={true} onComplete={handleOnboardingProcessComplete} onArtistSelectionComplete={handleArtistSelectionProcessComplete} />;
-  }
+  // AppCore.tsx
+if (showOnboarding) {
+  return (
+    <OnboardingModal
+      show={showOnboarding}
+      onComplete={handleOnboardingProcessComplete}
+      onArtistSelectionComplete={handleArtistSelectionProcessComplete}
+    />
+  );
+}
 
   return (
     <>
