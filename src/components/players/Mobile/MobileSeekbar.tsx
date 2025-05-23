@@ -108,7 +108,7 @@ const MobileSeekbar: React.FC<MobileSeekbarProps> = ({
             style={{ left: `${localProgress * 100}%`, x: "-50%" }}
             animate={{
             scale: isDragging || (showTooltip && !isMiniPlayer) ? 1.1 : 1,
-            opacity: isDragging || (showTooltip && !isMiniPlayer) ? 1 : (isMiniPlayer ? 1 : 0), // Thumb always visible on miniplayer if desired, or hide too
+            opacity: isMiniPlayer ? 0 : (isDragging || (showTooltip && !isMiniPlayer) ? 1 : 0), // Hide thumb completely for mini player
             }}
             transition={{ duration: 0.15 }}
         />
