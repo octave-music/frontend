@@ -359,10 +359,10 @@ const MobilePlayer: React.FC<MobilePlayerProps> = (props) => {
             >
               <MobilePlayerExpandedHeader
                 onCollapsePlayer={handlePlayerCollapse}
-                onShowQueue={() => { toggleLyricsView(); setShowQueueSheet(true); }} // Hide lyrics if showing queue
+                onShowQueue={() => { if (showLyrics) toggleLyricsView(); setShowQueueSheet(true); }} 
                 onShowMoreOptions={() => setShowMoreOptionsSheet(true)}
-                canShowQueueButton={canShowExtraActionButtons}
-              />
+                showMoreButtonInHeader={!canShowExtraActionButtons}              
+                />
 
               {/* Main Content Area: Switches between Artwork/Info, Queue, or Lyrics */}
               <div className="flex-1 flex flex-col min-h-0 w-full"> {/* Ensure this takes up space and allows children to scroll */}
@@ -394,7 +394,6 @@ const MobilePlayer: React.FC<MobilePlayerProps> = (props) => {
                   <div className="flex-1 flex flex-col justify-between min-h-0 w-full"> {/* justify-between to push controls down */}
                     <MobilePlayerExpandedArtworkInfo
                       currentTrack={currentTrack}
-                      dominantColor={dominantColor}
                       seekPosition={seekPosition}
                       duration={duration}
                       audioQuality={audioQuality}

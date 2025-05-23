@@ -67,8 +67,8 @@ type MobileLayoutProps = {
   audioQuality: AudioQuality;
   setAudioQuality: (quality: AudioQuality) => void; // The state setter
   storeSetting: (key: string, value: any) => Promise<void>;
-  setPlaylistSearchResults: (tracks: Track[]) => void;
-  setShowSearchInPlaylistCreation: (value: boolean) => void; // Keep if used
+  setPlaylistSearchResults: (tracks: Track[]) => void;  
+  setShowSearchInPlaylistCreation?: (value: boolean) => void;
   setShowCreatePlaylist: (value: boolean) => void;
   sidebarCollapsed: boolean; // This prop might need reconsideration for mobile
   setSidebarCollapsed: (value: boolean) => void; // This prop might need reconsideration for mobile

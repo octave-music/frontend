@@ -11,18 +11,18 @@ import { fmtTime } from "@/lib/utils/fmt"; // Adjust path
 
 interface MobilePlayerExpandedArtworkInfoProps {
   currentTrack: Track;
-  dominantColor: string | null; // For background gradient
+  // dominantColor: string | null; // No longer primary for background if using image
   seekPosition: number;
   duration: number;
   audioQuality: AudioQuality;
   listenCount: number;
   onHandleSeek: (time: number) => void;
   onShowAudioMenu: () => void;
-  onArtworkDragEnd: (info: PanInfo) => void; // For swipe to skip/prev
+  onArtworkDragEnd: (info: PanInfo) => void;
 }
 
 const MobilePlayerExpandedArtworkInfo: React.FC<MobilePlayerExpandedArtworkInfoProps> = ({
-  currentTrack, dominantColor, seekPosition, duration, audioQuality, listenCount,
+  currentTrack, seekPosition, duration, audioQuality, listenCount,
   onHandleSeek, onShowAudioMenu, onArtworkDragEnd
 }) => {
   return (
@@ -30,15 +30,15 @@ const MobilePlayerExpandedArtworkInfo: React.FC<MobilePlayerExpandedArtworkInfoP
       {/* Artwork with Background Blur */}
       <div className="relative w-full h-[min(65vw,300px)] flex justify-center items-center mb-6 mt-2 shrink-0">
         <div
-          className="absolute inset-0 opacity-80 transition-all duration-500"
+          className="absolute inset-0 opacity-90 transition-all duration-500" // Increased opacity
           style={{
-            backgroundImage: dominantColor 
-              ? `linear-gradient(to bottom, ${dominantColor}77, rgba(0,0,0,0.7))` 
-              : `linear-gradient(to bottom, rgba(50,50,50,0.7), rgba(0,0,0,0.7))`,
+            backgroundImage: currentTrack.album.cover_medium
+              ? `linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.85) 100%), url(${currentTrack.album.cover_medium})` // Restored image URL, adjusted gradient
+              : `linear-gradient(to bottom, rgba(30,30,30,0.7), rgba(0,0,0,0.9))`, // Fallback
             backgroundSize: "cover",
             backgroundPosition: "center",
-            filter: "blur(20px) brightness(1.1) saturate(1.2)", // Softer blur
-            transform: "scale(1.5)",
+            filter: "blur(25px) brightness(1.1) saturate(1.2)", // Adjusted filter
+            transform: "scale(1.75)", // Adjusted scale
             zIndex: -1,
           }}
         />
@@ -48,7 +48,7 @@ const MobilePlayerExpandedArtworkInfo: React.FC<MobilePlayerExpandedArtworkInfoP
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
           onDragEnd={(event, info) => onArtworkDragEnd(info)}
-          layoutId="album-art-mobile" // For shared layout animation with mini player
+          layoutId="album-art-mobile"
         >
           <Image
             src={currentTrack.album.cover_medium || "/images/default-album.png"}
@@ -79,13 +79,13 @@ const MobilePlayerExpandedArtworkInfo: React.FC<MobilePlayerExpandedArtworkInfoP
       </div>
 
       {/* Seekbar */}
-      <div className="w-full mb-4 mt-3 px-2 shrink-0">
+      <div className="w-full mb-4 mt-3 px-4 shrink-0"> {/* Increased px-4 for more seekbar padding */}
         <MobileSeekbar
           progress={duration > 0 ? seekPosition / duration : 0}
           handleSeek={onHandleSeek}
           duration={duration}
         />
-        <div className="flex justify-between text-xs text-white/60 mt-1 px-2">
+        <div className="flex justify-between text-xs text-white/60 mt-1 px-2"> {/* Kept px-2 for time labels for alignment */}
           <span>{fmtTime(seekPosition)}</span>
           <span>{fmtTime(duration)}</span>
         </div>

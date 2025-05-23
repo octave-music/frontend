@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Main } from "../components/index";
+import  Main  from "../components/index";
 import { StrictMode } from "react";
 
 export const metadata: Metadata = {
